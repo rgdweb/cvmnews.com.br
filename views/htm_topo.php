@@ -88,84 +88,13 @@
 .menu li:nth-child(7) a:hover { color: #fd79a8; }
 
 /* ===== BOTÃO HAMBURGER DO TEMA (a.menu_toggler) ===== */
-/* O theme.js cria este botão automaticamente */
-/* Sobrescrevemos o estilo de imagem de fundo por um hamburger CSS */
-a.menu_toggler {
-  background: none !important;
-  background-image: none !important;
-  width: 44px !important;
-  height: 44px !important;
-  position: relative !important;
-  display: none;
-  float: right !important;
-  margin: 0 !important;
-  border: 1px solid #666 !important;
-  border-radius: 4px !important;
-  padding: 0 !important;
-  cursor: pointer;
-  z-index: 1001;
-  text-indent: -9999px;
-}
+/* theme.js cria: <a class="menu_toggler"></a> - elemento VAZIO */
+/* Nosso JS (em htm_index.php) injeta <i class="fas fa-bars"> dentro dele */
+/* Aqui só sobrescrevemos o visual do botão */
 
-a.menu_toggler:before,
-a.menu_toggler:after,
-a.menu_toggler span {
-  content: '' !important;
-  position: absolute !important;
-  left: 8px !important;
-  width: 26px !important;
-  height: 3px !important;
-  background-color: #fff !important;
-  border-radius: 2px !important;
-  transition: all 0.3s ease !important;
-  display: block !important;
-}
-
-a.menu_toggler:before {
-  top: 10px !important;
-}
-
-a.menu_toggler span {
-  top: 20px !important;
-}
-
-a.menu_toggler:after {
-  top: 30px !important;
-}
-
-/* Hamburger animado ao abrir */
-a.menu_toggler.close_toggler {
-  background-color: #333 !important;
-  border-color: #ffd700 !important;
-}
-
-a.menu_toggler.close_toggler:before {
-  top: 20px !important;
-  transform: rotate(45deg) !important;
-  background-color: #ffd700 !important;
-}
-
-a.menu_toggler.close_toggler span {
-  opacity: 0 !important;
-}
-
-a.menu_toggler.close_toggler:after {
-  top: 20px !important;
-  transform: rotate(-45deg) !important;
-  background-color: #ffd700 !important;
-}
-
-a.menu_toggler:hover {
-  background-color: #333 !important;
-  border-color: #ffd700 !important;
-  box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
-}
-
-/* Esconder menu_toggler no desktop */
+/* Desktop: esconder */
 @media (min-width: 768px) {
-  a.menu_toggler {
-    display: none !important;
-  }
+  a.menu_toggler,
   a.tagline_toggler {
     display: none !important;
   }
@@ -197,10 +126,46 @@ a.menu_toggler:hover {
     height: 32px;
   }
 
-  /* Mostrar botão hamburger do tema */
+  /* Botão hamburger - sobrescrever o sprite original do tema */
   a.menu_toggler {
+    background: none !important;
+    background-image: none !important;
+    width: 44px !important;
+    height: 44px !important;
+    position: absolute !important;
+    right: 15px !important;
+    top: 10px !important;
+    left: auto !important;
     display: block !important;
-    margin-top: -50px !important;
+    border: 1px solid rgba(255,255,255,0.3) !important;
+    border-radius: 4px !important;
+    padding: 0 !important;
+    cursor: pointer !important;
+    z-index: 1001 !important;
+    text-indent: 0 !important;
+    text-align: center !important;
+    line-height: 44px !important;
+    font-size: 22px !important;
+    color: #fff !important;
+    margin: 0 !important;
+    float: none !important;
+  }
+
+  a.menu_toggler:hover {
+    background-color: rgba(255,215,0,0.2) !important;
+    border-color: #ffd700 !important;
+    color: #ffd700 !important;
+  }
+
+  a.menu_toggler.close_toggler {
+    background-color: rgba(255,215,0,0.15) !important;
+    border-color: #ffd700 !important;
+    color: #ffd700 !important;
+  }
+
+  /* Esconder tagline_toggler */
+  a.tagline_toggler {
+    display: none !important;
   }
 
   /* Estilizar o menu mobile do tema (.mobile_menu_wrapper) */
@@ -331,8 +296,8 @@ a.menu_toggler:hover {
         <hr style="margin-top:10px;">
 
         <!-- Menu principal desktop -->
-        <!-- O theme.js cria automaticamente o botao a.menu_toggler e o .mobile_menu_wrapper no mobile -->
-        <!-- NAO usamos mais botao hamburger personalizado - usamos o sistema do tema -->
+        <!-- O theme.js cria automaticamente o a.menu_toggler e o .mobile_menu_wrapper -->
+        <!-- Nosso JS em htm_index.php injeta o ícone Font Awesome no botão -->
         <div id="main-menu-collapse">
           <nav>
             <ul class="menu">

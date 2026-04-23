@@ -1,4 +1,6 @@
 <?php if(!isset($_base['libera_views'])){ header("HTTP/1.0 404 Not Found"); exit; } ?>
+<!-- Font Awesome 6 (para htm_conteudo.php que usa este header) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
 .topo_div1_icos a i { transition: all 0.3s ease; transform: scale(1); }
 .topo_div1_icos a:hover i {
@@ -63,67 +65,22 @@
 .menu li:nth-child(6) a:hover { color: #ffeaa7; }
 .menu li:nth-child(7) a:hover { color: #fd79a8; }
 
-/* ===== BOTÃO HAMBURGER DO TEMA ===== */
-a.menu_toggler {
-  background: none !important;
-  background-image: none !important;
-  width: 44px !important;
-  height: 44px !important;
-  position: relative !important;
-  display: none;
-  float: right !important;
-  margin: 0 !important;
-  border: 1px solid #666 !important;
-  border-radius: 4px !important;
-  padding: 0 !important;
-  cursor: pointer;
-  z-index: 1001;
-  text-indent: -9999px;
-}
-a.menu_toggler:before,
-a.menu_toggler:after,
-a.menu_toggler span {
-  content: '' !important;
-  position: absolute !important;
-  left: 8px !important;
-  width: 26px !important;
-  height: 3px !important;
-  background-color: #fff !important;
-  border-radius: 2px !important;
-  transition: all 0.3s ease !important;
-  display: block !important;
-}
-a.menu_toggler:before { top: 10px !important; }
-a.menu_toggler span { top: 20px !important; }
-a.menu_toggler:after { top: 30px !important; }
+/* ===== BOTÃO HAMBURGER - versão Font Awesome ===== */
+/* theme.js cria <a class="menu_toggler"></a> vazio */
+/* Nosso JS injeta <i class="fas fa-bars"> dentro */
 
-a.menu_toggler.close_toggler {
-  background-color: #333 !important;
-  border-color: #ffd700 !important;
-}
-a.menu_toggler.close_toggler:before {
-  top: 20px !important;
-  transform: rotate(45deg) !important;
-  background-color: #ffd700 !important;
-}
-a.menu_toggler.close_toggler span { opacity: 0 !important; }
-a.menu_toggler.close_toggler:after {
-  top: 20px !important;
-  transform: rotate(-45deg) !important;
-  background-color: #ffd700 !important;
-}
-a.menu_toggler:hover {
-  background-color: #333 !important;
-  border-color: #ffd700 !important;
-  box-shadow: 0 0 10px rgba(255,215,0,0.4);
-}
-
-/* Desktop */
+/* Desktop: esconder */
 @media (min-width: 768px) {
-  a.menu_toggler { display: none !important; }
-  a.tagline_toggler { display: none !important; }
-  .mobile_menu_wrapper { display: none !important; }
-  header nav { display: block !important; }
+  a.menu_toggler,
+  a.tagline_toggler {
+    display: none !important;
+  }
+  .mobile_menu_wrapper {
+    display: none !important;
+  }
+  header nav {
+    display: block !important;
+  }
 }
 
 /* Mobile */
@@ -140,10 +97,49 @@ a.menu_toggler:hover {
     width: 32px;
     height: 32px;
   }
+
+  /* Botão hamburger - sobrescrever o sprite original do tema */
   a.menu_toggler {
+    background: none !important;
+    background-image: none !important;
+    width: 44px !important;
+    height: 44px !important;
+    position: absolute !important;
+    right: 15px !important;
+    top: 10px !important;
+    left: auto !important;
     display: block !important;
-    margin-top: -50px !important;
+    border: 1px solid rgba(255,255,255,0.3) !important;
+    border-radius: 4px !important;
+    padding: 0 !important;
+    cursor: pointer !important;
+    z-index: 1001 !important;
+    text-indent: 0 !important;
+    text-align: center !important;
+    line-height: 44px !important;
+    font-size: 22px !important;
+    color: #fff !important;
+    margin: 0 !important;
+    float: none !important;
   }
+
+  a.menu_toggler:hover {
+    background-color: rgba(255,215,0,0.2) !important;
+    border-color: #ffd700 !important;
+    color: #ffd700 !important;
+  }
+
+  a.menu_toggler.close_toggler {
+    background-color: rgba(255,215,0,0.15) !important;
+    border-color: #ffd700 !important;
+    color: #ffd700 !important;
+  }
+
+  /* Esconder tagline_toggler */
+  a.tagline_toggler {
+    display: none !important;
+  }
+
   .mobile_menu_wrapper {
     display: none;
     background: #222 !important;
@@ -214,7 +210,7 @@ a.menu_toggler:hover {
                     <div class="col-sm-8">
                         <div class="topo_div1">
                             <div class="topo_div1_item">
-                                <div class="topo_div1_icos"><a href="javascript:newPopup();"><i class="fa fa-play"></i></a></div>
+                                <div class="topo_div1_icos"><a href="javascript:newPopup();"><i class="fas fa-play"></i></a></div>
                                 <div class="topo_div1_textos">
                                     <div class="topo_div1_item_txt1"><?=$_base['topo_horarios']['titulo']?></div>
                                     <div class="topo_div1_item_txt2"><?=$_base['programacao']['programa']?></div>
@@ -251,6 +247,7 @@ a.menu_toggler:hover {
 
                 <!-- Menu principal desktop -->
                 <!-- O theme.js cria o a.menu_toggler e .mobile_menu_wrapper automaticamente -->
+                <!-- Nosso JS em htm_conteudo.php injeta o ícone Font Awesome no botão -->
                 <div id="main-menu-collapse">
                     <nav>
                         <ul class="menu">

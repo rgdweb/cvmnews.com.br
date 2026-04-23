@@ -397,6 +397,16 @@ header("Expires: ".gmdate('D, d M Y H:i:s \G\M\T', time() + 3600));
 <script src="<?=LAYOUT?>js/jquery.themepunch.plugins.min.js"></script>
 <script src="<?=LAYOUT?>js/jquery.themepunch.revolution.min.js"></script>
 <script src="<?=LAYOUT?>js/funcoes.js"></script>
+<!-- FIX: Menu Mobile - Injeta ícone Font Awesome no menu_toggler criado pelo theme.js -->
+<script>
+jQuery(document).ready(function($) {
+    var toggler = $('a.menu_toggler');
+    if (toggler.length) {
+        toggler.html('<i class="fas fa-bars"></i>');
+        toggler.css('text-indent', '0');
+    }
+});
+</script>
 <script>
     function dominio(){ return "<?=DOMINIO?>"; }
     jQuery(document).ready(function($) {

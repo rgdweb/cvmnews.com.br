@@ -95,9 +95,9 @@
   <?php include_once('htm_rodape2.php'); ?>
 
   <div class="fixed-menu"></div>
-  <script type="text/javascript" src="<?=LAYOUT?>js/jquery.min.js"></script>	
+  <script type="text/javascript" src="<?=LAYOUT?>js/jquery.min.js"></script>    
   <script type="text/javascript" src="<?=LAYOUT?>js/bootstrap.min.js"></script>
-  <script type="text/javascript" src="<?=LAYOUT?>js/modules.js"></script>	
+  <script type="text/javascript" src="<?=LAYOUT?>js/modules.js"></script>       
   <script type="text/javascript" src="<?=LAYOUT?>js/theme.js"></script>
   <script type="text/javascript" src="<?=LAYOUT?>js/jquery.themepunch.plugins.min.js"></script>
   <script type="text/javascript" src="<?=LAYOUT?>js/jquery.themepunch.revolution.min.js"></script>
@@ -107,6 +107,16 @@
   <!-- Testimonials -->
   <script type="text/javascript" src="<?=LAYOUT?>js/slick.js"></script>
   <script type="text/javascript" src="<?=LAYOUT?>js/funcoes.js"></script>
+  <!-- FIX: Menu Mobile - Injeta ícone Font Awesome no menu_toggler criado pelo theme.js -->
+  <script type="text/javascript">
+  jQuery(document).ready(function($) {
+      var toggler = $('a.menu_toggler');
+      if (toggler.length) {
+          toggler.html('<i class="fas fa-bars"></i>');
+          toggler.css('text-indent', '0');
+      }
+  });
+  </script>
   <script type="text/javascript">function dominio(){ return "<?=DOMINIO?>"; }</script>
   <script type="text/javascript">
 
