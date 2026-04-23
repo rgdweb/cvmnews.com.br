@@ -62,7 +62,8 @@
 .menu li:nth-child(5) a:hover { color: #96ceb4; }
 .menu li:nth-child(6) a:hover { color: #ffeaa7; }
 .menu li:nth-child(7) a:hover { color: #fd79a8; }
-.navbar-toggle { transition: all 0.3s ease; }
+
+.navbar-toggle { transition: all 0.3s ease; cursor: pointer; }
 .navbar-toggle:hover {
   transform: scale(1.1);
   background-color: #ffd700;
@@ -70,10 +71,17 @@
   filter: drop-shadow(0 0 10px #ffd700);
 }
 
-/* Mobile */
+/* Desktop */
 @media (min-width: 768px) {
-  .navbar-header { display: none; }
+  .navbar-header { display: none !important; }
+  #main-menu-collapse {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
 }
+
+/* Mobile */
 @media (max-width: 767px) {
   .logo_div a.logo img {
     width: 80px !important;
@@ -88,11 +96,11 @@
     height: 32px;
   }
   .navbar-header {
-    display: block;
+    display: block !important;
     position: relative;
     float: right;
     margin-top: -45px;
-    z-index: 1000;
+    z-index: 1001;
   }
   .navbar-toggle {
     display: block !important;
@@ -102,6 +110,8 @@
     padding: 9px 10px;
     margin: 8px 0;
     cursor: pointer;
+    position: relative;
+    z-index: 1002;
   }
   .navbar-toggle .icon-bar {
     display: block !important;
@@ -114,19 +124,43 @@
   .navbar-toggle .icon-bar:first-child {
     margin-top: 0;
   }
+  /* Menu mobile escondido por padrão */
   #main-menu-collapse {
+    display: none;
     margin-top: 10px;
     clear: both;
+    width: 100%;
+    background: inherit;
+  }
+  /* Menu mobile aberto */
+  #main-menu-collapse.menu-aberto {
+    display: block !important;
   }
   .menu {
     flex-direction: column;
     gap: 0;
+    width: 100%;
   }
   .menu li a {
     display: block;
     padding: 12px 15px;
     border-bottom: 1px solid rgba(255,255,255,0.1);
+    width: 100%;
   }
+  .menu .sub-nav { display: block; }
+  .menu .sub-menu {
+    list-style: none;
+    padding-left: 15px;
+    margin: 0;
+  }
+  .menu .sub-menu li a {
+    font-size: 14px;
+    padding: 8px 15px;
+  }
+}
+
+#main-menu-collapse {
+  margin-top: 10px;
 }
 </style>
 
@@ -181,9 +215,9 @@
 
                 <hr style="margin-top:10px;">
 
-                <!-- Botão hamburger mobile -->
+                <!-- Botão hamburger mobile - onclick próprio -->
                 <div class="navbar-header">
-                    <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#main-menu-collapse">
+                    <button type="button" class="navbar-toggle" id="btn-menu-toggle" onclick="toggleMenuMobile()">
                         <span class="sr-only">Toggle navigation</span>
                         <span class="icon-bar"></span>
                         <span class="icon-bar"></span>
@@ -192,7 +226,7 @@
                 </div>
 
                 <!-- Menu principal (SÓ menu, sem redes sociais) -->
-                <div class="collapse navbar-collapse" id="main-menu-collapse">
+                <div id="main-menu-collapse">
                     <nav>
                         <ul class="menu">
                             <?php
@@ -226,3 +260,37 @@
         </header>
     </div>
 </div>
+
+<!-- JavaScript próprio para o menu mobile - NÃO depende do Bootstrap -->
+<script>
+function toggleMenuMobile() {
+  var menu = document.getElementById('main-menu-collapse');
+  var btn = document.getElementById('btn-menu-toggle');
+  if (!menu) return;
+  if (menu.classList.contains('menu-aberto')) {
+    menu.classList.remove('menu-aberto');
+    btn.classList.remove('active');
+  } else {
+    menu.classList.add('menu-aberto');
+    btn.classList.add('active');
+  }
+}
+(function() {
+  function ajustarMenu() {
+    var menu = document.getElementById('main-menu-collapse');
+    if (!menu) return;
+    if (window.innerWidth >= 768) {
+      menu.classList.remove('menu-aberto');
+      menu.style.display = '';
+      menu.style.height = '';
+      menu.style.overflow = '';
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ajustarMenu);
+  } else {
+    ajustarMenu();
+  }
+  window.addEventListener('resize', ajustarMenu);
+})();
+</script>

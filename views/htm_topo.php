@@ -30,6 +30,7 @@
   width: 40px;
   height: 40px;
   transition: all 0.3s ease;
+  animation: floatSuave 3s ease-in-out infinite;
 }
 .topo_redes_sociais_item img {
   width: 100%;
@@ -44,17 +45,10 @@
   box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4);
 }
 
-/* Animação flutuante suave - sem sobrepor o menu */
+/* Animação flutuante suave */
 @keyframes floatSuave {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-4px);
-  }
-}
-.topo_redes_sociais_item {
-  animation: floatSuave 3s ease-in-out infinite;
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
 }
 .topo_redes_sociais_item:nth-child(1) { animation-delay: 0s; }
 .topo_redes_sociais_item:nth-child(2) { animation-delay: 0.5s; }
@@ -77,7 +71,7 @@
   transform: scale(2.1);
 }
 
-/* Menu geral */
+/* ===== MENU DESKTOP ===== */
 .menu {
   white-space: nowrap;
   padding-left: 0;
@@ -99,7 +93,7 @@
   -webkit-text-stroke: 1px #00bfff;
 }
 
-/* Cores específicas de cada item do menu ao passar o mouse */
+/* Cores de cada item do menu ao hover */
 .menu li:nth-child(1) a:hover { color: #ffd700; }
 .menu li:nth-child(2) a:hover { color: #ff6b6b; }
 .menu li:nth-child(3) a:hover { color: #4ecdc4; }
@@ -108,9 +102,10 @@
 .menu li:nth-child(6) a:hover { color: #ffeaa7; }
 .menu li:nth-child(7) a:hover { color: #fd79a8; }
 
-/* Botão mobile */
+/* ===== BOTÃO HAMBURGER MOBILE ===== */
 .navbar-toggle {
   transition: all 0.3s ease;
+  cursor: pointer;
 }
 .navbar-toggle:hover {
   transform: scale(1.1);
@@ -122,20 +117,27 @@
 /* Esconder botão mobile em telas grandes */
 @media (min-width: 768px) {
   .navbar-header {
-    display: none;
+    display: none !important;
+  }
+  /* Desktop: menu sempre visível */
+  #main-menu-collapse {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 }
 
-/* ===== MOBILE ===== */
+/* ===== MENU MOBILE COLAPSADO ===== */
+/* Por padrão no mobile, o menu fica escondido */
 @media (max-width: 767px) {
-  /* Logo menor no mobile */
+  /* Logo menor */
   .logo_div a.logo img {
     width: 80px !important;
     height: 80px !important;
     padding: 3px;
   }
 
-  /* Redes sociais - centralizar no mobile, ícones menores */
+  /* Redes sociais centralizadas no mobile */
   .topo_redes_sociais {
     justify-content: center;
     padding: 5px 0;
@@ -145,13 +147,13 @@
     height: 32px;
   }
 
-  /* Botão hamburger visível no mobile */
+  /* Botão hamburger */
   .navbar-header {
-    display: block;
+    display: block !important;
     position: relative;
     float: right;
     margin-top: -45px;
-    z-index: 1000;
+    z-index: 1001;
   }
 
   .navbar-toggle {
@@ -162,6 +164,8 @@
     padding: 9px 10px;
     margin: 8px 0;
     cursor: pointer;
+    position: relative;
+    z-index: 1002;
   }
 
   .navbar-toggle .icon-bar {
@@ -177,25 +181,50 @@
     margin-top: 0;
   }
 
-  /* Menu colapsado no mobile - SÓ O MENU, sem redes sociais */
+  /* Menu mobile - escondido por padrão */
   #main-menu-collapse {
+    display: none;
     margin-top: 10px;
     clear: both;
+    width: 100%;
+    background: inherit;
   }
 
+  /* Menu mobile - quando aberto */
+  #main-menu-collapse.menu-aberto {
+    display: block !important;
+  }
+
+  /* Menu em coluna no mobile */
   .menu {
     flex-direction: column;
     gap: 0;
+    width: 100%;
   }
 
   .menu li a {
     display: block;
     padding: 12px 15px;
     border-bottom: 1px solid rgba(255,255,255,0.1);
+    width: 100%;
+  }
+
+  /* Sub-menu no mobile */
+  .menu .sub-nav {
+    display: block;
+  }
+  .menu .sub-menu {
+    list-style: none;
+    padding-left: 15px;
+    margin: 0;
+  }
+  .menu .sub-menu li a {
+    font-size: 14px;
+    padding: 8px 15px;
   }
 }
 
-/* Ajuste da margem do menu colapsado */
+/* Desktop: margem do menu */
 #main-menu-collapse {
   margin-top: 10px;
 }
@@ -259,9 +288,9 @@
 
         <hr style="margin-top:10px;">
 
-        <!-- Botão para menu mobile -->
+        <!-- Botão hamburger mobile - USA onclick ao invés de data-toggle do Bootstrap -->
         <div class="navbar-header">
-          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#main-menu-collapse">
+          <button type="button" class="navbar-toggle" id="btn-menu-toggle" onclick="toggleMenuMobile()">
             <span class="sr-only">Toggle navigation</span>
             <span class="icon-bar"></span>
             <span class="icon-bar"></span>
@@ -270,7 +299,7 @@
         </div>
 
         <!-- Menu principal (SÓ o menu, sem redes sociais dentro) -->
-        <div class="collapse navbar-collapse" id="main-menu-collapse">
+        <div id="main-menu-collapse">
           <nav>
             <ul class="menu">
                                  <?php
@@ -308,3 +337,42 @@
     </header>
   </div>
 </div>
+
+<!-- JavaScript próprio para o menu mobile - NÃO depende do Bootstrap -->
+<script>
+function toggleMenuMobile() {
+  var menu = document.getElementById('main-menu-collapse');
+  var btn = document.getElementById('btn-menu-toggle');
+  if (!menu) return;
+
+  if (menu.classList.contains('menu-aberto')) {
+    menu.classList.remove('menu-aberto');
+    btn.classList.remove('active');
+  } else {
+    menu.classList.add('menu-aberto');
+    btn.classList.add('active');
+  }
+}
+
+// Garantir que no desktop o menu fique sempre visível
+(function() {
+  function ajustarMenu() {
+    var menu = document.getElementById('main-menu-collapse');
+    if (!menu) return;
+    if (window.innerWidth >= 768) {
+      // Desktop: sempre visível, sem classe de toggle
+      menu.classList.remove('menu-aberto');
+      menu.style.display = '';
+      menu.style.height = '';
+      menu.style.overflow = '';
+    }
+  }
+  // Rodar ao carregar e ao redimensionar
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ajustarMenu);
+  } else {
+    ajustarMenu();
+  }
+  window.addEventListener('resize', ajustarMenu);
+})();
+</script>
