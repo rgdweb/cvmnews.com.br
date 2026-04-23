@@ -2,9 +2,9 @@
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-require_once __DIR__.'/../_api/phpmailer/src/Exception.php';
-require_once __DIR__.'/../_api/phpmailer/src/PHPMailer.php';
-require_once __DIR__.'/../_api/phpmailer/src/SMTP.php';
+require_once __DIR__.'/../_api/phpmailer/Exception.php';
+require_once __DIR__.'/../_api/phpmailer/PHPMailer.php';
+require_once __DIR__.'/../_api/phpmailer/SMTP.php';
 
 class model_envio
 {
@@ -15,8 +15,8 @@ class model_envio
             $mail->isSMTP();
             $mail->Host       = 'smtp.titan.email';
             $mail->SMTPAuth   = true;
-            $mail->Username   = 'contato@cvmnews.com.br';
-            $mail->Password   = 'Rgdweb@26';
+            $mail->Username   = defined('SMTP_USER') && SMTP_USER ? SMTP_USER : 'contato@cvmnews.com.br';
+            $mail->Password   = defined('SMTP_PASS') && SMTP_PASS ? SMTP_PASS : 'Rgdweb@26';
             $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
             $mail->Port       = 587;
 

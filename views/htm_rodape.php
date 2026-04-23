@@ -59,16 +59,16 @@
             <!-- Compartilhamento -->
             <div class="share-container">
               <span class="share-label">Compartilhe:</span>
-              <a href="https://www.facebook.com/sharer/sharer.php?u=<?=urlencode('http://'.$_SERVER['HTTP_HOST'])?>" target="_blank" class="share-btn facebook" title="Facebook">
+                            <a href="https://www.facebook.com/sharer/sharer.php?u=<?=urlencode('https://'.$_SERVER['HTTP_HOST'])?>" target="_blank" class="share-btn facebook" title="Facebook">
                 <i class="fab fa-facebook-f"></i>
               </a>
-              <a href="https://wa.me/?text=<?=urlencode('Confira este site: http://'.$_SERVER['HTTP_HOST'])?>" target="_blank" class="share-btn whatsapp" title="WhatsApp">
+                            <a href="https://wa.me/?text=<?=urlencode('Confira este site: https://'.$_SERVER['HTTP_HOST'])?>" target="_blank" class="share-btn whatsapp" title="WhatsApp">
                 <i class="fab fa-whatsapp"></i>
               </a>
               <a href="https://www.instagram.com/" target="_blank" class="share-btn instagram" title="Instagram" onclick="alert('Link copiado! Abra o Instagram e cole na biografia ou stories.')">
                 <i class="fab fa-instagram"></i>
               </a>
-              <a href="https://x.com/intent/tweet?url=<?=urlencode('http://'.$_SERVER['HTTP_HOST'])?>&text=<?=urlencode('Confira este site!')?>" target="_blank" class="share-btn x-twitter" title="X">
+                            <a href="https://x.com/intent/tweet?url=<?=urlencode('https://'.$_SERVER['HTTP_HOST'])?>&text=<?=urlencode('Confira este site!')?>" target="_blank" class="share-btn x-twitter" title="X">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
               </svg>
@@ -102,8 +102,9 @@
 
     <a class="logo" href="<?=DOMINIO?>"><img alt="<?=$_base['titulo_pagina']?>" src="<?=$_base['imagem']['147129831543478']?>" /></a>
      <footer class="main-footer"> 
-	<div class="pull-right hidden-xs"></div>
-	<span class="copyright"><strong>Copyright &copy; <?=date('Y')?> </strong> <?=$_base['copy']['conteudo']?> <a target="_blank"><a href="https://www.facebook.com/marciogomes2023/" target="_blank">Márcio Gomes</a></footer></span>
+        <div class="pull-right hidden-xs"></div>
+        <span class="copyright"><strong>Copyright &copy; <?=date('Y')?> </strong> <?=$_base['copy']['conteudo']?> <a href="https://www.facebook.com/marciogomes2023/" target="_blank">Márcio Gomes</a></span>
+    </footer>
     <div class="footer_bottom">
       <div class="copyright"></div>
     </div>
@@ -113,13 +114,13 @@
 <!-- Botões flutuantes -->
 <div class="btn-radio">
   <a href="javascript:newPopup();">
-    <button id="draggable" class="pulse-button"><i class="fa fa-play"></i></button>
+    <button id="btn-radio" class="pulse-button"><i class="fa fa-play"></i></button>
   </a>
 </div>
 
 <div class="btn-whats">
   <a href="https://wa.me/<?=$_base['radio_whatsapp']?>?text=Olá! Estou ouvindo <?=$_base['titulo_pagina']?>, quero fazer um pedido 😁😁😁" target="_blank">
-    <button id="draggable" class="pulse-button"><i class="fab fa-whatsapp"></i></button>
+    <button id="btn-whatsapp" class="pulse-button"><i class="fab fa-whatsapp"></i></button>
   </a>
 </div>
 
@@ -128,7 +129,6 @@
   <iframe src="<?=$_base['radio_ip']?>" frameborder="0" height="76px"></iframe>
 </div>
 
-<style>
 <style>
 .footer_bottom {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -141,7 +141,7 @@
 }
 
 .footer_bottom::before {
-    content: ";
+    content: '';
     position: absolute;
     top: 0;
     left: 0;

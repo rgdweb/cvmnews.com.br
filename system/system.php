@@ -71,7 +71,7 @@ class system {
     }
 
     protected function post($name){
-        $val = filter_input(INPUT_POST, $name, FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+        $val = filter_input(INPUT_POST, $name, FILTER_SANITIZE_SPECIAL_CHARS);
         return $val ? trim($val) : '';
     }
     

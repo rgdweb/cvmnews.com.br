@@ -9,7 +9,7 @@ $total_videos = count($lista_videos);
 ?>
 
 <style>
-@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
+/* Font Awesome já carregado no topo, sem @import */
 
 /* Título da seção de vídeos */
 .video-section-title {

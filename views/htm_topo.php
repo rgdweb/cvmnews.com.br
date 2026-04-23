@@ -1,11 +1,10 @@
 <?php if(!isset($_base['libera_views'])){ header("HTTP/1.0 404 Not Found"); exit; } ?>
+<!-- Font Awesome 6 (√∫nico) -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
 
 
 <style>
-/* Õcones e animaÁıes */
+/* √çcones e anima√ß√µes */
 .topo_div1_icos a i,
 .topo_redes_sociais_item img {
   transition: all 0.3s ease;
@@ -72,7 +71,7 @@
   -webkit-text-stroke: 1px #00bfff;
 }
 
-/* Cores especÌficas de cada item do menu ao passar o mouse */
+/* Cores espec√≠ficas de cada item do menu ao passar o mouse */
 .menu li:nth-child(1) a:hover { color: #ffd700; }
 .menu li:nth-child(2) a:hover { color: #ff6b6b; }
 .menu li:nth-child(3) a:hover { color: #4ecdc4; }
@@ -81,7 +80,7 @@
 .menu li:nth-child(6) a:hover { color: #ffeaa7; }
 .menu li:nth-child(7) a:hover { color: #fd79a8; }
 
-/* Bot„o mobile */
+/* Bot√£o mobile */
 .navbar-toggle {
   transition: all 0.3s ease;
 }
@@ -92,7 +91,7 @@
   filter: drop-shadow(0 0 10px #ffd700);
 }
 
-/* Esconder bot„o mobile em telas grandes */
+/* Esconder bot√£o mobile em telas grandes */
 @media (min-width: 768px) {
   .navbar-header {
     display: none;
@@ -158,7 +157,7 @@
 
         <hr style="margin-top:10px;">
 
-        <!-- Bot„o para menu mobile -->
+        <!-- Bot√£o para menu mobile -->
         <div class="navbar-header">
           <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#main-menu-collapse">
             <span class="sr-only">Toggle navigation</span>
@@ -171,7 +170,7 @@
         <!-- Menu principal -->
         <div class="collapse navbar-collapse" id="main-menu-collapse">
           <div class="row">
-            <div class="col-sm-13">
+            <div class="col-sm-9">
               <nav>
                 <ul class="menu">
                                      <?php
@@ -179,7 +178,7 @@
                       if ($pai != 0) { echo "<div class='sub-nav'><ul class='sub-menu'>"; }
                       foreach ($lista as $value) {
                     
-                        // Remove qualquer item com tÌtulo semelhante a "INICIAL"
+                        // Remove qualquer item com t√≠tulo semelhante a "INICIAL"
                         $titulo_limpo = mb_strtoupper(trim(strip_tags($value['titulo'])));
                         if (strpos($titulo_limpo, 'INICIAL') !== false) continue;
                     
@@ -204,7 +203,7 @@
                 </ul>
               </nav>
             </div>
-            <div class="col-sm-14">
+            <div class="col-sm-3">
               <div class="topo_redes_sociais">
                 <?php foreach($_base['listaredes'] as $value): ?>
                   <a href="<?=$value['endereco']?>" target="_blank" class="topo_redes_sociais_item">

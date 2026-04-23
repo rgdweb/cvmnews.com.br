@@ -20,7 +20,7 @@ class fotos extends controller {
     }
 
     public function inicial(){
-        $dados['_base'] = $this->base_layout();
+        $dados['_base'] = $this->base();
         $dados['_titulo'] = $this->_modulo_nome;
         $dados['_subtitulo'] = "";
 
@@ -63,7 +63,7 @@ class fotos extends controller {
     public function novo(){
         $this->nivel_acesso(78);
 
-        $dados['_base'] = $this->base_layout();
+        $dados['_base'] = $this->base();
         $dados['_titulo'] = $this->_modulo_nome;
         $dados['_subtitulo'] = "Novo";
 
@@ -122,7 +122,7 @@ class fotos extends controller {
     public function alterar(){
         $this->nivel_acesso(78);
 
-        $dados['_base'] = $this->base_layout();
+        $dados['_base'] = $this->base();
         $dados['_titulo'] = $this->_modulo_nome;
         $dados['_subtitulo'] = "Alterar";
 
@@ -203,7 +203,7 @@ class fotos extends controller {
     public function upload(){
         $this->nivel_acesso(78);
 
-        $dados['_base'] = $this->base_layout();
+        $dados['_base'] = $this->base();
         $codigo = $this->get('codigo');
         $dados['codigo'] = $codigo;
         $this->view('enviar_imagens', $dados);

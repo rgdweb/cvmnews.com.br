@@ -17,7 +17,7 @@ $lista_videos = array_slice($lista_videos, 0, 300);
 
 <!-- CSS -->
 <style>
-@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
+/* Font Awesome já carregado no topo, sem @import */
 
 .video-section-title {
   display: flex;

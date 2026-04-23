@@ -1,15 +1,15 @@
 <?php if(!isset($_base['libera_views'])){ header("HTTP/1.0 404 Not Found"); exit; } ?>
-<?php 
-// Adicionar cache para melhorar desempenho
-header("Cache-Control: max-age=2592000, public");
-header("Expires: ".gmdate('D, d M Y H:i:s \G\M\T', time() + 2592000));
+<?php
+// Cache moderado para conteúdo dinâmico
+header("Cache-Control: max-age=3600, public");
+header("Expires: ".gmdate('D, d M Y H:i:s \G\M\T', time() + 3600));
 ?>
 <!DOCTYPE html>
 <html>
 <head>
     <meta property="og:title" content="CVMNEWS - PORTAL DE NOTÍCIAS e WEB RÁDIO/TV">
     <meta property="og:description" content="TV-NOTICIAS-POLITICA-SEGURANÇA-ENTRETENIMENTO">
-    <meta property="og:url" content="<?= 'http://'.$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'] ?>">
+    <meta property="og:url" content="<?= 'https://'.$_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'] ?>">
     <meta property="og:type" content="website">
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
@@ -24,7 +24,6 @@ header("Expires: ".gmdate('D, d M Y H:i:s \G\M\T', time() + 2592000));
     <link href="<?=LAYOUT?>css/theme.css" rel="stylesheet">
     <link href="<?=LAYOUT?>css/revslider.css" rel="stylesheet">
     <link href="<?=LAYOUT?>css/custom.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.3.1/css/all.css">
     <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,700|Roboto:400,500,700,900" rel="stylesheet">
     <?php require_once('_css_padrao.php'); ?>
     <?php require_once('_css_personalizado.php'); ?>
