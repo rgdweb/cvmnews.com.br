@@ -91,6 +91,21 @@
   filter: drop-shadow(0 0 10px #ffd700);
 }
 
+/* Redes sociais - posicionamento correto */
+.topo_redes_sociais {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+/* Menu row - alinhar verticalmente */
+#main-menu-collapse .row {
+  display: flex;
+  align-items: center;
+}
+
 /* Esconder botão mobile em telas grandes */
 @media (min-width: 768px) {
   .navbar-header {
@@ -105,11 +120,74 @@
     height: 80px !important;
     padding: 3px;
   }
+
+  /* Botão hamburger visível no mobile */
+  .navbar-header {
+    display: block;
+    position: relative;
+    float: right;
+    margin-top: -50px;
+    z-index: 1000;
+  }
+
+  .navbar-toggle {
+    display: block !important;
+    background-color: #333;
+    border: 1px solid #666;
+    border-radius: 4px;
+    padding: 9px 10px;
+    margin: 8px 0;
+    cursor: pointer;
+  }
+
+  .navbar-toggle .icon-bar {
+    display: block !important;
+    width: 22px;
+    height: 2px;
+    border-radius: 1px;
+    background-color: #fff;
+    margin-top: 4px;
+  }
+
+  .navbar-toggle .icon-bar:first-child {
+    margin-top: 0;
+  }
+
+  /* Menu colapsado no mobile */
+  #main-menu-collapse {
+    margin-top: 10px;
+    clear: both;
+  }
+
+  #main-menu-collapse .row {
+    display: block;
+  }
+
+  #main-menu-collapse .col-sm-9,
+  #main-menu-collapse .col-sm-3 {
+    width: 100%;
+  }
+
+  .menu {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .menu li a {
+    display: block;
+    padding: 12px 15px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .topo_redes_sociais {
+    justify-content: center;
+    padding: 15px 0;
+  }
 }
 
 /* Ajuste da margem do menu colapsado */
 #main-menu-collapse {
-  margin-top: 40px;
+  margin-top: 10px;
 }
 
 </style>
