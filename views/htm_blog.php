@@ -1,7 +1,9 @@
 <?php if(!isset($_base['libera_views'])){ header("HTTP/1.0 404 Not Found"); exit; } ?>
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head> 
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
       <meta property="og:image" content="https://cvmnews.com.br/sistema/arquivos/imagens/Image-4-1-2-1-png[30-07-25][01-56-05].png">
  <!-- /Tudo em um único pacote -->
   <link rel="shortcut icon" href="<?=$_base['imagem']['147129831543478'];?>">   
@@ -86,6 +88,35 @@
   background-color: #00bfff;
   color: #fff;
   box-shadow: 0 4px 10px rgba(0, 191, 255, 0.3);
+}
+
+/* Responsivo blog mobile */
+@media (max-width: 767px) {
+  #corpo {
+    padding-top: 20px !important;
+  }
+  .blog_imagem_principal {
+    height: 200px !important;
+  }
+  .blog_lista_titulo {
+    font-size: 18px !important;
+  }
+  .blog_lista_previa {
+    font-size: 14px !important;
+  }
+  .blog_divisao_lateral {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 2px solid #eee;
+  }
+  .col-sm-8, .col-sm-4 {
+    width: 100% !important;
+    float: none !important;
+  }
+  .botao_padrao {
+    width: 100%;
+    padding: 12px !important;
+  }
 }
 </style>
   </head>
@@ -193,10 +224,10 @@
 
     <div class="fixed-menu"></div>
 
-    <script type="text/javascript" src="<?=LAYOUT?>js/jquery.min.js"></script>	
+    <script type="text/javascript" src="<?=LAYOUT?>js/jquery.min.js"></script>  
     <script type="text/javascript" src="<?=LAYOUT?>js/jquery-ui.min.js"></script>    
     <script type="text/javascript" src="<?=LAYOUT?>js/bootstrap.min.js"></script>
-    <script type="text/javascript" src="<?=LAYOUT?>js/modules.js"></script>	
+    <script type="text/javascript" src="<?=LAYOUT?>js/modules.js"></script>     
     <script type="text/javascript" src="<?=LAYOUT?>js/theme.js"></script>
     <script type="text/javascript" src="<?=LAYOUT?>js/jquery.themepunch.plugins.min.js"></script>
     <script type="text/javascript" src="<?=LAYOUT?>js/jquery.themepunch.revolution.min.js"></script>

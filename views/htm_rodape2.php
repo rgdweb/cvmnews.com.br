@@ -114,14 +114,19 @@
 <!-- Botões flutuantes -->
 <div class="btn-radio">
   <a href="javascript:newPopup();">
-    <button id="draggable" class="pulse-button"><i class="fa fa-play"></i></button>
+    <button id="btn-radio" class="pulse-button"><i class="fa fa-play"></i></button>
   </a>
 </div>
 
 <div class="btn-whats">
-  <a href="https://wa.me/<?=$_base['radio_whatsapp']?>?text=Olá! Estou ouvindo <?=$_base['titulo_pagina']?>, quero fazer um pedido 🙂" target="_blank">
-    <button id="draggable" class="pulse-button"><i class="fab fa-whatsapp"></i></button>
+  <a href="https://wa.me/<?=$_base['radio_whatsapp']?>?text=Olá! Estou ouvindo <?=$_base['titulo_pagina']?>, quero fazer um pedido 😁😁😁" target="_blank">
+    <button id="btn-whatsapp" class="pulse-button"><i class="fab fa-whatsapp"></i></button>
   </a>
+</div>
+
+<!-- Player fixo -->
+<div class="player-fixo">
+  <iframe src="<?=$_base['radio_ip']?>" frameborder="0" height="76px"></iframe>
 </div>
 
 
@@ -235,8 +240,84 @@
   right: 20px;
   bottom: 160px;
 }
+
+/* Espaço no rodapé para o player */
+.footer {
+  padding-bottom: 76px !important;
+}
+
+/* Player fixo */
+.player-fixo {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  z-index: 99;
+  background-color: #000;
+  box-sizing: border-box;
+}
+
+.player-fixo iframe {
+  width: 100%;
+  height: 76px;
+  border: none;
+}
+
+/* Reset para evitar overflow */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+/* Container principal */
+.footer .container {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Correção para elementos float */
+.contato-destaque > div {
+  overflow: hidden;
+  max-width: 100%;
+}
+
+/* Redes sociais rodapé */
+.redessociais_rodape {
+  display: inline-block;
+  margin-right: 10px;
+}
+
+.redessociais_rodape img {
+  max-width: 40px;
+  height: auto;
+}
+
 @media (max-width: 768px) {
   .main-footer .copyright { font-size: 14px; }
+  .footer {
+    padding-bottom: 76px !important;
+  }
+  .btn-radio {
+    bottom: 90px;
+  }
+  .btn-whats {
+    bottom: 150px;
+  }
+}
+
+@media only screen and (max-width: 768px) {
+  .copyright {
+    margin-top: 70px;
+    padding-bottom: 30px;
+    text-align: center;
+  }
 }
 </style>
 

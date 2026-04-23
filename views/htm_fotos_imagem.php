@@ -612,6 +612,23 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Robo
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+/* Garantir que o rodapé seja visível na galeria */
+.footer .main-footer .copyright {
+    color: #ffffff !important;
+    font-size: 16px !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+}
+.footer .main-footer .copyright a {
+    color: #ffd700 !important;
+    font-weight: bold !important;
+    text-decoration: none !important;
+}
+.footer_bottom {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    padding: 40px 20px !important;
+}
 </style>
 </head>
 

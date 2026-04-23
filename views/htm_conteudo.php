@@ -96,6 +96,17 @@
             padding: 15px 10px;
         }
     }
+
+    /* DESATIVAR popup de video e botao ATIVAR SOM */
+    .video-modal,
+    .video-popup,
+    #videoPopup,
+    #videoModal,
+    .sound-button,
+    #soundButton,
+    #soundToggleBtn {
+        display: none !important;
+    }
     </style>
 </head>
 <body>
@@ -182,6 +193,62 @@
           bar.style.width=Math.min(s/h*100,100)+"%";
         });
       }
+    })();
+
+    // DESATIVAR popup de video e botao ATIVAR SOM
+    // Esconder popups de video e ativar som nos videos da pagina
+    (function(){
+      // Remover botao ATIVAR SOM
+      var soundBtns = document.querySelectorAll('#soundButton, #soundToggleBtn, .sound-button, .sound-button *');
+      soundBtns.forEach(function(btn){ btn.remove(); });
+
+      // Fechar e remover popup de video se estiver aberto
+      var videoModals = document.querySelectorAll('.video-modal, .video-popup, #videoPopup, #videoModal');
+      videoModals.forEach(function(modal){
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+        // Parar qualquer iframe dentro do popup
+        var iframes = modal.querySelectorAll('iframe');
+        iframes.forEach(function(iframe){ iframe.src = ''; });
+      });
+
+      // Ativar som nos videos da pagina principal (remover mute)
+      var pageIframes = document.querySelectorAll('.conteudo-pagina iframe');
+      pageIframes.forEach(function(iframe){
+        var src = iframe.getAttribute('src') || '';
+        if(src.indexOf('youtube.com') !== -1 || src.indexOf('youtu.be') !== -1){
+          // Remover mute=1 e adicionar mute=0, autoplay=1
+          src = src.replace(/mute=1/gi, 'mute=0');
+          src = src.replace(/muted=1/gi, 'muted=0');
+          if(src.indexOf('mute=') === -1){
+            src += (src.indexOf('?') !== -1 ? '&' : '?') + 'mute=0';
+          }
+          iframe.setAttribute('src', src);
+          iframe.setAttribute('allow', 'autoplay; encrypted-media');
+        }
+      });
+
+      // Observer para remover popups que aparecem dinamicamente
+      var observer = new MutationObserver(function(mutations){
+        mutations.forEach(function(mutation){
+          mutation.addedNodes.forEach(function(node){
+            if(node.nodeType === 1){
+              // Remover botoes de som
+              if(node.id === 'soundButton' || node.id === 'soundToggleBtn' || 
+                 node.classList && (node.classList.contains('sound-button') || node.classList.contains('soundToggleBtn'))){
+                node.remove();
+              }
+              // Fechar popups de video
+              if(node.id === 'videoPopup' || node.id === 'videoModal' ||
+                 node.classList && (node.classList.contains('video-modal') || node.classList.contains('video-popup'))){
+                node.classList.remove('active');
+                node.style.display = 'none';
+              }
+            }
+          });
+        });
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
     })();
   </script>
 </body>
