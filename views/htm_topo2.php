@@ -1,6 +1,7 @@
 <?php if(!isset($_base['libera_views'])){ header("HTTP/1.0 404 Not Found"); exit; } ?>
-<!-- Font Awesome 6 (para htm_conteudo.php que usa este header) -->
+<!-- Font Awesome 6 -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
 <style>
 .topo_div1_icos a i { transition: all 0.3s ease; transform: scale(1); }
 .topo_div1_icos a:hover i {
@@ -11,7 +12,7 @@
   -webkit-text-stroke: 1px #00bfff;
 }
 
-/* Redes sociais - acima da linha, fora do collapse */
+/* Redes sociais */
 .topo_redes_sociais {
   display: flex;
   align-items: center;
@@ -65,139 +66,109 @@
 .menu li:nth-child(6) a:hover { color: #ffeaa7; }
 .menu li:nth-child(7) a:hover { color: #fd79a8; }
 
-/* ===== BOTÃO HAMBURGER - versão Font Awesome ===== */
-/* theme.js cria <a class="menu_toggler"></a> vazio */
-/* Nosso JS injeta <i class="fas fa-bars"> dentro */
+#main-menu-collapse {
+  margin-top: 10px;
+}
 
-/* Desktop: esconder */
+/* ===== NOSSO BOTÃO HAMBURGER (id=cvmmenu_btn) ===== */
+#cvmmenu_btn {
+  display: none;
+  position: absolute;
+  right: 15px;
+  top: 10px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  z-index: 99999;
+  color: #fff;
+  font-size: 22px;
+  text-align: center;
+  line-height: 44px;
+  padding: 0;
+}
+#cvmmenu_btn:hover,
+#cvmmenu_btn.menu_aberto {
+  background-color: rgba(255,215,0,0.2);
+  border-color: #ffd700;
+  color: #ffd700;
+}
+
+/* NOSSO menu mobile */
+#cvmmenu_mobile {
+  display: none;
+  background: #222;
+  width: 100%;
+  padding: 10px 0;
+  border-top: 2px solid #ffd700;
+  position: relative;
+  z-index: 99998;
+}
+#cvmmenu_mobile ul {
+  list-style: none;
+  padding: 0 15px;
+  margin: 0;
+}
+#cvmmenu_mobile ul li {
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+#cvmmenu_mobile ul li a {
+  color: #fff;
+  font-size: 16px;
+  font-weight: bold;
+  padding: 12px 5px;
+  display: block;
+  text-decoration: none;
+}
+#cvmmenu_mobile ul li a:hover {
+  color: #ffd700;
+}
+#cvmmenu_mobile .sub-nav {
+  display: none;
+  background: rgba(0,0,0,0.3);
+  padding-left: 15px;
+}
+#cvmmenu_mobile .sub-nav ul {
+  padding: 0;
+}
+#cvmmenu_mobile .sub-nav li a {
+  color: #ccc;
+  font-size: 14px;
+  padding: 8px 5px;
+}
+
+/* Desktop */
 @media (min-width: 768px) {
-  a.menu_toggler,
-  a.tagline_toggler {
-    display: none !important;
-  }
-  .mobile_menu_wrapper {
-    display: none !important;
-  }
-  header nav {
-    display: block !important;
-  }
+  #cvmmenu_btn { display: none !important; }
+  #cvmmenu_mobile { display: none !important; }
+  header nav { display: block !important; }
 }
 
 /* Mobile */
 @media (max-width: 767px) {
-  .logo_div a.logo img {
-    width: 80px !important;
-    height: 80px !important;
-  }
-  .topo_redes_sociais {
-    justify-content: center;
-    padding: 5px 0;
-  }
-  .topo_redes_sociais_item {
-    width: 32px;
-    height: 32px;
-  }
-
-  /* Botão hamburger - sobrescrever o sprite original do tema */
-  a.menu_toggler {
-    background: none !important;
-    background-image: none !important;
-    width: 44px !important;
-    height: 44px !important;
-    position: absolute !important;
-    right: 15px !important;
-    top: 10px !important;
-    left: auto !important;
-    display: block !important;
-    border: 1px solid rgba(255,255,255,0.3) !important;
-    border-radius: 4px !important;
-    padding: 0 !important;
-    cursor: pointer !important;
-    z-index: 1001 !important;
-    text-indent: 0 !important;
-    text-align: center !important;
-    line-height: 44px !important;
-    font-size: 22px !important;
-    color: #fff !important;
-    margin: 0 !important;
-    float: none !important;
-  }
-
-  a.menu_toggler:hover {
-    background-color: rgba(255,215,0,0.2) !important;
-    border-color: #ffd700 !important;
-    color: #ffd700 !important;
-  }
-
-  a.menu_toggler.close_toggler {
-    background-color: rgba(255,215,0,0.15) !important;
-    border-color: #ffd700 !important;
-    color: #ffd700 !important;
-  }
-
-  /* Esconder tagline_toggler */
-  a.tagline_toggler {
-    display: none !important;
-  }
-
-  .mobile_menu_wrapper {
-    display: none;
-    background: #222 !important;
-    width: 100% !important;
-    padding: 10px 0 !important;
-    margin-top: 10px !important;
-    border-top: 2px solid #ffd700 !important;
-    position: relative !important;
-    z-index: 1000 !important;
-  }
-  .mobile_menu_wrapper .mobile_menu {
-    padding: 0 15px !important;
-    list-style: none !important;
-  }
-  .mobile_menu_wrapper .mobile_menu li {
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-  }
-  .mobile_menu_wrapper .mobile_menu li a.mob_link {
-    color: #fff !important;
-    font-size: 16px !important;
-    font-weight: bold !important;
-    padding: 12px 5px !important;
-    display: block !important;
-    border-bottom: none !important;
-  }
-  .mobile_menu_wrapper .mobile_menu li a.mob_link:hover {
-    color: #ffd700 !important;
-  }
-  .mobile_menu_wrapper .sub-nav {
-    display: none;
-    background: rgba(0,0,0,0.3) !important;
-    padding-left: 15px;
-  }
-  .mobile_menu_wrapper .showsub .sub-nav {
-    display: block !important;
-  }
-  .mobile_menu_wrapper .sub-menu { width: 100% !important; }
-  .mobile_menu_wrapper .sub-menu li a {
-    color: #ccc !important;
-    font-size: 14px !important;
-    padding: 8px 5px !important;
-  }
-  .mobile_menu_wrapper li.menu-item-has-children:before {
-    color: #ffd700 !important;
-    right: 10px !important;
-    top: 14px !important;
-  }
-}
-
-#main-menu-collapse {
-  margin-top: 10px;
+  #cvmmenu_btn { display: block !important; }
+  a.menu_toggler { display: none !important; }
+  a.tagline_toggler { display: none !important; }
+  .mobile_menu_wrapper { display: none !important; }
+  #main-menu-collapse nav { display: none !important; }
+  .logo_div a.logo img { width: 80px !important; height: 80px !important; }
+  .topo_redes_sociais { justify-content: center; padding: 5px 0; }
+  .topo_redes_sociais_item { width: 32px; height: 32px; }
 }
 </style>
 
 <div class="main_header">
     <div class="header_parent_wrap">
-        <header>
+        <header style="position:relative;">
             <div class="container">
+
+                <!-- NOSSO BOTÃO HAMBURGER - direto no HTML -->
+                <button id="cvmmenu_btn" onclick="cvmToggleMenu()">
+                    <i class="fas fa-bars"></i>
+                </button>
+
                 <!-- Linha 1: Logo + Contato -->
                 <div class="row">
                     <div class="col-sm-4">
@@ -246,8 +217,6 @@
                 <hr style="margin-top:10px;">
 
                 <!-- Menu principal desktop -->
-                <!-- O theme.js cria o a.menu_toggler e .mobile_menu_wrapper automaticamente -->
-                <!-- Nosso JS em htm_conteudo.php injeta o ícone Font Awesome no botão -->
                 <div id="main-menu-collapse">
                     <nav>
                         <ul class="menu">
@@ -257,14 +226,12 @@
                                 foreach($lista as $key=>$value){
                                     $titulo_limpo = mb_strtoupper(trim(strip_tags($value['titulo'])));
                                     if (strpos($titulo_limpo, 'INICIAL') !== false) continue;
-
                                     $array=explode('#',$value['destino']);
                                     $numero=count($array);
                                     $end_final='#'.end($array);
                                     $endereco=$value['destino'];
                                     $namesmapagina=($end_final!="#conteudo"&&$numero>1)?" class='scrollSuave'":"";
                                     $pre_submenu=(count($value['filhos'])>0)?"class='menu-item-has-children'":"";
-
                                     echo"<li $pre_submenu><a $namesmapagina href='".$endereco."'>".$value['titulo']."</a>";
                                     if(count($value['filhos'])>0){
                                         geramenu2($value['filhos'],$controller,1);
@@ -278,7 +245,50 @@
                         </ul>
                     </nav>
                 </div>
+
+                <!-- NOSSO MENU MOBILE -->
+                <div id="cvmmenu_mobile">
+                    <ul>
+                        <?php
+                        function geramenumobile2($lista,$controller,$pai){
+                            if($pai!=0){echo"<div class='sub-nav'><ul>";}
+                            foreach($lista as $key=>$value){
+                                $titulo_limpo = mb_strtoupper(trim(strip_tags($value['titulo'])));
+                                if (strpos($titulo_limpo, 'INICIAL') !== false) continue;
+                                $endereco=$value['destino'];
+                                $tem_filhos=(count($value['filhos'])>0);
+                                echo"<li><a href='".$endereco."'>".$value['titulo']."</a>";
+                                if($tem_filhos){
+                                    geramenumobile2($value['filhos'],$controller,1);
+                                }
+                                echo"</li>";
+                            }
+                            if($pai!=0){echo"</ul></div>";}
+                        }
+                        geramenumobile2($_base['menu'],$controller,0);
+                        ?>
+                    </ul>
+                </div>
+
             </div>
         </header>
     </div>
 </div>
+
+<!-- JavaScript do menu mobile - inline, não depende de jQuery nem de theme.js -->
+<script>
+function cvmToggleMenu() {
+  var menu = document.getElementById('cvmmenu_mobile');
+  var btn = document.getElementById('cvmmenu_btn');
+  if (!menu || !btn) return;
+  if (menu.style.display === 'block') {
+    menu.style.display = 'none';
+    btn.classList.remove('menu_aberto');
+    btn.innerHTML = '<i class="fas fa-bars"></i>';
+  } else {
+    menu.style.display = 'block';
+    btn.classList.add('menu_aberto');
+    btn.innerHTML = '<i class="fas fa-times"></i>';
+  }
+}
+</script>

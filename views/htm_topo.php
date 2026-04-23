@@ -1,7 +1,6 @@
 <?php if(!isset($_base['libera_views'])){ header("HTTP/1.0 404 Not Found"); exit; } ?>
-<!-- Font Awesome 6 (único) -->
+<!-- Font Awesome 6 -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
 
 <style>
 /* Ícones de contato - hover */
@@ -17,7 +16,7 @@
   -webkit-text-stroke: 1px #00bfff;
 }
 
-/* ===== REDES SOCIAIS - ACIMA DA LINHA BRANCA ===== */
+/* ===== REDES SOCIAIS ===== */
 .topo_redes_sociais {
   display: flex;
   align-items: center;
@@ -44,8 +43,6 @@
   transform: scale(1.15) translateY(-3px);
   box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4);
 }
-
-/* Animação flutuante suave */
 @keyframes floatSuave {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-4px); }
@@ -87,36 +84,120 @@
 .menu li:nth-child(6) a:hover { color: #ffeaa7; }
 .menu li:nth-child(7) a:hover { color: #fd79a8; }
 
-/* ===== BOTÃO HAMBURGER DO TEMA (a.menu_toggler) ===== */
-/* theme.js cria: <a class="menu_toggler"></a> - elemento VAZIO */
-/* Nosso JS (em htm_index.php) injeta <i class="fas fa-bars"> dentro dele */
-/* Aqui só sobrescrevemos o visual do botão */
+/* Desktop: margem do menu */
+#main-menu-collapse {
+  margin-top: 10px;
+}
 
-/* Desktop: esconder */
+/* ===== NOSSO BOTÃO HAMBURGER (id=cvmmenu_btn) ===== */
+/* Este botão é colocado DIRETAMENTE no HTML, não depende do theme.js */
+#cvmmenu_btn {
+  display: none;
+  position: absolute;
+  right: 15px;
+  top: 10px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  z-index: 99999;
+  color: #fff;
+  font-size: 22px;
+  text-align: center;
+  line-height: 44px;
+  padding: 0;
+}
+#cvmmenu_btn:hover,
+#cvmmenu_btn.menu_aberto {
+  background-color: rgba(255,215,0,0.2);
+  border-color: #ffd700;
+  color: #ffd700;
+}
+
+/* NOSSO menu mobile (id=cvmmenu_mobile) */
+#cvmmenu_mobile {
+  display: none;
+  background: #222;
+  width: 100%;
+  padding: 10px 0;
+  border-top: 2px solid #ffd700;
+  position: relative;
+  z-index: 99998;
+}
+#cvmmenu_mobile ul {
+  list-style: none;
+  padding: 0 15px;
+  margin: 0;
+}
+#cvmmenu_mobile ul li {
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+#cvmmenu_mobile ul li a {
+  color: #fff;
+  font-size: 16px;
+  font-weight: bold;
+  padding: 12px 5px;
+  display: block;
+  text-decoration: none;
+}
+#cvmmenu_mobile ul li a:hover {
+  color: #ffd700;
+}
+#cvmmenu_mobile .sub-nav {
+  display: none;
+  background: rgba(0,0,0,0.3);
+  padding-left: 15px;
+}
+#cvmmenu_mobile .sub-nav ul {
+  padding: 0;
+}
+#cvmmenu_mobile .sub-nav li a {
+  color: #ccc;
+  font-size: 14px;
+  padding: 8px 5px;
+}
+
+/* Desktop: esconder nosso hamburger e menu mobile */
 @media (min-width: 768px) {
-  a.menu_toggler,
+  #cvmmenu_btn {
+    display: none !important;
+  }
+  #cvmmenu_mobile {
+    display: none !important;
+  }
+  header nav {
+    display: block !important;
+  }
+}
+
+/* Mobile: mostrar nosso hamburger, esconder nav original */
+@media (max-width: 767px) {
+  #cvmmenu_btn {
+    display: block !important;
+  }
+  /* Esconder o menu_toggler do theme.js (se existir) */
+  a.menu_toggler {
+    display: none !important;
+  }
   a.tagline_toggler {
     display: none !important;
   }
   .mobile_menu_wrapper {
     display: none !important;
   }
-  /* Garantir que nav fique visível no desktop */
-  header nav {
-    display: block !important;
+  /* Esconder o nav desktop no mobile */
+  #main-menu-collapse nav {
+    display: none !important;
   }
-}
-
-/* ===== MOBILE ===== */
-@media (max-width: 767px) {
   /* Logo menor */
   .logo_div a.logo img {
     width: 80px !important;
     height: 80px !important;
     padding: 3px;
   }
-
-  /* Redes sociais centralizadas no mobile */
+  /* Redes sociais centralizadas */
   .topo_redes_sociais {
     justify-content: center;
     padding: 5px 0;
@@ -125,125 +206,23 @@
     width: 32px;
     height: 32px;
   }
-
-  /* Botão hamburger - sobrescrever o sprite original do tema */
-  a.menu_toggler {
-    background: none !important;
-    background-image: none !important;
-    width: 44px !important;
-    height: 44px !important;
-    position: absolute !important;
-    right: 15px !important;
-    top: 10px !important;
-    left: auto !important;
-    display: block !important;
-    border: 1px solid rgba(255,255,255,0.3) !important;
-    border-radius: 4px !important;
-    padding: 0 !important;
-    cursor: pointer !important;
-    z-index: 1001 !important;
-    text-indent: 0 !important;
-    text-align: center !important;
-    line-height: 44px !important;
-    font-size: 22px !important;
-    color: #fff !important;
-    margin: 0 !important;
-    float: none !important;
-  }
-
-  a.menu_toggler:hover {
-    background-color: rgba(255,215,0,0.2) !important;
-    border-color: #ffd700 !important;
-    color: #ffd700 !important;
-  }
-
-  a.menu_toggler.close_toggler {
-    background-color: rgba(255,215,0,0.15) !important;
-    border-color: #ffd700 !important;
-    color: #ffd700 !important;
-  }
-
-  /* Esconder tagline_toggler */
-  a.tagline_toggler {
-    display: none !important;
-  }
-
-  /* Estilizar o menu mobile do tema (.mobile_menu_wrapper) */
-  .mobile_menu_wrapper {
-    display: none;
-    background: #222 !important;
-    width: 100% !important;
-    padding: 10px 0 !important;
-    margin-top: 10px !important;
-    border-top: 2px solid #ffd700 !important;
-    position: relative !important;
-    z-index: 1000 !important;
-  }
-
-  .mobile_menu_wrapper .mobile_menu {
-    padding: 0 15px !important;
-    list-style: none !important;
-  }
-
-  .mobile_menu_wrapper .mobile_menu li {
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-  }
-
-  .mobile_menu_wrapper .mobile_menu li a.mob_link {
-    color: #fff !important;
-    font-size: 16px !important;
-    font-weight: bold !important;
-    padding: 12px 5px !important;
-    display: block !important;
-    border-bottom: none !important;
-  }
-
-  .mobile_menu_wrapper .mobile_menu li a.mob_link:hover {
-    color: #ffd700 !important;
-  }
-
-  /* Sub-menu no mobile */
-  .mobile_menu_wrapper .sub-nav {
-    display: none;
-    background: rgba(0,0,0,0.3) !important;
-    padding-left: 15px;
-  }
-
-  .mobile_menu_wrapper .showsub .sub-nav {
-    display: block !important;
-  }
-
-  .mobile_menu_wrapper .sub-menu {
-    width: 100% !important;
-  }
-
-  .mobile_menu_wrapper .sub-menu li a {
-    color: #ccc !important;
-    font-size: 14px !important;
-    padding: 8px 5px !important;
-  }
-
-  /* Ícone de seta para submenus */
-  .mobile_menu_wrapper li.menu-item-has-children:before {
-    color: #ffd700 !important;
-    right: 10px !important;
-    top: 14px !important;
-  }
 }
-
-/* Desktop: margem do menu */
-#main-menu-collapse {
-  margin-top: 10px;
-}
-
 </style>
+
 <a href="https://titan.hostgator.com.br/mail/" target="_blank" class="link-webmail-flutuante">
     Webmail
 </a>
+
 <div class="main_header">
   <div class="header_parent_wrap">
-    <header>
+    <header style="position:relative;">
       <div class="container">
+
+        <!-- NOSSO BOTÃO HAMBURGER - direto no HTML, não depende de JS externo -->
+        <button id="cvmmenu_btn" onclick="cvmToggleMenu()">
+          <i class="fas fa-bars"></i>
+        </button>
+
         <!-- Linha 1: Logo + Informações de contato -->
         <div class="row">
           <div class="col-sm-4">
@@ -280,7 +259,7 @@
           </div>
         </div>
 
-        <!-- Linha 2: Redes Sociais (ACIMA da linha branca, FORA do collapse) -->
+        <!-- Linha 2: Redes Sociais (ACIMA da linha branca) -->
         <div class="row topo-redes-row">
           <div class="col-sm-12">
             <div class="topo_redes_sociais">
@@ -295,9 +274,7 @@
 
         <hr style="margin-top:10px;">
 
-        <!-- Menu principal desktop -->
-        <!-- O theme.js cria automaticamente o a.menu_toggler e o .mobile_menu_wrapper -->
-        <!-- Nosso JS em htm_index.php injeta o ícone Font Awesome no botão -->
+        <!-- Menu principal desktop (escondido no mobile via CSS) -->
         <div id="main-menu-collapse">
           <nav>
             <ul class="menu">
@@ -305,18 +282,14 @@
                 function geramenu($lista, $controller, $pai) {
                   if ($pai != 0) { echo "<div class='sub-nav'><ul class='sub-menu'>"; }
                   foreach ($lista as $value) {
-
-                    // Remove qualquer item com título semelhante a "INICIAL"
                     $titulo_limpo = mb_strtoupper(trim(strip_tags($value['titulo'])));
                     if (strpos($titulo_limpo, 'INICIAL') !== false) continue;
-
                     $array = explode('#', $value['destino']);
                     $numero = count($array);
                     $end_final = '#'.end($array);
                     $endereco = $value['destino'];
                     $namesmapagina = ($end_final != "#conteudo" && $numero > 1) ? " class='scrollSuave'" : "";
                     $pre_submenu = (count($value['filhos']) > 0) ? "class='menu-item-has-children'" : "";
-
                     echo "<li $pre_submenu><a $namesmapagina href='$endereco'>{$value['titulo']}</a>";
                     if (count($value['filhos']) > 0) {
                       geramenu($value['filhos'], $controller, 1);
@@ -327,12 +300,53 @@
                 }
                 geramenu($_base['menu'], $controller, 0);
                 ?>
-
             </ul>
           </nav>
         </div>
-      </div>
 
+        <!-- NOSSO MENU MOBILE - direto no HTML, cópia do menu desktop -->
+        <div id="cvmmenu_mobile">
+          <ul>
+            <?php
+            function geramenumobile($lista, $controller, $pai) {
+              if ($pai != 0) { echo "<div class='sub-nav'><ul>"; }
+              foreach ($lista as $value) {
+                $titulo_limpo = mb_strtoupper(trim(strip_tags($value['titulo'])));
+                if (strpos($titulo_limpo, 'INICIAL') !== false) continue;
+                $endereco = $value['destino'];
+                $tem_filhos = (count($value['filhos']) > 0);
+                echo "<li><a href='".$endereco."'>".$value['titulo']."</a>";
+                if ($tem_filhos) {
+                  geramenumobile($value['filhos'], $controller, 1);
+                }
+                echo "</li>";
+              }
+              if ($pai != 0) { echo "</ul></div>"; }
+            }
+            geramenumobile($_base['menu'], $controller, 0);
+            ?>
+          </ul>
+        </div>
+
+      </div>
     </header>
   </div>
 </div>
+
+<!-- JavaScript do menu mobile - inline, não depende de jQuery nem de theme.js -->
+<script>
+function cvmToggleMenu() {
+  var menu = document.getElementById('cvmmenu_mobile');
+  var btn = document.getElementById('cvmmenu_btn');
+  if (!menu || !btn) return;
+  if (menu.style.display === 'block') {
+    menu.style.display = 'none';
+    btn.classList.remove('menu_aberto');
+    btn.innerHTML = '<i class="fas fa-bars"></i>';
+  } else {
+    menu.style.display = 'block';
+    btn.classList.add('menu_aberto');
+    btn.innerHTML = '<i class="fas fa-times"></i>';
+  }
+}
+</script>
