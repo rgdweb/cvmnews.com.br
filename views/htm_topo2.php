@@ -1,48 +1,132 @@
 <?php if(!isset($_base['libera_views'])){ header("HTTP/1.0 404 Not Found"); exit; } ?>
 <style>
-.topo_div1_icos a i, .topo_redes_sociais_item img { transition: all 0.3s ease; transform: scale(1); }
-.topo_div1_icos a:hover i { 
-  transform: scale(1.2); 
-  color: #ffd700; 
-  text-shadow: 0 0 10px #ffd700, 0 0 20px #ffd700, 0 0 30px #ffd700;
+.topo_div1_icos a i { transition: all 0.3s ease; transform: scale(1); }
+.topo_div1_icos a:hover i {
+  transform: scale(1.2);
+  color: #ffd700;
+  text-shadow: 0 0 10px #ffd700, 0 0 20px #ffd700;
   filter: drop-shadow(0 0 8px #ffd700);
   -webkit-text-stroke: 1px #00bfff;
-  text-stroke: 1px #00bfff;
-  box-shadow: 0 0 5px #00bfff, 0 0 10px #00bfff, 0 0 15px #00bfff;
 }
-.topo_redes_sociais_item { display: inline-block; animation: float 3s ease-in-out infinite; }
-.topo_redes_sociais_item:hover img { transform: scale(1.15) translateY(-5px); box-shadow: 0 5px 15px rgba(255,215,0,0.3); }
+
+/* Redes sociais - acima da linha, fora do collapse */
+.topo_redes_sociais {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 0 2px 0;
+}
+.topo_redes_sociais_item {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  transition: all 0.3s ease;
+  animation: floatSuave 3s ease-in-out infinite;
+}
 .topo_redes_sociais_item:nth-child(1) { animation-delay: 0s; }
 .topo_redes_sociais_item:nth-child(2) { animation-delay: 0.5s; }
 .topo_redes_sociais_item:nth-child(3) { animation-delay: 1s; }
 .topo_redes_sociais_item:nth-child(4) { animation-delay: 1.5s; }
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-8px); }
+.topo_redes_sociais_item:nth-child(5) { animation-delay: 2s; }
+.topo_redes_sociais_item img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  transition: all 0.3s ease;
 }
+.topo_redes_sociais_item:hover img {
+  transform: scale(1.15) translateY(-3px);
+  box-shadow: 0 4px 12px rgba(255,215,0,0.4);
+}
+@keyframes floatSuave {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
 .logo img { transition: transform 0.3s ease; }
 .logo:hover img { transform: scale(1.05); }
 .menu li a { transition: all 0.3s ease; }
-.menu li a:hover { 
-  transform: translateY(-2px); 
-  text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor;
+.menu li a:hover {
+  transform: translateY(-2px);
+  text-shadow: 0 0 10px currentColor;
   filter: drop-shadow(0 0 8px currentColor);
   -webkit-text-stroke: 1px #00bfff;
-  text-stroke: 1px #00bfff;
 }
-.menu li:nth-child(1) a:hover { color: #ffd700; } /* INICIAL - Dourado */
-.menu li:nth-child(2) a:hover { color: #ff6b6b; } /* FOTOS - Vermelho */
-.menu li:nth-child(3) a:hover { color: #4ecdc4; } /* PROGRAMAÇÃO - Verde água */
-.menu li:nth-child(4) a:hover { color: #45b7d1; } /* NOTICIAS - Azul claro */
-.menu li:nth-child(5) a:hover { color: #96ceb4; } /* EQUIPE - Verde claro */
-.menu li:nth-child(6) a:hover { color: #ffeaa7; } /* CONTATO - Amarelo claro */
-.menu li:nth-child(7) a:hover { color: #fd79a8; } /* TV | VIDEOS - Rosa */
+.menu li:nth-child(1) a:hover { color: #ffd700; }
+.menu li:nth-child(2) a:hover { color: #ff6b6b; }
+.menu li:nth-child(3) a:hover { color: #4ecdc4; }
+.menu li:nth-child(4) a:hover { color: #45b7d1; }
+.menu li:nth-child(5) a:hover { color: #96ceb4; }
+.menu li:nth-child(6) a:hover { color: #ffeaa7; }
+.menu li:nth-child(7) a:hover { color: #fd79a8; }
 .navbar-toggle { transition: all 0.3s ease; }
-.navbar-toggle:hover { 
-  transform: scale(1.1); 
-  background-color: #ffd700; 
-  box-shadow: 0 0 15px #ffd700, 0 0 25px #ffd700, 0 0 35px #ffd700;
+.navbar-toggle:hover {
+  transform: scale(1.1);
+  background-color: #ffd700;
+  box-shadow: 0 0 15px #ffd700;
   filter: drop-shadow(0 0 10px #ffd700);
+}
+
+/* Mobile */
+@media (min-width: 768px) {
+  .navbar-header { display: none; }
+}
+@media (max-width: 767px) {
+  .logo_div a.logo img {
+    width: 80px !important;
+    height: 80px !important;
+  }
+  .topo_redes_sociais {
+    justify-content: center;
+    padding: 5px 0;
+  }
+  .topo_redes_sociais_item {
+    width: 32px;
+    height: 32px;
+  }
+  .navbar-header {
+    display: block;
+    position: relative;
+    float: right;
+    margin-top: -45px;
+    z-index: 1000;
+  }
+  .navbar-toggle {
+    display: block !important;
+    background-color: #333;
+    border: 1px solid #666;
+    border-radius: 4px;
+    padding: 9px 10px;
+    margin: 8px 0;
+    cursor: pointer;
+  }
+  .navbar-toggle .icon-bar {
+    display: block !important;
+    width: 22px;
+    height: 2px;
+    border-radius: 1px;
+    background-color: #fff;
+    margin-top: 4px;
+  }
+  .navbar-toggle .icon-bar:first-child {
+    margin-top: 0;
+  }
+  #main-menu-collapse {
+    margin-top: 10px;
+    clear: both;
+  }
+  .menu {
+    flex-direction: column;
+    gap: 0;
+  }
+  .menu li a {
+    display: block;
+    padding: 12px 15px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
 }
 </style>
 
@@ -50,6 +134,7 @@
     <div class="header_parent_wrap">
         <header>
             <div class="container">
+                <!-- Linha 1: Logo + Contato -->
                 <div class="row">
                     <div class="col-sm-4">
                         <div class="logo_div">
@@ -85,8 +170,18 @@
                     </div>
                 </div>
 
-                <div style="position:relative;width:100%;border-top:1px solid #ccc;padding-top:15px;margin-top:-10px;"></div>
-                
+                <!-- Redes sociais ACIMA da linha branca, FORA do collapse -->
+                <div class="row topo-redes-row">
+                    <div class="col-sm-12">
+                        <div class="topo_redes_sociais">
+                            <?php foreach($_base['listaredes'] as $key=>$value){echo"<a href='".$value['endereco']."' target='_blank' class='topo_redes_sociais_item'><img src='".$value['imagem']."' alt='Rede Social'></a>";} ?>
+                        </div>
+                    </div>
+                </div>
+
+                <hr style="margin-top:10px;">
+
+                <!-- Botão hamburger mobile -->
                 <div class="navbar-header">
                     <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#main-menu-collapse">
                         <span class="sr-only">Toggle navigation</span>
@@ -95,51 +190,37 @@
                         <span class="icon-bar"></span>
                     </button>
                 </div>
-                
+
+                <!-- Menu principal (SÓ menu, sem redes sociais) -->
                 <div class="collapse navbar-collapse" id="main-menu-collapse">
-                    <div class="row">
-                        <div class="col-sm-8">
-                            <nav>
-                                <ul class="menu">
-                                    <?php
-                                    function geramenu($lista,$controller,$pai){
-                                        if($pai!=0){echo"<div class='sub-nav'><ul class='sub-menu'";}
-                                        foreach($lista as $key=>$value){
-                                            $array=explode('#',$value['destino']);
-                                            $numero=count($array);
-                                            $end_final='#'.end($array);
-                                            if($end_final=="#conteudo"){
-                                                $namesmapagina="";
-                                                $endereco=$value['destino'];
-                                            }else{
-                                                if($numero>1){
-                                                    $namesmapagina=" class='scrollSuave' ";
-                                                    $endereco=$value['destino'];
-                                                }else{
-                                                    $namesmapagina="";
-                                                    $endereco=$value['destino'];
-                                                }
-                                            }
-                                            $pre_submenu=(count($value['filhos'])>0)?"class='menu-item-has-children'":"";
-                                            echo"<li $pre_submenu><a $namesmapagina href='".$endereco."'>".$value['titulo']."</a>";
-                                            if(count($value['filhos'])>0){
-                                                geramenu($value['filhos'],$controller,1);
-                                            }
-                                            echo"</li>";
-                                        }
-                                        if($pai!=0){echo"</ul></div>";}
+                    <nav>
+                        <ul class="menu">
+                            <?php
+                            function geramenu2($lista,$controller,$pai){
+                                if($pai!=0){echo"<div class='sub-nav'><ul class='sub-menu'>";}
+                                foreach($lista as $key=>$value){
+                                    $titulo_limpo = mb_strtoupper(trim(strip_tags($value['titulo'])));
+                                    if (strpos($titulo_limpo, 'INICIAL') !== false) continue;
+
+                                    $array=explode('#',$value['destino']);
+                                    $numero=count($array);
+                                    $end_final='#'.end($array);
+                                    $endereco=$value['destino'];
+                                    $namesmapagina=($end_final!="#conteudo"&&$numero>1)?" class='scrollSuave'":"";
+                                    $pre_submenu=(count($value['filhos'])>0)?"class='menu-item-has-children'":"";
+
+                                    echo"<li $pre_submenu><a $namesmapagina href='".$endereco."'>".$value['titulo']."</a>";
+                                    if(count($value['filhos'])>0){
+                                        geramenu2($value['filhos'],$controller,1);
                                     }
-                                    geramenu($_base['menu'],$controller,0);
-                                    ?>
-                                </ul>
-                            </nav>
-                        </div>
-                        <div class="col-sm-4">
-                            <div class="topo_redes_sociais">
-                                <?php foreach($_base['listaredes'] as $key=>$value){echo"<a href='".$value['endereco']."' target='_blank' class='topo_redes_sociais_item'><img src='".$value['imagem']."'></a>";} ?>
-                            </div>
-                        </div>
-                    </div>
+                                    echo"</li>";
+                                }
+                                if($pai!=0){echo"</ul></div>";}
+                            }
+                            geramenu2($_base['menu'],$controller,0);
+                            ?>
+                        </ul>
+                    </nav>
                 </div>
             </div>
         </header>

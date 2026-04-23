@@ -4,9 +4,8 @@
 
 
 <style>
-/* Ícones e animações */
-.topo_div1_icos a i,
-.topo_redes_sociais_item img {
+/* Ícones de contato - hover */
+.topo_div1_icos a i {
   transition: all 0.3s ease;
   transform: scale(1);
 }
@@ -17,22 +16,51 @@
   filter: drop-shadow(0 0 8px #ffd700);
   -webkit-text-stroke: 1px #00bfff;
 }
+
+/* ===== REDES SOCIAIS - ACIMA DA LINHA BRANCA ===== */
+.topo_redes_sociais {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 0 2px 0;
+}
 .topo_redes_sociais_item {
   display: inline-block;
-  animation: float 3s ease-in-out infinite;
+  width: 40px;
+  height: 40px;
+  transition: all 0.3s ease;
+}
+.topo_redes_sociais_item img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  transition: all 0.3s ease;
 }
 .topo_redes_sociais_item:hover img {
-  transform: scale(1.15) translateY(-5px);
-  box-shadow: 0 5px 15px rgba(255, 215, 0, 0.3);
+  transform: scale(1.15) translateY(-3px);
+  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4);
 }
-@keyframes float {
+
+/* Animação flutuante suave - sem sobrepor o menu */
+@keyframes floatSuave {
   0%, 100% {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-8px);
+    transform: translateY(-4px);
   }
 }
+.topo_redes_sociais_item {
+  animation: floatSuave 3s ease-in-out infinite;
+}
+.topo_redes_sociais_item:nth-child(1) { animation-delay: 0s; }
+.topo_redes_sociais_item:nth-child(2) { animation-delay: 0.5s; }
+.topo_redes_sociais_item:nth-child(3) { animation-delay: 1s; }
+.topo_redes_sociais_item:nth-child(4) { animation-delay: 1.5s; }
+.topo_redes_sociais_item:nth-child(5) { animation-delay: 2s; }
 
 /* Logo */
 .logo_div a.logo img {
@@ -91,21 +119,6 @@
   filter: drop-shadow(0 0 10px #ffd700);
 }
 
-/* Redes sociais - posicionamento correto */
-.topo_redes_sociais {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 5px 0;
-}
-
-/* Menu row - alinhar verticalmente */
-#main-menu-collapse .row {
-  display: flex;
-  align-items: center;
-}
-
 /* Esconder botão mobile em telas grandes */
 @media (min-width: 768px) {
   .navbar-header {
@@ -113,12 +126,23 @@
   }
 }
 
-/* Logo menor no mobile */
+/* ===== MOBILE ===== */
 @media (max-width: 767px) {
+  /* Logo menor no mobile */
   .logo_div a.logo img {
     width: 80px !important;
     height: 80px !important;
     padding: 3px;
+  }
+
+  /* Redes sociais - centralizar no mobile, ícones menores */
+  .topo_redes_sociais {
+    justify-content: center;
+    padding: 5px 0;
+  }
+  .topo_redes_sociais_item {
+    width: 32px;
+    height: 32px;
   }
 
   /* Botão hamburger visível no mobile */
@@ -126,7 +150,7 @@
     display: block;
     position: relative;
     float: right;
-    margin-top: -50px;
+    margin-top: -45px;
     z-index: 1000;
   }
 
@@ -153,19 +177,10 @@
     margin-top: 0;
   }
 
-  /* Menu colapsado no mobile */
+  /* Menu colapsado no mobile - SÓ O MENU, sem redes sociais */
   #main-menu-collapse {
     margin-top: 10px;
     clear: both;
-  }
-
-  #main-menu-collapse .row {
-    display: block;
-  }
-
-  #main-menu-collapse .col-sm-9,
-  #main-menu-collapse .col-sm-3 {
-    width: 100%;
   }
 
   .menu {
@@ -178,11 +193,6 @@
     padding: 12px 15px;
     border-bottom: 1px solid rgba(255,255,255,0.1);
   }
-
-  .topo_redes_sociais {
-    justify-content: center;
-    padding: 15px 0;
-  }
 }
 
 /* Ajuste da margem do menu colapsado */
@@ -192,12 +202,13 @@
 
 </style>
 <a href="https://titan.hostgator.com.br/mail/" target="_blank" class="link-webmail-flutuante">
-    Webmail 
+    Webmail
 </a>
 <div class="main_header">
   <div class="header_parent_wrap">
     <header>
       <div class="container">
+        <!-- Linha 1: Logo + Informações de contato -->
         <div class="row">
           <div class="col-sm-4">
             <div class="logo_div">
@@ -233,6 +244,19 @@
           </div>
         </div>
 
+        <!-- Linha 2: Redes Sociais (ACIMA da linha branca, FORA do collapse) -->
+        <div class="row topo-redes-row">
+          <div class="col-sm-12">
+            <div class="topo_redes_sociais">
+              <?php foreach($_base['listaredes'] as $value): ?>
+                <a href="<?=$value['endereco']?>" target="_blank" class="topo_redes_sociais_item">
+                  <img src="<?=$value['imagem']?>" alt="Rede Social">
+                </a>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        </div>
+
         <hr style="margin-top:10px;">
 
         <!-- Botão para menu mobile -->
@@ -245,55 +269,42 @@
           </button>
         </div>
 
-        <!-- Menu principal -->
+        <!-- Menu principal (SÓ o menu, sem redes sociais dentro) -->
         <div class="collapse navbar-collapse" id="main-menu-collapse">
-          <div class="row">
-            <div class="col-sm-9">
-              <nav>
-                <ul class="menu">
-                                     <?php
-                    function geramenu($lista, $controller, $pai) {
-                      if ($pai != 0) { echo "<div class='sub-nav'><ul class='sub-menu'>"; }
-                      foreach ($lista as $value) {
-                    
-                        // Remove qualquer item com título semelhante a "INICIAL"
-                        $titulo_limpo = mb_strtoupper(trim(strip_tags($value['titulo'])));
-                        if (strpos($titulo_limpo, 'INICIAL') !== false) continue;
-                    
-                        $array = explode('#', $value['destino']);
-                        $numero = count($array);
-                        $end_final = '#'.end($array);
-                        $endereco = $value['destino'];
-                        $namesmapagina = ($end_final != "#conteudo" && $numero > 1) ? " class='scrollSuave'" : "";
-                        $pre_submenu = (count($value['filhos']) > 0) ? "class='menu-item-has-children'" : "";
-                    
-                        echo "<li $pre_submenu><a $namesmapagina href='$endereco'>{$value['titulo']}</a>";
-                        if (count($value['filhos']) > 0) {
-                          geramenu($value['filhos'], $controller, 1);
-                        }
-                        echo "</li>";
-                      }
-                      if ($pai != 0) { echo "</ul></div>"; }
-                    }
-                    geramenu($_base['menu'], $controller, 0);
-                    ?>
+          <nav>
+            <ul class="menu">
+                                 <?php
+                function geramenu($lista, $controller, $pai) {
+                  if ($pai != 0) { echo "<div class='sub-nav'><ul class='sub-menu'>"; }
+                  foreach ($lista as $value) {
 
-                </ul>
-              </nav>
-            </div>
-            <div class="col-sm-3">
-              <div class="topo_redes_sociais">
-                <?php foreach($_base['listaredes'] as $value): ?>
-                  <a href="<?=$value['endereco']?>" target="_blank" class="topo_redes_sociais_item">
-                    <img src="<?=$value['imagem']?>" alt="Rede Social">
-                  </a>
-                <?php endforeach; ?>
-              </div>
-            </div>
-          </div>
+                    // Remove qualquer item com título semelhante a "INICIAL"
+                    $titulo_limpo = mb_strtoupper(trim(strip_tags($value['titulo'])));
+                    if (strpos($titulo_limpo, 'INICIAL') !== false) continue;
+
+                    $array = explode('#', $value['destino']);
+                    $numero = count($array);
+                    $end_final = '#'.end($array);
+                    $endereco = $value['destino'];
+                    $namesmapagina = ($end_final != "#conteudo" && $numero > 1) ? " class='scrollSuave'" : "";
+                    $pre_submenu = (count($value['filhos']) > 0) ? "class='menu-item-has-children'" : "";
+
+                    echo "<li $pre_submenu><a $namesmapagina href='$endereco'>{$value['titulo']}</a>";
+                    if (count($value['filhos']) > 0) {
+                      geramenu($value['filhos'], $controller, 1);
+                    }
+                    echo "</li>";
+                  }
+                  if ($pai != 0) { echo "</ul></div>"; }
+                }
+                geramenu($_base['menu'], $controller, 0);
+                ?>
+
+            </ul>
+          </nav>
         </div>
       </div>
-      
+
     </header>
   </div>
 </div>

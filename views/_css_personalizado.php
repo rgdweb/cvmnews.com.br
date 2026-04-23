@@ -233,20 +233,7 @@
 
 
 
-                .topo_redes_sociais{
-                text-align: right;
-                margin-top: -3px;
-        }
-        .topo_redes_sociais_item{
-                display: inline-block;
-                margin:3px;
-                width:50px;
-                height:50px;
-                text-align: center;
-        }
-        .topo_redes_sociais_item img{
-                width: 100%;
-        }
+        /* Redes sociais agora controladas pelo CSS em htm_topo.php */
 
 
 
@@ -831,15 +818,7 @@
 
 
 
-                .topo_redes_sociais{
-
-                        text-align: center;
-
-                        width: 100%;
-
-                        padding-bottom:20px;
-
-                }
+                /* Redes sociais responsivo - controlado em htm_topo.php */
 
 
 
