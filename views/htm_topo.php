@@ -206,6 +206,37 @@
     width: 32px;
     height: 32px;
   }
+  /* Email: trocar texto longo por ENVIAR E-MAIL no mobile */
+  .topo_div1_item_txt2.email-texto {
+    font-size: 11px !important;
+    word-break: break-all;
+  }
+  /* Ajustar itens de contato no mobile - empilhados verticalmente */
+  .topo_div1_item {
+    display: block !important;
+    width: 100% !important;
+    margin: 5px 0 !important;
+    height: auto !important;
+    text-align: center !important;
+  }
+  .topo_div1_icos {
+    float: none !important;
+    margin: 0 auto !important;
+  }
+  .topo_div1_textos {
+    float: none !important;
+    width: 100% !important;
+    text-align: center !important;
+  }
+  .topo_div1_item_txt1 {
+    text-align: center !important;
+    padding-left: 0 !important;
+  }
+  .topo_div1_item_txt2 {
+    text-align: center !important;
+    padding-left: 0 !important;
+    font-size: 12px !important;
+  }
 }
 </style>
 
@@ -245,7 +276,7 @@
                 <div class="topo_div1_icos"><a href="mailto:<?=$_base['topo_email']['conteudo']?>"><i class="far fa-envelope"></i></a></div>
                 <div class="topo_div1_textos">
                   <div class="topo_div1_item_txt1"><?=$_base['topo_email']['titulo']?></div>
-                  <div class="topo_div1_item_txt2"><?=$_base['topo_email']['conteudo']?></div>
+                  <div class="topo_div1_item_txt2 email-texto">ENVIAR E-MAIL</div>
                 </div>
               </div>
               <div class="topo_div1_item">

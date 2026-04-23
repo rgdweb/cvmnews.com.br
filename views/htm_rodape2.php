@@ -101,7 +101,10 @@
     </div>
 
     <a class="logo" href="<?=DOMINIO?>"><img alt="<?=$_base['titulo_pagina']?>" src="<?=$_base['imagem']['147129831543478']?>" /></a>
-    <span class="copyright"><?=$_base['copy']['conteudo']?></span>
+    <footer class="main-footer">
+        <div class="pull-right hidden-xs"></div>
+        <span class="copyright"><strong>Copyright &copy; <?=date('Y')?> </strong> <?=$_base['copy']['conteudo']?> <a href="https://www.facebook.com/marciogomes2023/" target="_blank">Márcio Gomes</a></span>
+    </footer>
     <div class="footer_bottom">
       <div class="copyright"></div>
     </div>
@@ -175,6 +178,65 @@
     margin-bottom: 12px;
     display: block;
   }
+}
+
+/* Footer bottom estilizado */
+.footer_bottom {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 40px 20px;
+    text-align: center;
+    margin-top: 50px;
+    box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+    position: relative;
+    overflow: hidden;
+}
+.footer_bottom::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57);
+    background-size: 300% 100%;
+    animation: gradientShift 3s ease infinite;
+}
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+.main-footer .copyright {
+    font-family: 'Arial', sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: #ffffff;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    letter-spacing: 1px;
+}
+.main-footer .copyright a {
+    color: #ffd700;
+    text-decoration: none;
+    font-weight: bold;
+}
+.main-footer .copyright a:hover {
+    text-decoration: underline;
+}
+.btn-radio, .btn-whats {
+  position: fixed;
+  z-index: 1000;
+  max-width: 60px;
+}
+.btn-radio {
+  right: 20px;
+  bottom: 100px;
+}
+.btn-whats {
+  right: 20px;
+  bottom: 160px;
+}
+@media (max-width: 768px) {
+  .main-footer .copyright { font-size: 14px; }
 }
 </style>
 
