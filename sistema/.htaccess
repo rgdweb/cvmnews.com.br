@@ -1,0 +1,4 @@
+RewriteEngine on
+RewriteCond %{SCRIPT_FILENAME} !-f
+RewriteCond %{SCRIPT_FILENAME} !-*.(css|js|txt|jpe?g|gif|png|xml)$
+RewriteRule ^(.*)$ index.php?url=$1

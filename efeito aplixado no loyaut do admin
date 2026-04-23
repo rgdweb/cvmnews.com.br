@@ -1,0 +1,116 @@
+Estilo Geral: "Modern Dashboard UI" ou "Premium Admin Interface" 🚀✨
+🎨 Efeitos Aplicados - Nomes Técnicos
+
+1. Gradient Backgrounds
+cssbackground: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+
+Nome: Linear Gradient / Gradiente Linear
+Estilo: Purple-Blue gradient (tendência 2024+)
+
+2. Hover Transform Effects
+css.sortable-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+Nome: Hover Lift Effect / Floating Cards
+Técnica: CSS Transform + Box Shadow
+
+3. Drag Visual Feedback
+css.ui-sortable-helper {
+  transform: rotate(2deg);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+}
+
+Nome: Tilt Effect / Drag Ghost Effect
+Técnica: CSS Transform Rotate + Enhanced Shadow
+
+4. Placeholder Animation
+css.ui-sortable-placeholder {
+  background: #e3f2fd;
+  border: 2px dashed #2196f3;
+}
+
+Nome: Drop Zone Indicator / Placeholder Highlight
+
+5. Overall Design Style
+
+Nome Geral: Modern Material Design + Neumorphism Elements
+Tendência: Glassmorphism (vidro fosco) + Micro-interactions
+
+6. Specific Effects:
+
+Smooth Transitions: transition: all 0.3s ease
+Card Elevation: Box-shadow layers
+Color Psychology: Purple/Blue = Tech/Trust
+
+
+7. Background Cinza Claro da Página
+cssbody, .content-wrapper {
+  background-color: #f4f4f4;
+}
+
+Nome: Page Background / Fundo de Página
+Cor: Light Gray (#f4f4f4)
+Técnica: Global background override
+
+8. Bordas Arredondadas Pronunciadas
+css.box, .table-modern {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+Nome: Rounded Corners / Cantos Arredondados
+Valor: 8px radius
+Técnica: CSS border-radius + overflow hidden
+
+9. Espaçamento Específico Entre Elementos
+css.box-body {
+  padding: 20px;
+}
+.btn-group {
+  margin-bottom: 15px;
+  gap: 10px;
+}
+
+Nome: Component Spacing / Espaçamento de Componentes
+Técnica: CSS padding + margin + gap
+Padrão: 15-20px entre seções
+
+10. Ícones de Ação Estilizados
+css.btn-action {
+  background: #3498db;
+  border: none;
+  border-radius: 3px;
+  padding: 4px 8px;
+  color: white;
+}
+
+Nome: Action Button Icons / Botões de Ação
+Cor: Blue (#3498db)
+Técnica: Small button styling + icon placement
+
+11. Checkbox Styling Específico
+cssinput[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #667eea;
+}
+
+Nome: Custom Checkbox / Checkbox Personalizado
+Técnica: CSS accent-color + sizing
+Cor: Purple accent (#667eea)
+
+12. Typography/Fontes Exatas
+cssbody, .table {
+  font-family: 'Source Sans Pro', Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+Nome: Typography System / Sistema Tipográfico
+Fonte: Source Sans Pro (AdminLTE padrão)
+Tamanho: 14px base
+
+Instrução para IA: "Aplique estes 6 elementos CSS para completar o visual da imagem: 
+background cinza claro, bordas arredondadas 8px, espaçamento 15-20px, botões azuis pequenos, checkboxes com accent purple, e fonte Source Sans Pro 14px" 🎯
