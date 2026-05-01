@@ -148,27 +148,40 @@ async function uploadDirectToPHP(
   filename: string,
   tipo: string = 'track'
 ): Promise<{ url: string; arquivo: string }> {
+  // Step 1: obter token do Vercel
   const tokenRes = await fetch('/api/upload-token')
   const tokenData = await tokenRes.json()
   if (!tokenData.uploadUrl || !tokenData.token) {
     throw new Error('Erro ao obter token de upload')
   }
 
+  const uploadUrl = tokenData.uploadUrl
+  console.log(`[UploadDirect] URL: ${uploadUrl}, Token: ${tokenData.token.substring(0, 20)}...`)
+
+  // Step 2: upload direto ao PHP
   const formData = new FormData()
   formData.append('arquivo', blob, filename)
   formData.append('tipo', tipo)
 
-  const uploadRes = await fetch(tokenData.uploadUrl, {
+  const uploadRes = await fetch(uploadUrl, {
     method: 'POST',
     headers: { 'X-Upload-Token': tokenData.token },
     body: formData,
   })
+
+  // Verificar se a resposta é JSON
+  const contentType = uploadRes.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    const text = await uploadRes.text().catch(() => '(vazio)')
+    throw new Error(`Servidor respondeu com erro ${uploadRes.status}: ${text.substring(0, 200)}`)
+  }
 
   const uploadData = await uploadRes.json()
   if (!uploadData.sucesso) {
     throw new Error(uploadData.erro || 'Erro no upload para o servidor')
   }
 
+  console.log(`[UploadDirect] OK: ${uploadData.arquivo}`)
   return { url: uploadData.url, arquivo: uploadData.arquivo }
 }
 
@@ -615,17 +628,34 @@ export default function AdminDashboard() {
             audioUrl = result.url
             audioFilename = result.arquivo
           } catch (directErr) {
-            console.error('[Track] Upload direto falhou, tentando proxy Vercel:', directErr)
-            // Fallback: tenta proxy Vercel
+            console.error('[Track] Upload direto falhou:', directErr)
+            // Fallback: tenta proxy Vercel (pode falhar se arquivo > 4.5MB)
             toast.info('Tentando método alternativo...')
-            const formData = new FormData()
-            formData.append('file', pendingTrackFile.blob, pendingTrackFile.name)
-            const uploadRes = await fetch('/api/upload-track', { method: 'POST', body: formData })
-            const uploadData = await uploadRes.json()
-            if (uploadRes.ok && (uploadData.path || uploadData.url)) {
-              audioUrl = uploadData.path || uploadData.url
-              audioFilename = uploadData.filename || ''
-            } else {
+            try {
+              const formData = new FormData()
+              formData.append('file', pendingTrackFile.blob, pendingTrackFile.name)
+              const uploadRes = await fetch('/api/upload-track', { method: 'POST', body: formData })
+              const contentType = uploadRes.headers.get('content-type') || ''
+
+              if (contentType.includes('application/json')) {
+                const uploadData = await uploadRes.json()
+                if (uploadRes.ok && (uploadData.path || uploadData.url)) {
+                  audioUrl = uploadData.path || uploadData.url
+                  audioFilename = uploadData.filename || ''
+                } else {
+                  setUploadingTrack(false)
+                  toast.error(uploadData.error || 'Erro no upload. Arquivo muito grande para o servidor.')
+                  return
+                }
+              } else {
+                // Vercel retornou HTML (provavelmente 413 Request Entity Too Large)
+                console.error('[Track] Vercel rejeitou arquivo grande (provavelmente 413)', uploadRes.status)
+                setUploadingTrack(false)
+                toast.error(`Arquivo muito grande (${fileSizeMB.toFixed(1)}MB). O servidor não aceita arquivos acima de ~4MB por este método.`)
+                return
+              }
+            } catch (fallbackErr) {
+              console.error('[Track] Fallback tambem falhou:', fallbackErr)
               setUploadingTrack(false)
               toast.error('Erro ao enviar arquivo. Tente um arquivo menor.')
               return
