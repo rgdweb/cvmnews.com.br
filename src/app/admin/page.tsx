@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import {
   AudioWaveform, LogOut, Plus, Trash2, Edit, Upload, Music, Mic,
-  Loader2, RefreshCw, Volume2, FileAudio
+  Loader2, RefreshCw, Volume2, FileAudio, CheckCircle2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
@@ -116,6 +116,43 @@ function writeWavString(view: DataView, offset: number, str: string) {
   for (let i = 0; i < str.length; i++) {
     view.setUint8(offset + i, str.charCodeAt(i))
   }
+}
+
+/**
+ * Upload directly to PHP server (bypasses Vercel 4.5MB body limit).
+ * Gets a one-time token from /api/upload-token, then uploads to PHP.
+ */
+async function uploadDirectToPHP(
+  blob: Blob,
+  filename: string,
+  tipo: string = 'track'
+): Promise<{ url: string; arquivo: string }> {
+  // Get upload URL and token
+  const tokenRes = await fetch('/api/upload-token')
+  const tokenData = await tokenRes.json()
+  if (!tokenData.uploadUrl || !tokenData.token) {
+    throw new Error('Erro ao obter token de upload')
+  }
+
+  // Upload directly to PHP (bypasses Vercel body limit!)
+  const formData = new FormData()
+  formData.append('arquivo', blob, filename)
+  formData.append('tipo', tipo)
+
+  const uploadRes = await fetch(tokenData.uploadUrl, {
+    method: 'POST',
+    headers: {
+      'X-Upload-Token': tokenData.token,
+    },
+    body: formData,
+  })
+
+  const uploadData = await uploadRes.json()
+  if (!uploadData.sucesso) {
+    throw new Error(uploadData.erro || 'Erro no upload para o servidor')
+  }
+
+  return { url: uploadData.url, arquivo: uploadData.arquivo }
 }
 
 interface VoiceVariation {
@@ -221,6 +258,9 @@ export default function AdminDashboard() {
   const [variationDialogOpen, setVariationDialogOpen] = useState(false)
   const [uploadingRef, setUploadingRef] = useState(false)
 
+  // Pending files (not uploaded yet, waiting for save)
+  const [pendingVoiceFile, setPendingVoiceFile] = useState<File | null>(null)
+
   // Track form state
   const [trackForm, setTrackForm] = useState({ name: '', description: '', emoji: '' })
   const [trackDialogOpen, setTrackDialogOpen] = useState(false)
@@ -230,6 +270,9 @@ export default function AdminDashboard() {
   const [trackDuration, setTrackDuration] = useState(0)
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null)
   const [audioServerConfig, setAudioServerConfig] = useState<{ url: string; apiKey: string } | null>(null)
+
+  // Pending track file (not uploaded yet, waiting for save)
+  const [pendingTrackFile, setPendingTrackFile] = useState<{ blob: Blob; name: string } | null>(null)
 
   // Check auth
   useEffect(() => {
@@ -326,38 +369,12 @@ export default function AdminDashboard() {
   }
 
   // --- VARIATION CRUD ---
-  const handleUploadRefAudio = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Select voice file (NO upload — just store in state for later upload on save)
+  const handleSelectVoiceFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
-    setUploadingRef(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const res = await fetch('/api/upload-voice', {
-        method: 'POST',
-        body: formData,
-      })
-
-      const data = await res.json()
-      if (data.serverUrl || data.path) {
-        setVariationForm(prev => ({
-          ...prev,
-          refAudioPath: data.path || '',
-          serverUrl: data.serverUrl || '',
-          filename: data.filename || '',
-          refAudioName: data.name || file.name,
-        }))
-        toast.success('Áudio enviado para o servidor!')
-      } else {
-        toast.error(data.error || 'Falha no upload')
-      }
-    } catch {
-      toast.error('Erro no upload do áudio')
-    } finally {
-      setUploadingRef(false)
-    }
+    setPendingVoiceFile(file)
+    toast.success(`Arquivo pronto: ${file.name} (${(file.size / 1024).toFixed(0)}KB)`)
   }
 
   const handleSaveVariation = async () => {
@@ -369,6 +386,37 @@ export default function AdminDashboard() {
     const instructValue = variationForm.instruct === 'none' ? '' : variationForm.instruct
 
     try {
+      // Upload pending voice file if there is one
+      if (pendingVoiceFile) {
+        setUploadingRef(true)
+        toast.info('Enviando arquivo de áudio...')
+
+        const formData = new FormData()
+        formData.append('file', pendingVoiceFile)
+
+        const res = await fetch('/api/upload-voice', {
+          method: 'POST',
+          body: formData,
+        })
+
+        const data = await res.json()
+        if (data.serverUrl || data.path) {
+          setVariationForm(prev => ({
+            ...prev,
+            refAudioPath: data.path || '',
+            serverUrl: data.serverUrl || '',
+            filename: data.filename || '',
+            refAudioName: data.name || pendingVoiceFile.name,
+          }))
+        } else {
+          toast.error(data.error || 'Falha no upload do áudio')
+          setUploadingRef(false)
+          return
+        }
+        toast.success('Áudio enviado!')
+        setUploadingRef(false)
+      }
+
       if (editingVariationId) {
         // UPDATE existing variation
         const updateBody: Record<string, unknown> = {
@@ -413,9 +461,12 @@ export default function AdminDashboard() {
       setEditingVariationId(null)
       setAddingVariationTo(null)
       setVariationForm({ label: '', emoji: '', refAudioPath: '', serverUrl: '', filename: '', refAudioName: '', refText: '', instruct: 'none' })
+      setPendingVoiceFile(null)
       loadData()
     } catch {
       toast.error('Erro ao salvar variação')
+    } finally {
+      setUploadingRef(false)
     }
   }
 
@@ -443,7 +494,7 @@ export default function AdminDashboard() {
     }
   }
 
-  // Quick audio-only update for a variation
+  // Quick audio-only update for a variation (kept as-is — convenience feature for inline updates)
   const handleQuickUploadAudio = async (variationId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -480,50 +531,26 @@ export default function AdminDashboard() {
   }
 
   // --- TRACK CRUD ---
-  const handleUploadTrackFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Select track file (NO upload — just compress if needed and store in state)
+  const handleSelectTrackFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    setUploadingTrack(true)
     try {
-      // Comprimir audio se for grande (> 3MB) para evitar limite do PHP server
-      const originalSizeMB = (file.size / (1024 * 1024)).toFixed(1)
-      let uploadBlob: Blob = file
-      let uploadName: string = file.name
-
       if (file.size >= 3 * 1024 * 1024) {
-        console.log(`[Admin] Comprimindo trilha ${originalSizeMB}MB...`)
+        // Compress large files instantly using OfflineAudioContext
+        toast.info('Comprimindo arquivo...')
         const compressed = await compressAudioFile(file)
-        uploadBlob = compressed.blob
-        uploadName = compressed.name
-        const compressedSizeMB = (compressed.blob.size / (1024 * 1024)).toFixed(1)
-        toast.success(`Comprimido: ${originalSizeMB}MB → ${compressedSizeMB}MB`)
-      }
-
-      // Upload through Vercel API (same-origin, avoids CORS issues)
-      const formData = new FormData()
-      formData.append('file', uploadBlob, uploadName)
-
-      const res = await fetch('/api/upload-track', {
-        method: 'POST',
-        body: formData,
-      })
-
-      const data = await res.json()
-
-      if (data.path || data.filename) {
-        setTrackFilePath(data.path)
-        setTrackFilename(data.filename)
-        setTrackDuration(data.duration || 0)
-        toast.success('Trilha enviada!')
+        setPendingTrackFile({ blob: compressed.blob, name: compressed.name })
+        toast.success(`Arquivo pronto (${(compressed.blob.size / (1024 * 1024)).toFixed(1)}MB)`)
       } else {
-        toast.error(data.error || 'Falha no upload')
+        setPendingTrackFile({ blob: file, name: file.name })
+        toast.success(`Arquivo pronto (${(file.size / (1024 * 1024)).toFixed(1)}MB)`)
       }
     } catch (err) {
-      console.error('Track upload error:', err)
-      toast.error('Erro no upload da trilha')
-    } finally {
-      setUploadingTrack(false)
+      console.error('Error preparing file:', err)
+      toast.error('Erro ao processar o arquivo')
+      setPendingTrackFile(null)
     }
   }
 
@@ -534,6 +561,51 @@ export default function AdminDashboard() {
     }
 
     try {
+      let audioUrl = editingTrackId ? undefined : undefined
+      let audioFilename = ''
+
+      // Upload pending file if there is one (directly to PHP, bypassing Vercel limit)
+      if (pendingTrackFile) {
+        setUploadingTrack(true)
+        if (editingTrackId) {
+          toast.info('Enviando novo arquivo...')
+        } else {
+          toast.info('Enviando arquivo...')
+        }
+
+        const result = await uploadDirectToPHP(pendingTrackFile.blob, pendingTrackFile.name, 'track')
+
+        // If editing with new audio, delete old audio from server
+        if (editingTrackId) {
+          const oldTrack = tracks.find(t => t.id === editingTrackId)
+          if (oldTrack?.audioPath) {
+            const oldFilename = oldTrack.audioPath.split('/').pop()
+            if (oldFilename) {
+              try {
+                await fetch('/api/admin/tracks', {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ filename: oldFilename, tipo: 'track' }),
+                })
+              } catch {
+                // Ignore delete errors — old file cleanup is best-effort
+              }
+            }
+          }
+        }
+
+        audioUrl = result.url
+        audioFilename = result.arquivo
+        setTrackFilePath(result.url)
+        toast.success('Arquivo enviado!')
+        setUploadingTrack(false)
+      }
+
+      if (!audioUrl && !editingTrackId) {
+        toast.error('Arquivo de áudio é obrigatório')
+        return
+      }
+
       if (editingTrackId) {
         // UPDATE existing track
         const updateBody: Record<string, unknown> = {
@@ -542,9 +614,8 @@ export default function AdminDashboard() {
           emoji: trackForm.emoji,
         }
         // Only update audio if a new one was uploaded
-        if (trackFilePath) {
-          updateBody.audioPath = trackFilePath
-          updateBody.duration = trackDuration
+        if (audioUrl) {
+          updateBody.audioPath = audioUrl
         }
         await fetch(`/api/tracks/${editingTrackId}`, {
           method: 'PUT',
@@ -554,17 +625,13 @@ export default function AdminDashboard() {
         toast.success('Trilha atualizada!')
       } else {
         // CREATE new track
-        if (!trackFilePath) {
-          toast.error('Arquivo de áudio é obrigatório')
-          return
-        }
         await fetch('/api/tracks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...trackForm,
-            audioPath: trackFilePath,
-            duration: trackDuration,
+            audioPath: audioUrl,
+            duration: 0,
           }),
         })
         toast.success('Trilha criada!')
@@ -575,9 +642,13 @@ export default function AdminDashboard() {
       setTrackForm({ name: '', description: '', emoji: '' })
       setTrackFilePath('')
       setTrackDuration(0)
+      setPendingTrackFile(null)
       loadData()
-    } catch {
-      toast.error('Erro ao salvar trilha')
+    } catch (err) {
+      console.error('Track save error:', err)
+      toast.error(err instanceof Error ? err.message : 'Erro ao salvar trilha')
+    } finally {
+      setUploadingTrack(false)
     }
   }
 
@@ -850,6 +921,7 @@ export default function AdminDashboard() {
                               setEditingVariationId(null)
                               setAddingVariationTo(voice.id)
                               setVariationForm({ label: '', emoji: '', refAudioPath: '', serverUrl: '', filename: '', refAudioName: '', refText: '', instruct: 'none' })
+                              setPendingVoiceFile(null)
                               setVariationDialogOpen(true)
                             }}
                             className="border-slate-600 text-slate-300 hover:bg-slate-700 gap-1"
@@ -943,6 +1015,7 @@ export default function AdminDashboard() {
                                         refText: v.refText,
                                         instruct: v.instruct || 'none',
                                       })
+                                      setPendingVoiceFile(null)
                                       setVariationDialogOpen(true)
                                     }}
                                     className="h-7 px-2 text-xs text-slate-400 hover:text-white hover:bg-slate-700 gap-1"
@@ -984,6 +1057,7 @@ export default function AdminDashboard() {
             if (!open) {
               setEditingVariationId(null)
               setAddingVariationTo(null)
+              setPendingVoiceFile(null)
             }
           }}>
             <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-lg">
@@ -1023,21 +1097,21 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Upload reference audio */}
+                {/* Select reference audio (upload happens on save) */}
                 <div className="space-y-2">
                   <Label className="text-slate-300">
                     Áudio de Referência {editingVariationId ? '' : '*'} (3-10s)
                   </Label>
                   {editingVariationId && editingVariation?.refAudioPath && (
                     <p className="text-xs text-slate-500">
-                      Audio atual: {editingVariation.refAudioName || 'arquivo'} — envie um novo para substituir
+                      Audio atual: {editingVariation.refAudioName || 'arquivo'} — selecione um novo para substituir
                     </p>
                   )}
                   <div className="relative">
                     <input
                       type="file"
                       accept="audio/*"
-                      onChange={handleUploadRefAudio}
+                      onChange={handleSelectVoiceFile}
                       className="hidden"
                       id="ref-audio-upload-dialog"
                     />
@@ -1045,25 +1119,29 @@ export default function AdminDashboard() {
                       type="button"
                       variant="outline"
                       onClick={() => document.getElementById('ref-audio-upload-dialog')?.click()}
-                      disabled={uploadingRef}
                       className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 gap-2"
                     >
-                      {uploadingRef ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                      {pendingVoiceFile ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span className="text-emerald-400">
+                            {pendingVoiceFile.name} ({(pendingVoiceFile.size / 1024).toFixed(0)}KB)
+                          </span>
+                        </>
                       ) : (
-                        <Upload className="w-4 h-4" />
+                        <>
+                          <Upload className="w-4 h-4" />
+                          {editingVariationId
+                            ? 'Enviar novo áudio (opcional)'
+                            : 'Selecionar arquivo de áudio'
+                          }
+                        </>
                       )}
-                      {variationForm.refAudioPath
-                        ? variationForm.refAudioName
-                        : editingVariationId
-                          ? 'Enviar novo áudio (opcional)'
-                          : 'Selecionar arquivo de áudio'
-                      }
                     </Button>
                   </div>
-                  {variationForm.refAudioPath && (
+                  {pendingVoiceFile && (
                     <Badge variant="outline" className="bg-emerald-900/30 border-emerald-700 text-emerald-400">
-                      Novo audio enviado
+                      Pronto para enviar ao salvar
                     </Badge>
                   )}
                 </div>
@@ -1097,9 +1175,14 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="ghost" onClick={() => { setVariationDialogOpen(false); setEditingVariationId(null); setAddingVariationTo(null) }} className="text-slate-400">Cancelar</Button>
-                <Button onClick={handleSaveVariation} className="bg-violet-600 hover:bg-violet-700 text-white">
-                  {editingVariationId ? 'Salvar Alterações' : 'Adicionar Variação'}
+                <Button variant="ghost" onClick={() => { setVariationDialogOpen(false); setEditingVariationId(null); setAddingVariationTo(null); setPendingVoiceFile(null) }} className="text-slate-400">Cancelar</Button>
+                <Button onClick={handleSaveVariation} disabled={uploadingRef} className="bg-violet-600 hover:bg-violet-700 text-white">
+                  {uploadingRef ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                      Enviando...
+                    </>
+                  ) : editingVariationId ? 'Salvar Alterações' : 'Adicionar Variação'}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -1111,7 +1194,10 @@ export default function AdminDashboard() {
               <h2 className="text-lg font-semibold text-white">Trilhas Musicais</h2>
               <Dialog open={trackDialogOpen} onOpenChange={(open) => {
                 setTrackDialogOpen(open)
-                if (!open) setEditingTrackId(null)
+                if (!open) {
+                  setEditingTrackId(null)
+                  setPendingTrackFile(null)
+                }
               }}>
                 <DialogTrigger asChild>
                   <Button
@@ -1120,6 +1206,7 @@ export default function AdminDashboard() {
                       setTrackForm({ name: '', description: '', emoji: '' })
                       setTrackFilePath('')
                       setTrackDuration(0)
+                      setPendingTrackFile(null)
                     }}
                     className="bg-violet-600 hover:bg-violet-700 text-white gap-2"
                   >
@@ -1131,7 +1218,7 @@ export default function AdminDashboard() {
                   <DialogHeader>
                     <DialogTitle>{editingTrackId ? 'Editar Trilha' : 'Nova Trilha Musical'}</DialogTitle>
                     <DialogDescription className="text-slate-400">
-                      {editingTrackId ? 'Altere os dados da trilha. Deixe o áudio vazio para manter o atual.' : 'Faça upload de uma trilha de fundo para mixar com as vozes geradas.'}
+                      {editingTrackId ? 'Altere os dados da trilha. Selecione um novo áudio para substituir o atual.' : 'Faça upload de uma trilha de fundo para mixar com as vozes geradas.'}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
@@ -1167,11 +1254,11 @@ export default function AdminDashboard() {
                     </div>
                     <div className="space-y-2">
                       <Label className="text-slate-300">
-                        Arquivo de Áudio {editingTrackId ? '' : '*'}
+                        Arquivo de Áudio {editingTrackId ? '(opcional)' : '*'}
                       </Label>
                       {editingTrackId && (
                         <p className="text-xs text-slate-500">
-                          Envie um novo arquivo para substituir o áudio atual, ou deixe vazio para manter.
+                          Selecione um novo arquivo para substituir o áudio atual, ou deixe vazio para manter.
                         </p>
                       )}
                       {editingTrackId && (() => {
@@ -1186,7 +1273,7 @@ export default function AdminDashboard() {
                       <input
                         type="file"
                         accept="audio/*"
-                        onChange={handleUploadTrackFile}
+                        onChange={handleSelectTrackFile}
                         className="hidden"
                         id="track-file-upload"
                       />
@@ -1194,32 +1281,38 @@ export default function AdminDashboard() {
                         type="button"
                         variant="outline"
                         onClick={() => document.getElementById('track-file-upload')?.click()}
-                        disabled={uploadingTrack}
                         className="w-full border-slate-500 text-white hover:bg-slate-700 gap-2"
                       >
-                        {uploadingTrack ? (
+                        {pendingTrackFile ? (
                           <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Comprimindo e enviando...
-                          </>
-                        ) : trackFilePath ? (
-                          <>
-                            <FileAudio className="w-4 h-4 text-emerald-400" />
-                            <span className="text-emerald-400">Arquivo pronto!</span>
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span className="text-emerald-400">
+                              {pendingTrackFile.name} ({(pendingTrackFile.blob.size / (1024 * 1024)).toFixed(1)}MB)
+                            </span>
                           </>
                         ) : (
                           <>
                             <Upload className="w-4 h-4" />
-                            {editingTrackId ? 'Enviar novo áudio (opcional)' : 'Selecionar arquivo de áudio'}
+                            {editingTrackId ? 'Selecionar novo áudio (opcional)' : 'Selecionar arquivo de áudio'}
                           </>
                         )}
                       </Button>
+                      {pendingTrackFile && (
+                        <Badge variant="outline" className="bg-emerald-900/30 border-emerald-700 text-emerald-400">
+                          Pronto para enviar ao salvar
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <DialogFooter>
-                    <Button variant="ghost" onClick={() => setTrackDialogOpen(false)} className="text-slate-400">Cancelar</Button>
-                    <Button onClick={handleSaveTrack} className="bg-violet-600 hover:bg-violet-700 text-white">
-                      {editingTrackId ? 'Salvar' : 'Criar Trilha'}
+                    <Button variant="ghost" onClick={() => { setTrackDialogOpen(false); setPendingTrackFile(null) }} className="text-slate-400">Cancelar</Button>
+                    <Button onClick={handleSaveTrack} disabled={uploadingTrack} className="bg-violet-600 hover:bg-violet-700 text-white">
+                      {uploadingTrack ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                          {editingTrackId ? 'Enviando...' : 'Enviando...'}
+                        </>
+                      ) : editingTrackId ? 'Salvar' : 'Criar Trilha'}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -1281,6 +1374,7 @@ export default function AdminDashboard() {
                               })
                               setTrackFilePath('')
                               setTrackDuration(track.duration)
+                              setPendingTrackFile(null)
                               setTrackDialogOpen(true)
                             }}
                             className="text-slate-400 hover:text-white"

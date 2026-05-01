@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminSession } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { deleteFromAudioServer } from '@/lib/audio-server'
 
 // PUT /api/tracks/[id] - Update a track
 export async function PUT(
@@ -48,6 +49,22 @@ export async function DELETE(
     }
 
     const { id } = await params
+
+    // Delete audio from PHP server before removing from DB
+    const track = await db.track.findUnique({ where: { id } })
+    if (track?.audioPath) {
+      const filename = track.audioPath.split('/').pop()
+      if (filename) {
+        try {
+          await deleteFromAudioServer(filename, 'track')
+          console.log('[Track] Deleted audio from server:', filename)
+        } catch (err) {
+          console.error('[Track] Failed to delete audio from server:', err)
+          // Continue with DB deletion even if server deletion fails
+        }
+      }
+    }
+
     await db.track.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {

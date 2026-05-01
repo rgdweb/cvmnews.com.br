@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminSession } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { deleteFromAudioServer } from '@/lib/audio-server'
 
 // GET /api/voices/[id] - Get a specific voice
 export async function GET(
@@ -73,6 +74,25 @@ export async function DELETE(
     }
 
     const { id } = await params
+
+    // Delete all variation audio files from PHP server before removing voice
+    const voice = await db.voice.findUnique({
+      where: { id },
+      include: { variations: true },
+    })
+    if (voice?.variations) {
+      for (const variation of voice.variations) {
+        if (variation.refAudioFilename) {
+          try {
+            await deleteFromAudioServer(variation.refAudioFilename, 'ref')
+            console.log('[Voice] Deleted variation audio:', variation.refAudioFilename)
+          } catch (err) {
+            console.error('[Voice] Failed to delete variation audio:', err)
+          }
+        }
+      }
+    }
+
     await db.voice.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
