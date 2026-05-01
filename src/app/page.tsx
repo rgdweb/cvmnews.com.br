@@ -21,6 +21,8 @@ interface VoiceVariation {
   label: string
   emoji: string
   refAudioPath: string
+  refAudioServerUrl: string
+  refAudioFilename: string
   refAudioName: string
   refText: string
   instruct: string
@@ -225,6 +227,7 @@ export default function VozProClient() {
   // Debug state
   const [lastGenResponse, setLastGenResponse] = useState<Record<string, unknown> | null>(null)
   const [debugOpen, setDebugOpen] = useState(false)
+  const [phpServerUrl, setPhpServerUrl] = useState('')
 
   const resultAudioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -238,9 +241,10 @@ export default function VozProClient() {
     const loadData = async () => {
       setLoading(true)
       try {
-        const [voicesRes, tracksRes] = await Promise.all([
+        const [voicesRes, tracksRes, configRes] = await Promise.all([
           fetch('/api/voices'),
           fetch('/api/tracks'),
+          fetch('/api/generate-config'),
         ])
         if (voicesRes.ok) {
           const voicesData = await voicesRes.json()
@@ -257,6 +261,10 @@ export default function VozProClient() {
         if (tracksRes.ok) {
           const tracksData = await tracksRes.json()
           setTracks(tracksData)
+        }
+        if (configRes.ok) {
+          const configData = await configRes.json()
+          setPhpServerUrl(configData.phpServerUrl || '')
         }
       } catch {
         toast.error('Erro ao carregar dados')
@@ -299,26 +307,41 @@ export default function VozProClient() {
       setGeneratingTime(Math.floor((Date.now() - genStartTime) / 1000))
     }, 1000)
 
-    // Timeout de seguranca do frontend (cancela se demorar mais de 120s)
+    // Timeout de seguranca do frontend (cancela se demorar mais de 5 min)
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 120000)
+    const timeoutId = setTimeout(() => controller.abort(), 300000)
 
     try {
+      // Montar instruct a partir dos metadados da voz
+      const voice = selectedVoice
+      const instructParts: string[] = []
+      if (voice && voice.gender !== 'Auto') instructParts.push(voice.gender.toLowerCase())
+      if (voice && voice.age !== 'Auto') instructParts.push(voice.age.toLowerCase())
+      if (voice && voice.pitch !== 'Auto') instructParts.push(voice.pitch.toLowerCase())
+      if (voice && voice.accent !== 'Auto') instructParts.push(voice.accent.toLowerCase())
+      if (selectedVariation?.instruct && selectedVariation.instruct.trim()) instructParts.push(selectedVariation.instruct.trim())
+      const instructStr = instructParts.join(', ')
+
+      // CORPO DA REQUISICAO - todos os dados que o PHP precisa
       const body: Record<string, unknown> = {
-        variationId: selectedVariationId,
         text: text.trim(),
         language,
+        refAudioUrl: selectedVariation?.refAudioServerUrl || '',
+        refAudioPath: selectedVariation?.refAudioPath || '',
+        refText: selectedVariation?.refText || '',
+        instruct: instructStr,
+        refAudioName: selectedVariation?.refAudioName || 'ref_audio.wav',
         speed,
         numStep,
         guidanceScale,
       }
 
-      if (trackEnabled && selectedTrackId) {
-        body.trackId = selectedTrackId
-        body.trackVolume = trackVolume
-      }
+      // URL destino: PHP server (sem Vercel!) ou fallback para Vercel API
+      const generateUrl = phpServerUrl
+        ? phpServerUrl.replace(/\/$/, '') + '/generate.php'
+        : '/api/generate'
 
-      const res = await fetch('/api/generate', {
+      const res = await fetch(generateUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -334,7 +357,7 @@ export default function VozProClient() {
           const errText = await res.text()
           try {
             const errData = JSON.parse(errText)
-            errorMsg = errData.error || errorMsg
+            errorMsg = errData.erro || errData.error || errorMsg
             debugData = errData.debug || null
           } catch {
             // Nao e JSON (provavelmente HTML do Vercel em caso de 504)
@@ -377,10 +400,11 @@ export default function VozProClient() {
       const data = await res.json()
       console.log('[VozPro] Generate response:', { hasAudioUrl: !!data.audioUrl, hasTrackUrl: !!data.trackUrl, clientMix: data.clientMix })
 
-      if (data.error) {
-        console.error('[VozPro] API returned error:', data.error)
-        if (data.debug) setLastGenResponse({ debug: data.debug, error: data.error })
-        toast.error(data.error, { description: 'Aguarde alguns segundos e tente novamente.' })
+      if (data.error || data.erro) {
+        const errMsg = data.erro || data.error
+        console.error('[VozPro] API returned error:', errMsg)
+        if (data.debug) setLastGenResponse({ debug: data.debug, error: errMsg })
+        toast.error(errMsg, { description: 'Aguarde alguns segundos e tente novamente.' })
         return
       }
 
@@ -393,24 +417,23 @@ export default function VozProClient() {
         return
       }
 
-      // If server indicates client-side mixing is needed
-      if (data.clientMix && data.trackUrl) {
-        console.log('[VozPro] Client-side mixing required, mixing voice + track...')
+      // Mixagem client-side com trilha (funciona tanto com PHP quanto Vercel)
+      if (trackEnabled && selectedTrack?.audioPath) {
+        console.log('[VozPro] Client-side mixing, mixing voice + track...')
         toast.info('Mixando voz com trilha...')
 
         try {
           const mixedDataUri = await mixAudioClientSide(
             data.audioUrl,
-            data.trackUrl,
-            data.trackVolume ?? 0.3
+            selectedTrack.audioPath,
+            trackVolume
           )
           setAudioUrl(data.audioUrl)
           setMixedAudioUrl(mixedDataUri)
           setIsMixed(true)
-          toast.success(`Áudio gerado com trilha "${data.trackName || 'selecionada'}"!`)
+          toast.success(`Áudio gerado com trilha "${selectedTrack.name}"!${data.viaPhp ? ' (via PHP)' : ''}`)
         } catch (mixErr) {
           console.error('[VozPro] Client-side mixing failed:', mixErr)
-          // Fallback: just use the voice audio
           setAudioUrl(data.audioUrl)
           toast.warning('Não foi possível mixar a trilha. Reproduzindo apenas a voz.')
         }

@@ -23,6 +23,9 @@ define('UPLOAD_DIR', __DIR__ . '/audios/');
 // Tipos permitidos de upload
 define('ALLOWED_CATEGORIES', ['ref', 'track', 'generated']);
 
+// URL do HuggingFace Space OmniVoice (usado pelo generate.php)
+define('HF_SPACE_URL', 'https://k2-fsa-omnivoice.hf.space');
+
 // Habilitar logs
 define('ENABLE_LOGS', true);
 
