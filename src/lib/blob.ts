@@ -1,15 +1,25 @@
 import { put, del, head } from '@vercel/blob'
 
+export interface BlobUploadResult {
+  url: string
+  downloadUrl: string
+  pathname: string
+}
+
 /**
  * Upload a file to Vercel Blob storage.
- * Returns the Blob URL of the uploaded file.
+ * Returns the Blob URL and download URL of the uploaded file.
  */
-export async function uploadToBlob(filename: string, file: File | Buffer, contentType?: string): Promise<string> {
+export async function uploadToBlob(filename: string, file: File | Buffer, contentType?: string): Promise<BlobUploadResult> {
   const blob = await put(filename, file, {
-    access: 'public',
+    access: 'private',
     contentType,
   })
-  return blob.url
+  return {
+    url: blob.url,
+    downloadUrl: blob.downloadUrl,
+    pathname: blob.pathname,
+  }
 }
 
 /**
@@ -28,7 +38,7 @@ export async function deleteFromBlob(url: string): Promise<void> {
  * Check if a URL is a Vercel Blob URL.
  */
 export function isBlobUrl(url: string): boolean {
-  return url.includes('.blob.vercel-storage.com') || url.includes('public.blob.vercel-storage.com')
+  return url.includes('.blob.vercel-storage.com')
 }
 
 /**

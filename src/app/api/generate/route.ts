@@ -13,7 +13,11 @@ const HF_SPACE_URL = process.env.HF_SPACE_URL || 'https://k2-fsa-omnivoice.hf.sp
 async function reuploadRefAudioToHF(blobUrl: string, fileName: string): Promise<string | null> {
   try {
     console.log('[Generate] Re-uploading ref audio to HF Space from Blob...')
-    const audioRes = await fetch(blobUrl)
+    const headers: Record<string, string> = {}
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`
+    }
+    const audioRes = await fetch(blobUrl, { headers })
     if (!audioRes.ok) {
       console.error('[Generate] Failed to fetch ref audio from Blob:', audioRes.status)
       return null

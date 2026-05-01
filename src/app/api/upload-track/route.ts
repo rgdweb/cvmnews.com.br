@@ -31,14 +31,14 @@ export async function POST(req: NextRequest) {
     const uniqueName = `tracks/${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`
 
     // Upload to Vercel Blob
-    const blobUrl = await uploadToBlob(uniqueName, file, file.type || 'audio/mpeg')
+    const blobResult = await uploadToBlob(uniqueName, file, file.type || 'audio/mpeg')
 
     // Get duration client-side after upload (ffprobe not available on Vercel)
     // Duration will be detected on the client or set to 0
     const duration = 0
 
     return NextResponse.json({
-      path: blobUrl,
+      path: blobResult.downloadUrl || blobResult.url,
       name: file.name,
       duration,
     })

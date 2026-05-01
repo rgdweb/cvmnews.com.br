@@ -16,8 +16,10 @@ export async function POST(req: NextRequest) {
     // Step 1: Upload the file to Vercel Blob (permanent storage)
     const ext = file.name.match(/\.(mp3|wav|ogg|m4a|flac|webm)$/i)?.[0] || '.wav'
     const uniqueName = `ref-voice/${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`
-    const blobUrl = await uploadToBlob(uniqueName, file, file.type || 'audio/wav')
-    console.log('[UploadVoice] Saved to Blob:', blobUrl)
+    const blobResult = await uploadToBlob(uniqueName, file, file.type || 'audio/wav')
+    console.log('[UploadVoice] Saved to Blob:', blobResult.url)
+    // Use the download URL which includes a signed token for private blobs
+    const blobUrl = blobResult.downloadUrl || blobResult.url
 
     // Step 2: Upload the file to the Gradio Space's upload endpoint
     const uploadForm = new FormData()
@@ -35,7 +37,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         path: '',
         blobUrl,
-        url: blobUrl,
+        blobPathname: blobResult.pathname,
+        url: `${HF_SPACE_URL}/gradio_api/file=`,
         name: file.name,
       })
     }
@@ -47,6 +50,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         path: uploadData[0],
         blobUrl,
+        blobPathname: blobResult.pathname,
         url: `${HF_SPACE_URL}/gradio_api/file=${uploadData[0]}`,
         name: file.name,
       })
@@ -56,7 +60,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       path: '',
       blobUrl,
-      url: blobUrl,
+      blobPathname: blobResult.pathname,
+      url: `${HF_SPACE_URL}/gradio_api/file=`,
       name: file.name,
     })
   } catch (error) {
