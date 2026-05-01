@@ -196,6 +196,68 @@ function writeString(view: DataView, offset: number, str: string) {
   }
 }
 
+/**
+ * Comprimir audio client-side usando Web Audio API + MediaRecorder (opus).
+ * Reduz drasticamente o tamanho (ex: WAV 8MB → WebM 800KB) sem perda perceptivel.
+ * Retorna um Blob menor, pronto para upload.
+ */
+async function compressAudioFile(file: File): Promise<{ blob: Blob; name: string }> {
+  const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+
+  // Decodificar o audio original
+  const arrayBuffer = await file.arrayBuffer()
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+
+  // Se o arquivo ja for pequeno (< 3MB), nao comprimir
+  if (file.size < 3 * 1024 * 1024) {
+    await audioCtx.close()
+    return { blob: file, name: file.name }
+  }
+
+  // Criar um MediaStreamDestination para capturar o audio
+  const dest = audioCtx.createMediaStreamDestination()
+  const source = audioCtx.createBufferSource()
+  source.buffer = audioBuffer
+  source.connect(dest)
+  source.start(0)
+
+  // Usar MediaRecorder com opus (codec de alta eficiencia)
+  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus'
+    : MediaRecorder.isTypeSupported('audio/webm')
+      ? 'audio/webm'
+      : 'audio/mp4'
+
+  const recorder = new MediaRecorder(dest.stream, {
+    mimeType,
+    audioBitsPerSecond: 128000, // 128kbps - qualidade alta, tamanho pequeno
+  })
+
+  const chunks: Blob[] = []
+  recorder.ondataavailable = (e) => {
+    if (e.data.size > 0) chunks.push(e.data)
+  }
+
+  return new Promise<{ blob: Blob; name: string }>((resolve) => {
+    recorder.onstop = () => {
+      const compressed = new Blob(chunks, { type: mimeType })
+      const ext = mimeType.includes('webm') ? '.webm' : mimeType.includes('mp4') ? '.mp4' : '.mp3'
+      const baseName = file.name.replace(/\.[^.]+$/, '')
+      const finalSizeKB = Math.round(compressed.size / 1024)
+      const originalSizeKB = Math.round(file.size / 1024)
+      console.log(`[VozPro] Compressao: ${originalSizeKB}KB → ${finalSizeKB}KB (${Math.round((1 - compressed.size / file.size) * 100)}% reducao)`)
+      audioCtx.close()
+      resolve({ blob: compressed, name: baseName + ext })
+    }
+
+    recorder.start()
+    // Parar quando o audio terminar de tocar
+    source.onended = () => {
+      setTimeout(() => recorder.stop(), 100)
+    }
+  })
+}
+
 export default function VozProClient() {
   const [voices, setVoices] = useState<Voice[]>([])
   const [tracks, setTracks] = useState<Track[]>([])
@@ -872,7 +934,7 @@ export default function VozProClient() {
                       <Button
                         onClick={togglePlayback}
                         variant="outline"
-                        className="flex-1 border-white/10 text-white hover:bg-white/10 gap-1"
+                        className="flex-1 border-violet-500/40 bg-violet-500/10 hover:bg-violet-500/20 text-violet-100 hover:text-white gap-1.5"
                       >
                         {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                         {isPlaying ? 'Pausar' : 'Reproduzir'}
@@ -880,13 +942,13 @@ export default function VozProClient() {
                       <Button
                         onClick={stopPlayback}
                         variant="outline"
-                        className="border-white/10 text-white hover:bg-white/10"
+                        className="border-slate-500/40 bg-slate-500/10 hover:bg-slate-500/20 text-slate-200 hover:text-white"
                       >
                         <Square className="w-4 h-4" />
                       </Button>
                       <Button
                         onClick={handleDownload}
-                        className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white gap-1"
+                        className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white gap-1.5"
                       >
                         <Download className="w-4 h-4" />
                         Baixar

@@ -19,6 +19,64 @@ import {
 import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
 
+/**
+ * Comprimir audio client-side usando Web Audio API + MediaRecorder (opus).
+ * Reduz drasticamente o tamanho sem perda perceptivel de qualidade.
+ * Ex: WAV 8MB → WebM opus 128kbps ≈ 800KB
+ */
+async function compressAudioFile(file: File): Promise<{ blob: Blob; name: string }> {
+  const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+
+  const arrayBuffer = await file.arrayBuffer()
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+
+  // Arquivos pequenos nao precisam de compressao
+  if (file.size < 3 * 1024 * 1024) {
+    await audioCtx.close()
+    return { blob: file, name: file.name }
+  }
+
+  const dest = audioCtx.createMediaStreamDestination()
+  const source = audioCtx.createBufferSource()
+  source.buffer = audioBuffer
+  source.connect(dest)
+  source.start(0)
+
+  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus'
+    : MediaRecorder.isTypeSupported('audio/webm')
+      ? 'audio/webm'
+      : 'audio/mp4'
+
+  const recorder = new MediaRecorder(dest.stream, {
+    mimeType,
+    audioBitsPerSecond: 128000,
+  })
+
+  const chunks: Blob[] = []
+  recorder.ondataavailable = (e) => {
+    if (e.data.size > 0) chunks.push(e.data)
+  }
+
+  return new Promise<{ blob: Blob; name: string }>((resolve) => {
+    recorder.onstop = () => {
+      const compressed = new Blob(chunks, { type: mimeType })
+      const ext = mimeType.includes('webm') ? '.webm' : mimeType.includes('mp4') ? '.mp4' : '.mp3'
+      const baseName = file.name.replace(/\.[^.]+$/, '')
+      const finalKB = Math.round(compressed.size / 1024)
+      const originalKB = Math.round(file.size / 1024)
+      console.log(`[Admin] Compressao trilha: ${originalKB}KB → ${finalKB}KB (${Math.round((1 - compressed.size / file.size) * 100)}% reducao)`)
+      audioCtx.close()
+      resolve({ blob: compressed, name: baseName + ext })
+    }
+
+    recorder.start()
+    source.onended = () => {
+      setTimeout(() => recorder.stop(), 100)
+    }
+  })
+}
+
 interface VoiceVariation {
   id: string
   label: string
@@ -387,9 +445,23 @@ export default function AdminDashboard() {
 
     setUploadingTrack(true)
     try {
+      // Comprimir audio se for grande (> 3MB) para evitar limite do Vercel
+      const originalSizeMB = (file.size / (1024 * 1024)).toFixed(1)
+      let uploadBlob: Blob = file
+      let uploadName: string = file.name
+
+      if (file.size >= 3 * 1024 * 1024) {
+        toast.info(`Comprimindo trilha (${originalSizeMB}MB)...`)
+        const compressed = await compressAudioFile(file)
+        uploadBlob = compressed.blob
+        uploadName = compressed.name
+        const compressedSizeMB = (compressed.blob.size / (1024 * 1024)).toFixed(1)
+        toast.success(`Comprimido: ${originalSizeMB}MB → ${compressedSizeMB}MB`)
+      }
+
       // Upload through Vercel API (same-origin, avoids CORS issues)
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', uploadBlob, uploadName)
 
       const res = await fetch('/api/upload-track', {
         method: 'POST',

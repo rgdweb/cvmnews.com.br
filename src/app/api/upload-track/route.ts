@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Validate file type
-    const validTypes = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3', 'audio/x-wav', 'audio/flac', 'audio/m4a', 'audio/webm']
+    const validTypes = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3', 'audio/x-wav', 'audio/flac', 'audio/m4a', 'audio/webm', 'audio/webm;codecs=opus']
     if (!validTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|ogg|m4a|flac|webm)$/i)) {
       return NextResponse.json(
         { error: 'Formato não suportado. Use MP3, WAV ou OGG.' },
