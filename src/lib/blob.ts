@@ -12,7 +12,6 @@ export interface BlobUploadResult {
  */
 export async function uploadToBlob(filename: string, file: File | Buffer, contentType?: string): Promise<BlobUploadResult> {
   const blob = await put(filename, file, {
-    access: 'private',
     contentType,
   })
   return {
