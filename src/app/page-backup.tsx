@@ -220,7 +220,6 @@ export default function VozProClient() {
   const [mixedAudioUrl, setMixedAudioUrl] = useState<string | null>(null)
   const [isMixed, setIsMixed] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [generatingTime, setGeneratingTime] = useState(0)
 
   // Debug state
   const [lastGenResponse, setLastGenResponse] = useState<Record<string, unknown> | null>(null)
@@ -291,17 +290,6 @@ export default function VozProClient() {
     setAudioUrl(null)
     setMixedAudioUrl(null)
     setIsMixed(false)
-    setGeneratingTime(0)
-
-    // Timer para mostrar tempo decorrido ao usuario
-    const genStartTime = Date.now()
-    const timerInterval = setInterval(() => {
-      setGeneratingTime(Math.floor((Date.now() - genStartTime) / 1000))
-    }, 1000)
-
-    // Timeout de seguranca do frontend (cancela se demorar mais de 120s)
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 120000)
 
     try {
       const body: Record<string, unknown> = {
@@ -322,55 +310,19 @@ export default function VozProClient() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: controller.signal,
       })
 
       if (!res.ok) {
         let errorMsg = `Erro do servidor (${res.status})`
         let debugData = null
-
-        // Tenta ler como JSON, depois como texto (Vercel 504 retorna HTML)
         try {
-          const errText = await res.text()
-          try {
-            const errData = JSON.parse(errText)
-            errorMsg = errData.error || errorMsg
-            debugData = errData.debug || null
-          } catch {
-            // Nao e JSON (provavelmente HTML do Vercel em caso de 504)
-            if (errText.length > 10 && errText.length < 1000) {
-              errorMsg = `Erro ${res.status}: ${errText.substring(0, 300)}`
-            }
-          }
+          const errData = await res.json()
+          errorMsg = errData.error || errorMsg
+          debugData = errData.debug || null
         } catch {}
-
-        // Mensagem especifica para 504 (timeout do Vercel)
-        if (res.status === 504) {
-          errorMsg = 'O servidor demorou mais que o esperado e a conexao foi encerrada (timeout 504).'
-        }
-
-        console.error('[VozPro] Generate error:', errorMsg, { debugData })
-
-        // SEMPRE mostra debug, mesmo sem dados do servidor
-        if (debugData) {
-          setLastGenResponse({ debug: debugData, error: errorMsg })
-        } else {
-          setLastGenResponse({
-            error: errorMsg,
-            debug: {
-              totalDuration: Date.now() - genStartTime,
-              steps: [
-                { time: new Date().toISOString(), step: 'Erro HTTP ' + res.status, status: 'error', detail: errorMsg, duration: Date.now() - genStartTime }
-              ]
-            }
-          })
-        }
-
-        toast.error(errorMsg, {
-          description: res.status === 504
-            ? 'A geracao de voz demorou demais. Tente um texto mais curto ou aguarde alguns minutos.'
-            : 'Aguarde alguns segundos e tente novamente.'
-        })
+        console.error('[VozPro] Generate error:', errorMsg)
+        if (debugData) setLastGenResponse({ debug: debugData, error: errorMsg })
+        toast.error(errorMsg, { description: 'Aguarde alguns segundos e tente novamente.' })
         return
       }
 
@@ -431,37 +383,9 @@ export default function VozProClient() {
       }
     } catch (err) {
       console.error('[VozPro] Generate exception:', err)
-      const elapsed = Date.now() - genStartTime
-
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        // Timeout do frontend (120s)
-        toast.error('Tempo limite excedido', { description: 'A geração demorou mais de 2 minutos. Tente um texto mais curto.' })
-        setLastGenResponse({
-          error: 'Timeout do frontend (120s) — abortado automaticamente',
-          debug: {
-            totalDuration: elapsed,
-            steps: [
-              { time: new Date().toISOString(), step: 'Timeout Frontend', status: 'error', detail: `AbortController abortou após 120s (${(elapsed / 1000).toFixed(0)}s decorridos). O servidor pode ter demorado mais que o limite do Vercel (60s Hobby / 300s Pro).`, duration: elapsed }
-            ]
-          }
-        })
-      } else {
-        toast.error('Erro de conexão com o servidor')
-        setLastGenResponse({
-          error: err instanceof Error ? err.message : 'Erro desconhecido',
-          debug: {
-            totalDuration: elapsed,
-            steps: [
-              { time: new Date().toISOString(), step: 'Exceção', status: 'error', detail: err instanceof Error ? err.message : String(err), duration: elapsed }
-            ]
-          }
-        })
-      }
+      toast.error('Erro de conexão com o servidor')
     } finally {
-      clearInterval(timerInterval)
-      clearTimeout(timeoutId)
       setIsGenerating(false)
-      setGeneratingTime(0)
     }
   }, [text, selectedVariationId, language, speed, numStep, guidanceScale, trackEnabled, selectedTrackId, trackVolume])
 
@@ -923,20 +847,7 @@ export default function VozProClient() {
                       {isGenerating ? 'Gerando seu áudio...' : 'Nenhum áudio gerado ainda'}
                     </p>
                     {isGenerating && (
-                      <div className="space-y-1">
-                        <p className="text-xs text-slate-500 mt-2">
-                          {generatingTime < 5
-                            ? 'Iniciando geração...'
-                            : generatingTime < 45
-                              ? `Processando há ${generatingTime}s...`
-                              : `Ainda processando... ${generatingTime}s`}
-                        </p>
-                        {generatingTime >= 45 && (
-                          <p className="text-[10px] text-yellow-500/70">
-                            Se demorar muito, será cancelado automaticamente (limite: 120s)
-                          </p>
-                        )}
-                      </div>
+                      <p className="text-xs text-slate-500 mt-2">Isso pode levar alguns segundos...</p>
                     )}
                   </div>
                 )}
