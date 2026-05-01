@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { uploadToAudioServer } from '@/lib/audio-server'
 
+export const maxDuration = 60
+
 const HF_SPACE_URL = process.env.HF_SPACE_URL || 'https://k2-fsa-omnivoice.hf.space'
 
 // POST /api/upload-voice - Upload reference audio to PHP hosting AND HuggingFace Space

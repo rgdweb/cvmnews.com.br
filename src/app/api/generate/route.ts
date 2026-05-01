@@ -290,19 +290,20 @@ export async function POST(req: NextRequest) {
 
         if (eventType === 'error') {
           console.error('[Generate] Error event from Gradio:', eventData)
+          let errorMsg = 'Erro na geração pelo servidor de IA.'
           if (eventData && eventData !== 'null') {
             try {
               const errData = JSON.parse(eventData)
-              return NextResponse.json(
-                { error: errData.error || 'Falha na geração' },
-                { status: 500 }
-              )
+              errorMsg = errData.error || errData.message || errorMsg
             } catch {
-              // fall through
+              // rawData is not JSON, use it as-is if meaningful
+              if (eventData.length > 5 && eventData.length < 500) {
+                errorMsg = eventData
+              }
             }
           }
           return NextResponse.json(
-            { error: 'Erro na geração. Verifique se o áudio de referência é válido (3-10 segundos, formato WAV/MP3).' },
+            { error: errorMsg },
             { status: 500 }
           )
         }
