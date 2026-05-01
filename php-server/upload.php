@@ -1,6 +1,10 @@
 <?php
 // upload.php - Upload de áudios para o VozPro
 
+// Remover limites de tempo para uploads grandes (funciona mesmo se .htaccess for ignorado)
+set_time_limit(0);
+ini_set('max_input_time', 0);
+
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
@@ -45,14 +49,29 @@ if (!in_array($tipo, ALLOWED_CATEGORIES)) {
 }
 
 // Validar arquivo enviado
-if (!isset($_FILES['arquivo']) || $_FILES['arquivo']['error'] !== UPLOAD_ERR_OK) {
+if (!isset($_FILES['arquivo'])) {
+    // Se $_FILES esta vazio, pode ser que post_max_size foi excedido
+    if (empty($_POST) && $_SERVER['CONTENT_LENGTH'] > 0) {
+        http_response_code(400);
+        echo json_encode(['sucesso' => false, 'erro' => 'Arquivo excede o limite post_max_size do servidor (' . ini_get('post_max_size') . ')']);
+        exit;
+    }
+    http_response_code(400);
+    echo json_encode(['sucesso' => false, 'erro' => 'Nenhum arquivo enviado']);
+    exit;
+}
+
+if ($_FILES['arquivo']['error'] !== UPLOAD_ERR_OK) {
     $erros = [
-        UPLOAD_ERR_INI_SIZE => 'Arquivo muito grande (limite do servidor)',
+        UPLOAD_ERR_INI_SIZE => 'Arquivo muito grande (limite do servidor: ' . ini_get('upload_max_filesize') . ')',
         UPLOAD_ERR_FORM_SIZE => 'Arquivo muito grande (limite do formulario)',
-        UPLOAD_ERR_PARTIAL => 'Arquivo enviado parcialmente',
+        UPLOAD_ERR_PARTIAL => 'Arquivo enviado parcialmente - tente novamente',
         UPLOAD_ERR_NO_FILE => 'Nenhum arquivo enviado',
+        UPLOAD_ERR_NO_TMP_DIR => 'Pasta temporaria inexistente no servidor',
+        UPLOAD_ERR_CANT_WRITE => 'Erro de permissao ao salvar no servidor',
+        UPLOAD_ERR_EXTENSION => 'Upload bloqueado por extensao do PHP',
     ];
-    $erro = $erros[$_FILES['arquivo']['error']] ?? 'Erro desconhecido no upload';
+    $erro = $erros[$_FILES['arquivo']['error']] ?? 'Erro desconhecido no upload (codigo: ' . $_FILES['arquivo']['error'] . ')';
     http_response_code(400);
     echo json_encode(['sucesso' => false, 'erro' => $erro]);
     exit;

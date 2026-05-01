@@ -408,7 +408,17 @@ export default function AdminDashboard() {
         body: formData,
       })
 
-      const data = await res.json()
+      let data: any
+      try {
+        data = await res.json()
+      } catch {
+        // Resposta nao e JSON - pode ser erro HTML do PHP/servidor
+        const text = await res.text().catch(() => '')
+        console.error('Resposta nao-JSON do PHP:', res.status, text.substring(0, 500))
+        toast.error(`Erro do servidor (${res.status}): ${text.substring(0, 150) || 'resposta vazia'}`)
+        return
+      }
+
       if (data.sucesso) {
         setTrackFilePath(data.url)
         setTrackFilename(data.arquivo)
@@ -419,7 +429,7 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       console.error('Track upload error:', err)
-      toast.error('Erro no upload da trilha')
+      toast.error(`Erro na conexao: ${err instanceof Error ? err.message : 'falha de rede'}`)
     } finally {
       setUploadingTrack(false)
     }
