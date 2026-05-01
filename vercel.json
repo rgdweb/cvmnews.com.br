@@ -15,5 +15,6 @@
     "src/app/api/upload-track/route.ts": {
       "maxDuration": 60
     }
-  }
+  },
+  "serverExternalPackages": []
 }
