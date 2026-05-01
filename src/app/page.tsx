@@ -227,7 +227,7 @@ export default function VozProClient() {
   // Debug state
   const [lastGenResponse, setLastGenResponse] = useState<Record<string, unknown> | null>(null)
   const [debugOpen, setDebugOpen] = useState(false)
-  const [phpServerUrl, setPhpServerUrl] = useState('')
+  const [usePhpGenerate, setUsePhpGenerate] = useState(false)
 
   const resultAudioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -264,7 +264,7 @@ export default function VozProClient() {
         }
         if (configRes.ok) {
           const configData = await configRes.json()
-          setPhpServerUrl(configData.phpServerUrl || '')
+          setUsePhpGenerate(!!configData.phpServerUrl)
         }
       } catch {
         toast.error('Erro ao carregar dados')
@@ -336,10 +336,8 @@ export default function VozProClient() {
         guidanceScale,
       }
 
-      // URL destino: PHP server (sem Vercel!) ou fallback para Vercel API
-      const generateUrl = phpServerUrl
-        ? phpServerUrl.replace(/\/$/, '') + '/generate.php'
-        : '/api/generate'
+      // URL destino: proxy Vercel -> PHP (sem CORS!) ou fallback Vercel API direta
+      const generateUrl = usePhpGenerate ? '/api/php-generate' : '/api/generate'
 
       const res = await fetch(generateUrl, {
         method: 'POST',
