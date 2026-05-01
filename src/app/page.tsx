@@ -328,7 +328,7 @@ export default function VozProClient() {
 
       if (data.error) {
         console.error('[VozPro] API returned error:', data.error)
-        toast.error(data.error)
+        toast.error(data.error, { description: 'Aguarde alguns segundos e tente novamente.' })
         return
       }
 

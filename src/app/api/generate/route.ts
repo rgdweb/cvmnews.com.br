@@ -184,24 +184,36 @@ export async function POST(req: NextRequest) {
       true,                                           // [11] postprocess_output
     ]
 
-    // Step 1: Submit the job to Gradio queue
+    // Step 1: Submit the job to Gradio queue (with retry for busy server)
     console.log('[Generate] Submitting to Gradio clone_fn...')
     let submitResult = await submitToGradio(data)
 
-    // If first attempt failed and we have a server URL, retry once with a fresh upload
-    if (!submitResult.eventId && serverUrl) {
-      console.log('[Generate] First submit failed, retrying with fresh upload...')
-      const retryPath = await uploadAudioToHF(serverUrl, fileName)
-      if (retryPath) {
-        const retryFileData = {
-          path: retryPath,
-          orig_name: fileName,
-          mime_type: fileName.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav',
-          is_stream: false,
-          meta: { _type: 'gradio.FileData' },
+    // If submit failed, wait and retry up to 3 times (Gradio may be busy)
+    if (!submitResult.eventId) {
+      for (let retry = 1; retry <= 3; retry++) {
+        console.log(`[Generate] Submit failed, waiting 5s and retrying (${retry}/3)...`)
+        await new Promise(r => setTimeout(r, 5000))
+
+        // Re-upload audio in case HF Space was restarted
+        if (serverUrl) {
+          const retryPath = await uploadAudioToHF(serverUrl, fileName)
+          if (retryPath) {
+            const retryFileData = {
+              path: retryPath,
+              orig_name: fileName,
+              mime_type: fileName.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav',
+              is_stream: false,
+              meta: { _type: 'gradio.FileData' },
+            }
+            data[2] = retryFileData
+          }
         }
-        data[2] = retryFileData
+
         submitResult = await submitToGradio(data)
+        if (submitResult.eventId) {
+          console.log(`[Generate] Retry ${retry} succeeded!`)
+          break
+        }
       }
     }
 
