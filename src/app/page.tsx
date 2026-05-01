@@ -314,12 +314,15 @@ export default function VozProClient() {
 
       if (!res.ok) {
         let errorMsg = `Erro do servidor (${res.status})`
+        let debugData = null
         try {
           const errData = await res.json()
           errorMsg = errData.error || errorMsg
+          debugData = errData.debug || null
         } catch {}
         console.error('[VozPro] Generate error:', errorMsg)
-        toast.error(errorMsg)
+        if (debugData) setLastGenResponse({ debug: debugData, error: errorMsg })
+        toast.error(errorMsg, { description: 'Aguarde alguns segundos e tente novamente.' })
         return
       }
 
@@ -328,6 +331,7 @@ export default function VozProClient() {
 
       if (data.error) {
         console.error('[VozPro] API returned error:', data.error)
+        if (data.debug) setLastGenResponse({ debug: data.debug, error: data.error })
         toast.error(data.error, { description: 'Aguarde alguns segundos e tente novamente.' })
         return
       }
@@ -894,54 +898,84 @@ export default function VozProClient() {
               </summary>
               <Card className="mt-2 bg-white/5 border-white/10 backdrop-blur">
                 <CardContent className="pt-5 space-y-3">
-                  <div className="space-y-2 text-xs font-mono">
-                    <div>
-                      <span className="text-slate-400">audioUrl:</span>{' '}
-                      <span className="text-slate-300 break-all">
-                        {audioUrl
-                          ? audioUrl.startsWith('data:')
-                            ? 'base64 (data URI)'
-                            : audioUrl.startsWith('http')
-                              ? 'External URL'
-                              : audioUrl
-                          : 'null'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400">mixedAudioUrl:</span>{' '}
-                      <span className="text-slate-300 break-all">
-                        {mixedAudioUrl
-                          ? mixedAudioUrl.startsWith('data:')
-                            ? 'base64 (data URI)'
-                            : mixedAudioUrl.startsWith('http')
-                              ? 'External URL'
-                              : mixedAudioUrl
-                          : 'null'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400">isMixed:</span>{' '}
-                      <span className="text-slate-300">{String(isMixed)}</span>
-                    </div>
-                    {lastGenResponse && (
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-slate-400">Last API Response:</span>
+                  {/* Debug Steps Timeline */}
+                  {(lastGenResponse as Record<string, unknown>)?.debug && 
+                    typeof (lastGenResponse as Record<string, unknown>)?.debug === 'object' && 
+                    ((lastGenResponse as Record<string, unknown>)?.debug as Record<string, unknown>)?.steps ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-300">Log de Geração</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-500">
+                            {(((lastGenResponse as Record<string, unknown>)?.debug as Record<string, unknown>)?.totalDuration as number / 1000).toFixed(1)}s total
+                          </span>
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-5 px-1.5 text-slate-500 hover:text-white"
-                            onClick={() => { navigator.clipboard.writeText(JSON.stringify(lastGenResponse, null, 2)); toast.success('Resposta copiada!') }}
+                            onClick={() => { navigator.clipboard.writeText(JSON.stringify(lastGenResponse, null, 2)); toast.success('Debug copiado!') }}
                           >
                             <Copy className="w-3 h-3" />
                           </Button>
                         </div>
-                        <pre className="bg-slate-900/50 border border-white/10 rounded p-2 text-[10px] text-slate-400 max-h-40 overflow-auto whitespace-pre-wrap break-all">
-{JSON.stringify(lastGenResponse, null, 2)}
-                        </pre>
                       </div>
-                    )}
-                  </div>
+                      <div className="space-y-1 max-h-60 overflow-auto">
+                        {(((lastGenResponse as Record<string, unknown>)?.debug as Record<string, unknown>)?.steps as Array<Record<string, string>>).map((step: Record<string, string>, i: number) => (
+                          <div key={i} className={`flex items-start gap-2 text-[11px] font-mono px-2 py-1 rounded ${
+                            step.status === 'error' ? 'bg-red-500/10 border border-red-500/20' :
+                            step.status === 'ok' ? 'bg-green-500/5' :
+                            step.status === 'warn' ? 'bg-yellow-500/5' :
+                            'bg-slate-800/30'
+                          }`}>
+                            <span className="text-slate-600 shrink-0">{step.time}</span>
+                            <span className={`shrink-0 w-2 h-2 mt-0.5 rounded-full ${
+                              step.status === 'error' ? 'bg-red-500' :
+                              step.status === 'ok' ? 'bg-green-500' :
+                              step.status === 'warn' ? 'bg-yellow-500' :
+                              'bg-blue-500'
+                            }`} />
+                            <span className={`shrink-0 ${
+                              step.status === 'error' ? 'text-red-400' :
+                              step.status === 'ok' ? 'text-green-400' :
+                              step.status === 'warn' ? 'text-yellow-400' :
+                              'text-blue-400'
+                            }`}>{step.step}</span>
+                            {step.detail && (
+                              <span className="text-slate-500 break-all">{step.detail}</span>
+                            )}
+                            {step.duration !== undefined && (
+                              <span className="text-slate-600 shrink-0 ml-auto">+{Number(step.duration)}ms</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {/* Error highlight */}
+                      {(lastGenResponse as Record<string, unknown>)?.error && (
+                        <div className="bg-red-500/10 border border-red-500/20 rounded p-2 text-xs text-red-400">
+                          <span className="font-semibold">Erro: </span>{String((lastGenResponse as Record<string, unknown>).error)}
+                        </div>
+                      )}
+                    </div>
+                  ) : lastGenResponse ? (
+                    <div className="space-y-2 text-xs font-mono">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-slate-400">Last API Response:</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 px-1.5 text-slate-500 hover:text-white"
+                          onClick={() => { navigator.clipboard.writeText(JSON.stringify(lastGenResponse, null, 2)); toast.success('Resposta copiada!') }}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
+                      <pre className="bg-slate-900/50 border border-white/10 rounded p-2 text-[10px] text-slate-400 max-h-40 overflow-auto whitespace-pre-wrap break-all">
+{JSON.stringify(lastGenResponse, null, 2)}
+                      </pre>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500">Nenhuma geração realizada ainda.</p>
+                  )}
                 </CardContent>
               </Card>
             </details>

@@ -6,26 +6,45 @@ export const maxDuration = 300
 
 const HF_SPACE_URL = process.env.HF_SPACE_URL || 'https://k2-fsa-omnivoice.hf.space'
 
+// Debug logger - coleta todos os passos para retorno ao frontend
+function createDebug() {
+  const steps: { time: string; step: string; status: string; detail?: string; duration?: number }[] = []
+  const start = Date.now()
+
+  function log(step: string, status: 'info' | 'ok' | 'warn' | 'error', detail?: string) {
+    steps.push({
+      time: new Date().toISOString().split('T')[1],
+      step,
+      status,
+      detail: detail || '',
+      duration: Date.now() - start,
+    })
+    console.log(`[Generate][${status.toUpperCase()}] ${step}${detail ? ': ' + detail : ''}`)
+  }
+
+  function result() {
+    return { totalDuration: Date.now() - start, steps }
+  }
+
+  return { log, result }
+}
+
 /**
  * Upload a reference audio to HuggingFace Space from a URL.
- * Downloads the audio from the given URL, then uploads it to HF Space.
- * Returns the HF path for Gradio FileData.
  */
-async function uploadAudioToHF(audioUrl: string, fileName: string): Promise<string | null> {
+async function uploadAudioToHF(audioUrl: string, fileName: string, debug: ReturnType<typeof createDebug>): Promise<string | null> {
   try {
-    console.log('[Generate] Downloading ref audio from:', audioUrl.substring(0, 80))
+    debug.log('Download ref audio', 'info', `from: ${audioUrl.substring(0, 80)}`)
 
-    // Download the audio file
     const audioRes = await fetch(audioUrl)
     if (!audioRes.ok) {
-      console.error('[Generate] Failed to download ref audio:', audioRes.status)
+      debug.log('Download ref audio', 'error', `HTTP ${audioRes.status} - ${audioRes.statusText}`)
       return null
     }
 
     const audioBlob = await audioRes.blob()
-    console.log('[Generate] Downloaded audio, size:', audioBlob.size, 'bytes')
+    debug.log('Download ref audio', 'ok', `${(audioBlob.size / 1024).toFixed(1)}KB baixado`)
 
-    // Upload to HF Space
     const uploadForm = new FormData()
     uploadForm.append('files', audioBlob, fileName)
 
@@ -36,27 +55,28 @@ async function uploadAudioToHF(audioUrl: string, fileName: string): Promise<stri
 
     if (!uploadRes.ok) {
       const errText = await uploadRes.text()
-      console.error('[Generate] Upload to HF failed:', uploadRes.status, errText)
+      debug.log('Upload to HF', 'error', `HTTP ${uploadRes.status}: ${errText.substring(0, 200)}`)
       return null
     }
 
     const uploadData = await uploadRes.json()
     if (Array.isArray(uploadData) && uploadData.length > 0) {
-      console.log('[Generate] Upload to HF successful:', uploadData[0])
+      debug.log('Upload to HF', 'ok', `path: ${uploadData[0]}`)
       return uploadData[0]
     }
 
+    debug.log('Upload to HF', 'error', 'Resposta inesperada do upload')
     return null
   } catch (err) {
-    console.error('[Generate] Upload to HF error:', err)
+    debug.log('Upload to HF', 'error', err instanceof Error ? err.message : String(err))
     return null
   }
 }
 
 /**
- * Try to submit a TTS job to Gradio. Returns { eventId, gradioError }.
+ * Submit TTS job to Gradio.
  */
-async function submitToGradio(data: unknown[]): Promise<{ eventId: string | null; gradioError: string | null }> {
+async function submitToGradio(data: unknown[], debug: ReturnType<typeof createDebug>): Promise<{ eventId: string | null; gradioError: string | null }> {
   const submitRes = await fetch(`${HF_SPACE_URL}/gradio_api/call/_clone_fn`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -65,26 +85,50 @@ async function submitToGradio(data: unknown[]): Promise<{ eventId: string | null
 
   if (!submitRes.ok) {
     const errText = await submitRes.text()
+    debug.log('Submit to Gradio', 'error', `HTTP ${submitRes.status}: ${errText.substring(0, 300)}`)
     return { eventId: null, gradioError: `HTTP ${submitRes.status}: ${errText}` }
   }
 
   const submitData = await submitRes.json()
-  return { eventId: submitData.event_id, gradioError: null }
+  const eventId = submitData.event_id
+  debug.log('Submit to Gradio', eventId ? 'ok' : 'error', eventId ? `event_id: ${eventId}` : 'sem event_id retornado')
+  return { eventId, gradioError: null }
+}
+
+/**
+ * Check if HF Space is awake.
+ */
+async function checkHFStatus(debug: ReturnType<typeof createDebug>): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const res = await fetch(`${HF_SPACE_URL}/info`, { signal: AbortSignal.timeout(10000) })
+    if (res.ok) {
+      const info = await res.json()
+      debug.log('HF Space status', 'ok', `Model: ${info?.model_name || info?.model || 'loaded'}`)
+      return { ok: true, detail: JSON.stringify(info).substring(0, 200) }
+    }
+    debug.log('HF Space status', 'warn', `HTTP ${res.status} - pode estar acordando`)
+    return { ok: false, detail: `HTTP ${res.status}` }
+  } catch (err) {
+    debug.log('HF Space status', 'error', `Não respondeu: ${err instanceof Error ? err.message : String(err)}`)
+    return { ok: false, detail: 'Offline ou timeout' }
+  }
 }
 
 // POST /api/generate - Generate TTS audio
 export async function POST(req: NextRequest) {
+  const debug = createDebug()
+
   try {
     const body = await req.json()
     const { variationId, text, language, trackId, trackVolume, speed, numStep, guidanceScale } = body
 
     // Validate
     if (!text || !text.trim()) {
-      return NextResponse.json({ error: 'Texto é obrigatório' }, { status: 400 })
+      return NextResponse.json({ error: 'Texto é obrigatório', debug: debug.result() }, { status: 400 })
     }
 
     if (!variationId) {
-      return NextResponse.json({ error: 'Selecione uma variação de voz' }, { status: 400 })
+      return NextResponse.json({ error: 'Selecione uma variação de voz', debug: debug.result() }, { status: 400 })
     }
 
     // Get the voice variation
@@ -94,72 +138,67 @@ export async function POST(req: NextRequest) {
     })
 
     if (!variation) {
-      return NextResponse.json({ error: 'Variação de voz não encontrada' }, { status: 404 })
+      debug.log('Busca variação', 'error', `ID: ${variationId} não encontrado`)
+      return NextResponse.json({ error: 'Variação de voz não encontrada', debug: debug.result() }, { status: 404 })
     }
 
-    console.log('[Generate] Variation:', variation.label, '| Voice:', variation.voice.name)
-    console.log('[Generate] refAudioPath (HF):', variation.refAudioPath)
-    console.log('[Generate] refAudioServerUrl:', (variation as Record<string, unknown>).refAudioServerUrl || '(not set)')
-    console.log('[Generate] refAudioName:', variation.refAudioName)
-    console.log('[Generate] Text:', text.substring(0, 80) + (text.length > 80 ? '...' : ''))
+    debug.log('Variação encontrada', 'ok', `${variation.label} (voz: ${variation.voice.name})`)
+    debug.log('Áudio ref', 'info', `serverUrl: ${((variation as Record<string, unknown>).refAudioServerUrl as string) || 'NÃO DEFINIDO'}`)
+    debug.log('Áudio ref', 'info', `hfPath: ${variation.refAudioPath || 'NENHUM'}`)
+    debug.log('Áudio ref', 'info', `fileName: ${variation.refAudioName || 'NENHUM'}`)
+    debug.log('Texto', 'info', `${text.substring(0, 60)}${text.length > 60 ? '...' : ''}`)
 
-    // Build instruct from voice settings + variation instruct
+    // Check HF Space status first
+    const hfStatus = await checkHFStatus(debug)
+
+    // Build instruct
     let instructParts: string[] = []
-
-    if (variation.voice.gender && variation.voice.gender !== 'Auto') {
-      instructParts.push(variation.voice.gender.toLowerCase())
-    }
-    if (variation.voice.age && variation.voice.age !== 'Auto') {
-      instructParts.push(variation.voice.age.toLowerCase())
-    }
-    if (variation.voice.pitch && variation.voice.pitch !== 'Auto') {
-      instructParts.push(variation.voice.pitch.toLowerCase())
-    }
-    if (variation.voice.accent && variation.voice.accent !== 'Auto') {
-      instructParts.push(variation.voice.accent.toLowerCase())
-    }
-    if (variation.instruct && variation.instruct.trim()) {
-      instructParts.push(variation.instruct.trim())
-    }
-
+    if (variation.voice.gender && variation.voice.gender !== 'Auto') instructParts.push(variation.voice.gender.toLowerCase())
+    if (variation.voice.age && variation.voice.age !== 'Auto') instructParts.push(variation.voice.age.toLowerCase())
+    if (variation.voice.pitch && variation.voice.pitch !== 'Auto') instructParts.push(variation.voice.pitch.toLowerCase())
+    if (variation.voice.accent && variation.voice.accent !== 'Auto') instructParts.push(variation.voice.accent.toLowerCase())
+    if (variation.instruct && variation.instruct.trim()) instructParts.push(variation.instruct.trim())
     const instructStr = instructParts.join(', ')
+    debug.log('Instruct', 'info', instructStr || '(vazio)')
+    debug.log('Parâmetros', 'info', `lang: ${language || 'Auto'} | speed: ${speed ?? 1.0} | steps: ${numStep ?? 32} | cfg: ${guidanceScale ?? 2.0}`)
 
-    console.log('[Generate] Instruct string:', instructStr || '(empty)')
-    console.log('[Generate] Language:', language || 'Auto', '| Speed:', speed ?? 1.0, '| Steps:', numStep ?? 32, '| CFG:', guidanceScale ?? 2.0)
-
-    // Get the permanent audio URL from our server
+    // Get permanent audio URL
     const serverUrl = (variation as Record<string, unknown>).refAudioServerUrl as string || (variation as Record<string, unknown>).refAudioBlobUrl as string || ''
     const fileName = variation.refAudioName || 'ref_audio.wav'
 
-    // ALWAYS re-upload from our permanent server to HF Space
-    // This ensures the audio is always available, even if HF Space was restarted
+    // Re-upload to HF
     let refAudioPath: string | null = null
 
     if (serverUrl) {
-      console.log('[Generate] Re-uploading audio from server to HF Space...')
-      refAudioPath = await uploadAudioToHF(serverUrl, fileName)
+      debug.log('Re-upload audio', 'info', 'Enviando do servidor PHP para HF Space...')
+      refAudioPath = await uploadAudioToHF(serverUrl, fileName, debug)
       if (refAudioPath) {
-        // Update the HF path in DB (it may have changed)
         await db.voiceVariation.update({
           where: { id: variation.id },
           data: { refAudioPath },
         })
-        console.log('[Generate] Updated refAudioPath in DB:', refAudioPath)
+        debug.log('Re-upload audio', 'ok', 'Atualizado no DB')
+      } else {
+        debug.log('Re-upload audio', 'warn', 'Falhou! Tentando path existente...')
       }
-    } else if (variation.refAudioPath) {
-      // Fallback: try using the existing HF path (may or may not work)
-      console.log('[Generate] No server URL, trying existing HF path...')
+    } else {
+      debug.log('Re-upload audio', 'warn', 'Sem serverUrl! Usando path HF existente')
+    }
+
+    if (!refAudioPath && variation.refAudioPath) {
       refAudioPath = variation.refAudioPath
+      debug.log('Fallback HF path', 'info', `Usando: ${refAudioPath}`)
     }
 
     if (!refAudioPath) {
+      debug.log('Audio ref FINAL', 'error', 'Nenhum audio disponivel para envio ao Gradio')
       return NextResponse.json(
-        { error: 'Áudio de referência não disponível. Reenvie o áudio de referência na variação.' },
+        { error: 'Áudio de referência não disponível. Reenvie o áudio de referência na variação.', debug: debug.result() },
         { status: 400 }
       )
     }
 
-    // Build the ref audio FileData object for Gradio
+    // Build Gradio params
     const refAudioFileData = {
       path: refAudioPath,
       orig_name: fileName,
@@ -168,88 +207,85 @@ export async function POST(req: NextRequest) {
       meta: { _type: 'gradio.FileData' },
     }
 
-    // Build clone mode parameters
     const data = [
-      text,                                           // [0] text
-      language || 'Auto',                             // [1] language
-      refAudioFileData,                               // [2] ref_audio
-      variation.refText || '',                        // [3] ref_text
-      instructStr,                                    // [4] instruct
-      numStep ?? 32,                                  // [5] num_step
-      guidanceScale ?? 2.0,                           // [6] guidance_scale
-      true,                                           // [7] denoise
-      speed ?? 1.0,                                   // [8] speed
-      null,                                           // [9] duration
-      true,                                           // [10] preprocess_prompt
-      true,                                           // [11] postprocess_output
+      text,
+      language || 'Auto',
+      refAudioFileData,
+      variation.refText || '',
+      instructStr,
+      numStep ?? 32,
+      guidanceScale ?? 2.0,
+      true,   // denoise
+      speed ?? 1.0,
+      null,   // duration
+      true,   // preprocess_prompt
+      true,   // postprocess_output
     ]
 
-    // Step 1: Submit the job to Gradio queue (with retry for busy server)
-    console.log('[Generate] Submitting to Gradio clone_fn...')
-    let submitResult = await submitToGradio(data)
+    // Submit with retry
+    debug.log('Submit job', 'info', 'Enviando para Gradio...')
+    let submitResult = await submitToGradio(data, debug)
 
-    // If submit failed, wait and retry up to 3 times (Gradio may be busy)
     if (!submitResult.eventId) {
       for (let retry = 1; retry <= 3; retry++) {
-        console.log(`[Generate] Submit failed, waiting 5s and retrying (${retry}/3)...`)
+        debug.log('Retry', 'warn', `Tentativa ${retry}/3 - aguardando 5s...`)
         await new Promise(r => setTimeout(r, 5000))
 
-        // Re-upload audio in case HF Space was restarted
         if (serverUrl) {
-          const retryPath = await uploadAudioToHF(serverUrl, fileName)
+          const retryPath = await uploadAudioToHF(serverUrl, fileName, debug)
           if (retryPath) {
-            const retryFileData = {
+            data[2] = {
               path: retryPath,
               orig_name: fileName,
               mime_type: fileName.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav',
               is_stream: false,
               meta: { _type: 'gradio.FileData' },
             }
-            data[2] = retryFileData
           }
         }
 
-        submitResult = await submitToGradio(data)
+        submitResult = await submitToGradio(data, debug)
         if (submitResult.eventId) {
-          console.log(`[Generate] Retry ${retry} succeeded!`)
+          debug.log('Retry', 'ok', `Sucesso na tentativa ${retry}!`)
           break
         }
       }
     }
 
     if (submitResult.gradioError) {
-      console.error('[Generate] Submit error:', submitResult.gradioError)
+      debug.log('FINAL', 'error', `Gradio rejeitou: ${submitResult.gradioError.substring(0, 200)}`)
       return NextResponse.json(
-        { error: `Falha ao enviar para o servidor de IA: ${submitResult.gradioError}` },
+        { error: `Falha ao enviar para o servidor de IA: ${submitResult.gradioError}`, debug: debug.result() },
         { status: 502 }
       )
     }
 
     const eventId = submitResult.eventId
-    console.log('[Generate] Got event_id:', eventId)
-
     if (!eventId) {
+      debug.log('FINAL', 'error', 'Sem event_id apos retries')
       return NextResponse.json(
-        { error: 'Nenhum event_id retornado do servidor' },
+        { error: 'Nenhum event_id retornado apos tentativas', debug: debug.result() },
         { status: 502 }
       )
     }
 
-    // Step 2: Poll for the result using SSE stream
-    console.log('[Generate] Polling for result...')
+    // Poll for result
+    debug.log('Polling', 'info', `event_id: ${eventId}`)
     const maxAttempts = 120
     let voiceAudioUrl: string | null = null
     let attemptCount = 0
+    let lastGradioError: string | null = null
 
     for (let i = 0; i < maxAttempts; i++) {
       attemptCount = i + 1
-      if (i % 10 === 0) console.log(`[Generate] Poll attempt ${i + 1}/${maxAttempts}...`)
+
       const resultRes = await fetch(
         `${HF_SPACE_URL}/gradio_api/call/_clone_fn/${eventId}`,
         { headers: { 'Accept': 'text/event-stream' } }
       )
 
       if (!resultRes.ok) {
+        if (i % 10 === 0) debug.log('Poll', 'warn', `HTTP ${resultRes.status} na tentativa ${i + 1}`)
         await new Promise(r => setTimeout(r, 2000))
         continue
       }
@@ -265,12 +301,13 @@ export async function POST(req: NextRequest) {
         const eventData = dataLine?.slice(6).trim()
 
         if (eventType === 'complete' && eventData) {
-          console.log('[Generate] Got complete event!')
+          debug.log('Poll', 'ok', `Complete na tentativa ${i + 1} (${((i + 1) * 1.5).toFixed(0)}s)`)
           try {
             const resultData = JSON.parse(eventData)
             if (!Array.isArray(resultData) || resultData.length < 2) {
+              debug.log('Parse result', 'error', `Formato inesperado: ${JSON.stringify(resultData).substring(0, 200)}`)
               return NextResponse.json(
-                { error: 'Formato de resposta inesperado' },
+                { error: 'Formato de resposta inesperado', debug: debug.result() },
                 { status: 502 }
               )
             }
@@ -278,49 +315,47 @@ export async function POST(req: NextRequest) {
             const audioOutput = resultData[0]
             if (audioOutput?.url) {
               voiceAudioUrl = audioOutput.url
-              console.log('[Generate] Audio URL (direct):', voiceAudioUrl)
             } else if (audioOutput?.path) {
               voiceAudioUrl = `${HF_SPACE_URL}/gradio_api/file=${audioOutput.path}`
-              console.log('[Generate] Audio URL (from path):', voiceAudioUrl)
             }
 
-            if (!voiceAudioUrl) {
-              console.error('[Generate] No audio URL found in response:', JSON.stringify(resultData))
+            if (voiceAudioUrl) {
+              debug.log('Audio gerado', 'ok', voiceAudioUrl.substring(0, 100))
+            } else {
+              debug.log('Audio gerado', 'error', `Sem URL no output: ${JSON.stringify(resultData).substring(0, 200)}`)
               return NextResponse.json(
-                { error: 'Nenhum áudio gerado pela IA' },
+                { error: 'Nenhum áudio gerado pela IA', debug: debug.result() },
                 { status: 500 }
               )
             }
           } catch (parseErr) {
-            console.error('[Generate] Parse error:', parseErr, eventData)
+            debug.log('Parse result', 'error', `${parseErr instanceof Error ? parseErr.message : String(parseErr)} | raw: ${eventData.substring(0, 100)}`)
             return NextResponse.json(
-              { error: 'Erro ao processar resposta do servidor' },
+              { error: 'Erro ao processar resposta do servidor', debug: debug.result() },
               { status: 502 }
             )
           }
         }
 
         if (eventType === 'error') {
-          console.error('[Generate] Error event from Gradio:', eventData)
+          debug.log('Gradio ERROR', 'error', `Raw: ${eventData?.substring(0, 500) || 'vazio'}`)
+          lastGradioError = eventData
           let errorMsg = 'Erro na geração pelo servidor de IA.'
           if (eventData && eventData !== 'null') {
             try {
               const errData = JSON.parse(eventData)
               errorMsg = errData.error || errData.message || errorMsg
             } catch {
-              // rawData is not JSON, use it as-is if meaningful
               if (eventData.length > 5 && eventData.length < 500) {
                 errorMsg = eventData
               }
             }
           }
-          return NextResponse.json(
-            { error: errorMsg },
-            { status: 500 }
-          )
+          return NextResponse.json({ error: errorMsg, debug: debug.result() }, { status: 500 })
         }
 
         if (eventType === 'heartbeat') {
+          debug.log('Poll', 'warn', 'Heartbeat recebido (sem resultado)')
           break
         }
       }
@@ -329,29 +364,35 @@ export async function POST(req: NextRequest) {
       await new Promise(r => setTimeout(r, 1500))
     }
 
-    console.log(`[Generate] Polling completed after ${attemptCount} attempts, voiceAudioUrl:`, voiceAudioUrl ? 'FOUND' : 'NULL')
+    debug.log('Polling', voiceAudioUrl ? 'ok' : 'error', `${attemptCount} tentativas | ${voiceAudioUrl ? 'audio encontrado' : 'timeout'}`)
 
     if (!voiceAudioUrl) {
-      console.error('[Generate] Timeout - no audio URL after', maxAttempts, 'attempts')
-      return NextResponse.json({ error: 'Tempo limite excedido na geração' }, { status: 504 })
+      return NextResponse.json(
+        { error: 'Tempo limite excedido na geração (3 min)', debug: debug.result() },
+        { status: 504 }
+      )
     }
 
-    // Step 3: Download voice audio and return as base64
-    console.log('[Generate] Downloading voice audio for client delivery...')
+    // Download voice audio
+    debug.log('Download audio', 'info', 'Baixando audio gerado...')
     const voiceRes = await fetch(voiceAudioUrl)
+    if (!voiceRes.ok) {
+      debug.log('Download audio', 'error', `HTTP ${voiceRes.status}`)
+      return NextResponse.json({ error: 'Falha ao baixar audio gerado', debug: debug.result() }, { status: 502 })
+    }
     const voiceBuffer = Buffer.from(await voiceRes.arrayBuffer())
-    const voiceBase64 = voiceBuffer.toString('base64')
+    debug.log('Download audio', 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB baixado`)
 
-    // Determine audio MIME type from URL or default to wav
     const voiceMimeType = voiceAudioUrl.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav'
-    const voiceDataUri = `data:${voiceMimeType};base64,${voiceBase64}`
+    const voiceDataUri = `data:${voiceMimeType};base64,${voiceBuffer.toString('base64')}`
 
-    // If track is requested, return the track URL for client-side mixing
+    // Track mixing
     if (trackId) {
       const track = await db.track.findUnique({ where: { id: trackId } })
-      console.log('[Generate] Track requested:', track?.name, '| Volume:', trackVolume)
+      debug.log('Track', track?.audioPath ? 'ok' : 'warn', `${track?.name || 'N/A'} | vol: ${trackVolume ?? 0.3}`)
 
       if (track?.audioPath) {
+        debug.log('FINAL', 'ok', 'Retornando voice + track para mix no cliente')
         return NextResponse.json({
           audioUrl: voiceDataUri,
           trackUrl: track.audioPath,
@@ -359,19 +400,21 @@ export async function POST(req: NextRequest) {
           trackName: track.name,
           mixed: false,
           clientMix: true,
+          debug: debug.result(),
         })
       }
     }
 
-    // No track - return voice audio only
+    debug.log('FINAL', 'ok', 'Audio pronto sem track')
     return NextResponse.json({
       audioUrl: voiceDataUri,
       mixed: false,
+      debug: debug.result(),
     })
   } catch (error) {
-    console.error('[Generate] API error:', error)
+    debug.log('EXCEPTION', 'error', error instanceof Error ? `${error.message}\n${error.stack?.substring(0, 300)}` : String(error))
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Erro interno do servidor' },
+      { error: error instanceof Error ? error.message : 'Erro interno do servidor', debug: debug.result() },
       { status: 500 }
     )
   }
