@@ -20,9 +20,9 @@ import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
 
 /**
- * Comprimir audio client-side usando Web Audio API + MediaRecorder (opus).
- * Reduz drasticamente o tamanho sem perda perceptivel de qualidade.
- * Ex: WAV 8MB → WebM opus 128kbps ≈ 800KB
+ * Comprimir audio client-side usando OfflineAudioContext (INSTANTANEO, sem tempo real).
+ * Converte para mono 22050Hz WAV - reduz ~75% do tamanho sem degradar trilhas musicais.
+ * Ex: WAV 44100Hz stereo 8MB → WAV 22050Hz mono ~2MB (instantaneo)
  */
 async function compressAudioFile(file: File): Promise<{ blob: Blob; name: string }> {
   const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
@@ -36,45 +36,86 @@ async function compressAudioFile(file: File): Promise<{ blob: Blob; name: string
     return { blob: file, name: file.name }
   }
 
-  const dest = audioCtx.createMediaStreamDestination()
-  const source = audioCtx.createBufferSource()
+  // Downsample para 22050Hz mono (background music fica perfeito)
+  const targetSampleRate = 22050
+  const numChannels = 1 // mono
+  const length = Math.ceil(audioBuffer.duration * targetSampleRate)
+
+  const offlineCtx = new OfflineAudioContext(numChannels, length, targetSampleRate)
+  const source = offlineCtx.createBufferSource()
   source.buffer = audioBuffer
-  source.connect(dest)
+  source.connect(offlineCtx.destination)
   source.start(0)
 
-  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-    ? 'audio/webm;codecs=opus'
-    : MediaRecorder.isTypeSupported('audio/webm')
-      ? 'audio/webm'
-      : 'audio/mp4'
+  // Renderiza INSTANTANEAMENTE (nao tempo real!)
+  const resampledBuffer = await offlineCtx.startRendering()
 
-  const recorder = new MediaRecorder(dest.stream, {
-    mimeType,
-    audioBitsPerSecond: 128000,
-  })
+  // Converte para WAV
+  const wavBlob = encodeAudioBufferToWav(resampledBuffer)
 
-  const chunks: Blob[] = []
-  recorder.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data)
+  const baseName = file.name.replace(/\.[^.]+$/, '')
+  const finalKB = Math.round(wavBlob.size / 1024)
+  const originalKB = Math.round(file.size / 1024)
+  console.log(`[Admin] Compressao trilha: ${originalKB}KB → ${finalKB}KB (${Math.round((1 - wavBlob.size / file.size) * 100)}% reducao, ${targetSampleRate}Hz mono)`)
+
+  await audioCtx.close()
+  return { blob: wavBlob, name: baseName + '.wav' }
+}
+
+/**
+ * Converte AudioBuffer para Blob WAV.
+ */
+function encodeAudioBufferToWav(buffer: AudioBuffer): Blob {
+  const numChannels = buffer.numberOfChannels
+  const sampleRate = buffer.sampleRate
+  const bitDepth = 16
+  const bytesPerSample = bitDepth / 8
+  const blockAlign = numChannels * bytesPerSample
+  const dataSize = buffer.length * blockAlign
+  const headerSize = 44
+  const totalSize = headerSize + dataSize
+
+  const arrayBuffer = new ArrayBuffer(totalSize)
+  const view = new DataView(arrayBuffer)
+
+  // WAV header
+  writeWavString(view, 0, 'RIFF')
+  view.setUint32(4, totalSize - 8, true)
+  writeWavString(view, 8, 'WAVE')
+  writeWavString(view, 12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, numChannels, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * blockAlign, true)
+  view.setUint16(32, blockAlign, true)
+  view.setUint16(34, bitDepth, true)
+  writeWavString(view, 36, 'data')
+  view.setUint32(40, dataSize, true)
+
+  // Audio data (interleaved)
+  const channels: Float32Array[] = []
+  for (let ch = 0; ch < numChannels; ch++) {
+    channels.push(buffer.getChannelData(ch))
   }
 
-  return new Promise<{ blob: Blob; name: string }>((resolve) => {
-    recorder.onstop = () => {
-      const compressed = new Blob(chunks, { type: mimeType })
-      const ext = mimeType.includes('webm') ? '.webm' : mimeType.includes('mp4') ? '.mp4' : '.mp3'
-      const baseName = file.name.replace(/\.[^.]+$/, '')
-      const finalKB = Math.round(compressed.size / 1024)
-      const originalKB = Math.round(file.size / 1024)
-      console.log(`[Admin] Compressao trilha: ${originalKB}KB → ${finalKB}KB (${Math.round((1 - compressed.size / file.size) * 100)}% reducao)`)
-      audioCtx.close()
-      resolve({ blob: compressed, name: baseName + ext })
+  let offset = 44
+  for (let i = 0; i < buffer.length; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const sample = Math.max(-1, Math.min(1, channels[ch][i]))
+      const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF
+      view.setInt16(offset, intSample, true)
+      offset += 2
     }
+  }
 
-    recorder.start()
-    source.onended = () => {
-      setTimeout(() => recorder.stop(), 100)
-    }
-  })
+  return new Blob([arrayBuffer], { type: 'audio/wav' })
+}
+
+function writeWavString(view: DataView, offset: number, str: string) {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i))
+  }
 }
 
 interface VoiceVariation {
@@ -445,13 +486,13 @@ export default function AdminDashboard() {
 
     setUploadingTrack(true)
     try {
-      // Comprimir audio se for grande (> 3MB) para evitar limite do Vercel
+      // Comprimir audio se for grande (> 3MB) para evitar limite do PHP server
       const originalSizeMB = (file.size / (1024 * 1024)).toFixed(1)
       let uploadBlob: Blob = file
       let uploadName: string = file.name
 
       if (file.size >= 3 * 1024 * 1024) {
-        toast.info(`Comprimindo trilha (${originalSizeMB}MB)...`)
+        console.log(`[Admin] Comprimindo trilha ${originalSizeMB}MB...`)
         const compressed = await compressAudioFile(file)
         uploadBlob = compressed.blob
         uploadName = compressed.name
@@ -1154,14 +1195,24 @@ export default function AdminDashboard() {
                         variant="outline"
                         onClick={() => document.getElementById('track-file-upload')?.click()}
                         disabled={uploadingTrack}
-                        className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 gap-2"
+                        className="w-full border-slate-500 text-white hover:bg-slate-700 gap-2"
                       >
                         {uploadingTrack ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Comprimindo e enviando...
+                          </>
+                        ) : trackFilePath ? (
+                          <>
+                            <FileAudio className="w-4 h-4 text-emerald-400" />
+                            <span className="text-emerald-400">Arquivo pronto!</span>
+                          </>
                         ) : (
-                          <Upload className="w-4 h-4" />
+                          <>
+                            <Upload className="w-4 h-4" />
+                            {editingTrackId ? 'Enviar novo áudio (opcional)' : 'Selecionar arquivo de áudio'}
+                          </>
                         )}
-                        {trackFilePath ? 'Novo arquivo enviado' : editingTrackId ? 'Enviar novo áudio (opcional)' : 'Selecionar arquivo MP3/WAV/OGG'}
                       </Button>
                     </div>
                   </div>
