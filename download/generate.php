@@ -2,7 +2,7 @@
 // generate.php - Geracao de voz TTS via OmniVoice (chamada DIRETA do browser)
 // Bypassa completamente o Vercel para evitar timeout de 60s
 // Usa HMAC token para autenticacao (mesmo padrao do upload-direct.php)
-// v3: SSE Streaming persistente (conexao aberta ate resultado)
+// v4: Audio trimming (max 10s) para evitar CUDA OOM na RTX 3060 12GB
 
 set_time_limit(0);
 ini_set('max_input_time', 0);
@@ -11,7 +11,6 @@ ini_set('memory_limit', '256M');
 require_once __DIR__ . '/config.php';
 
 // CORS (necessario para chamada direta do browser)
-// header_remove evita duplicata com .htaccess / config do servidor
 header_remove('Access-Control-Allow-Origin');
 header_remove('Access-Control-Allow-Methods');
 header_remove('Access-Control-Allow-Headers');
@@ -40,7 +39,6 @@ if (empty($token)) {
     exit;
 }
 
-// Token format: timestamp.hmac_sha256
 $parts = explode('.', $token);
 if (count($parts) !== 2) {
     http_response_code(401);
@@ -51,21 +49,18 @@ if (count($parts) !== 2) {
 $timestamp = (int)$parts[0];
 $receivedHmac = $parts[1];
 
-// Token expira em 30 minutos (geracao na GPU local pode demorar)
 if (time() - $timestamp > 1800) {
     http_response_code(401);
     echo json_encode(['erro' => 'Token expirado, tente novamente']);
     exit;
 }
 
-// Token no futuro (diferenca de relogio)
 if ($timestamp > time() + 60) {
     http_response_code(401);
     echo json_encode(['erro' => 'Token invalido']);
     exit;
 }
 
-// Verificar HMAC usando a API_KEY como segredo
 $expectedHmac = hash_hmac('sha256', (string)$timestamp, API_KEY);
 if (!hash_equals($expectedHmac, $receivedHmac)) {
     http_response_code(401);
@@ -138,6 +133,9 @@ debugLog('HF Space', 'info', $hfUrl);
 
 // ===================== FUNCOES =====================
 
+// Tempo maximo do audio de referencia em segundos (GPU 12GB)
+define('MAX_REF_AUDIO_SECONDS', 10);
+
 function downloadRefAudio($url, $name) {
     debugLog('Download ref audio', 'info', 'de: ' . mb_substr($url, 0, 80));
     $tempFile = tempnam(sys_get_temp_dir(), 'vp_ref_') . '.' . pathinfo($name, PATHINFO_EXTENSION);
@@ -155,13 +153,54 @@ function downloadRefAudio($url, $name) {
     curl_close($ch);
     fclose($fp);
 
-    if ($dlOk && $dlHttpCode == 200 && filesize($tempFile) > 0) {
-        debugLog('Download ref audio', 'ok', round(filesize($tempFile) / 1024) . 'KB');
-        return $tempFile;
+    if (!$dlOk || $dlHttpCode != 200 || filesize($tempFile) == 0) {
+        debugLog('Download ref audio', 'error', "HTTP $dlHttpCode");
+        if (file_exists($tempFile)) unlink($tempFile);
+        return null;
     }
-    debugLog('Download ref audio', 'error', "HTTP $dlHttpCode");
-    if (file_exists($tempFile)) unlink($tempFile);
-    return null;
+
+    $originalSize = filesize($tempFile);
+    debugLog('Download ref audio', 'ok', round($originalSize / 1024) . 'KB');
+
+    // ===== TRIMAR AUDIO PARA EVITAR CUDA OOM =====
+    $trimmedFile = trimAudioToMaxSeconds($tempFile, MAX_REF_AUDIO_SECONDS);
+    if ($trimmedFile && $trimmedFile !== $tempFile) {
+        if (file_exists($tempFile)) unlink($tempFile);
+        $tempFile = $trimmedFile;
+        debugLog('Trim audio', 'ok', round(filesize($tempFile) / 1024) . 'KB (max ' . MAX_REF_AUDIO_SECONDS . 's)');
+    } elseif ($trimmedFile === false) {
+        debugLog('Trim audio', 'warn', 'Falha no trim, usando original');
+    }
+
+    return $tempFile;
+}
+
+function trimAudioToMaxSeconds($filePath, $maxSeconds = 10) {
+    $trimScript = __DIR__ . '/trim_audio.py';
+
+    if (!file_exists($trimScript)) {
+        debugLog('Trim audio', 'warn', 'trim_audio.py nao encontrado');
+        return false;
+    }
+
+    $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+    $trimmedFile = tempnam(sys_get_temp_dir(), 'vp_trim_') . '.' . $ext;
+
+    $cmd = 'python3 ' . escapeshellarg($trimScript) . ' '
+         . escapeshellarg($filePath) . ' '
+         . escapeshellarg($trimmedFile) . ' '
+         . escapeshellarg((string)$maxSeconds);
+
+    $output = shell_exec($cmd . ' 2>&1');
+    $output = trim($output ?? '');
+
+    if ($output === 'OK' && file_exists($trimmedFile) && filesize($trimmedFile) > 0) {
+        return $trimmedFile;
+    }
+
+    if (file_exists($trimmedFile)) unlink($trimmedFile);
+    debugLog('Trim audio', 'warn', 'Falha: ' . $output);
+    return false;
 }
 
 function uploadToHF($filePath, $fileName, $hfUrl) {
@@ -225,7 +264,7 @@ function submitToGradio($gradioData, $hfUrl) {
     return $eventId;
 }
 
-function streamSSEForResult($eventId, $hfUrl, $timeoutSec = 180) {
+function streamSSEForResult($eventId, $hfUrl, $timeoutSec = 600) {
     debugLog('SSE Stream', 'info', "Abrindo conexao persistente para $eventId...");
 
     $audioUrl = null;
@@ -244,7 +283,7 @@ function streamSSEForResult($eventId, $hfUrl, $timeoutSec = 180) {
         }
 
         $blocks = explode("\n\n", $buffer);
-        $buffer = array_pop($blocks) !== null ? array_pop($blocks) : '';
+        $buffer = array_pop($blocks) ?? '';
 
         foreach ($blocks as $block) {
             $block = trim($block);
@@ -283,11 +322,13 @@ function streamSSEForResult($eventId, $hfUrl, $timeoutSec = 180) {
             }
 
             if ($eventType === 'error') {
-                debugLog('SSE Stream', 'error', 'Evento ERROR: ' . mb_substr($eventData ?: 'vazio', 0, 300));
+                debugLog('SSE Stream', 'error', 'Evento ERROR: ' . mb_substr($eventData ?: 'vazio', 0, 500));
                 if (empty($eventData) || $eventData === 'null') {
                     $error = 'null';
                 } elseif (strpos($eventData, '404') !== false) {
                     $error = '404';
+                } elseif (strpos($eventData, 'OutOfMemory') !== false || strpos($eventData, 'CUDA') !== false) {
+                    $error = 'CUDA OOM';
                 } else {
                     $errParsed = json_decode($eventData, true);
                     $error = $errParsed['error'] ?? $errParsed['message'] ?? 'Erro na geracao';
@@ -310,7 +351,13 @@ function streamSSEForResult($eventId, $hfUrl, $timeoutSec = 180) {
         CURLOPT_RETURNTRANSFER => false,
         CURLOPT_TIMEOUT => $timeoutSec,
         CURLOPT_CONNECTTIMEOUT => 30,
-        CURLOPT_HTTPHEADER => ['Accept: text/event-stream'],
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        CURLOPT_HTTPHEADER => [
+            'Accept: text/event-stream',
+            'Cache-Control: no-cache',
+            'Connection: keep-alive',
+            'X-Accel-Buffering: no',
+        ],
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_WRITEFUNCTION => $writeFn,
     ]);
@@ -391,7 +438,6 @@ if (!empty($refAudioUrl)) {
 
 if (!$tempRefFile && !empty($refAudioPath)) {
     debugLog('Fallback HF path', 'info', $refAudioPath);
-    $audioUrl = null;
 }
 
 $gradioData = [
@@ -466,6 +512,8 @@ if (!$audioUrl) {
         $userMsg = 'Servidor de IA reiniciou. Tente novamente.';
     } elseif ($lastError === 'timeout') {
         $userMsg = 'Tempo limite excedido na geracao.';
+    } elseif ($lastError === 'CUDA OOM') {
+        $userMsg = 'GPU sem memoria. O audio de referencia e muito longo - use um audio de ate 10 segundos.';
     }
     returnError($userMsg, 504);
 }
@@ -508,7 +556,7 @@ debugLog('Base64 encode', 'ok', round(strlen($audioBase64) / 1024) . 'KB base64'
 if ($tempAudioFile && file_exists($tempAudioFile)) unlink($tempAudioFile);
 
 // ===================== RETORNAR =====================
-debugLog('FINAL', 'ok', 'audio pronto via PHP DIRECT (SSE Streaming, sem Vercel proxy)');
+debugLog('FINAL', 'ok', 'audio pronto via PHP DIRECT (SSE + trim)');
 
 echo json_encode([
     'audioUrl' => $dataUri,
