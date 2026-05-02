@@ -4,20 +4,21 @@
 > Contem TUDO que foi implementado, decisoes arquiteturais, problemas resolvidos e como cada parte funciona.
 > 
 > **Ultima atualizacao**: 02/05/2026
-> **Status**: Sistema 100% funcional em producao
+> **Status**: Sistema 100% funcional em producao (GPU local via localtunnel)
 
 ---
 
 ## 1. O QUE E O PROJETO
 
-**VozPro** e um produto comercial de sintese de voz (TTS - Text-to-Speech) que usa o modelo **OmniVoice** hospedado no HuggingFace Spaces. O sistema permite:
+**VozPro** e um produto comercial de sintese de voz (TTS - Text-to-Speech) que usa o modelo **OmniVoice** rodando localmente em GPU (RTX 3060 12GB) exposto via tunnel. O sistema permite:
 
 - Clonagem de voz a partir de audios de referencia (3-10 segundos)
 - Geracao de voz com diferentes emocoes/estilos (variacoes com audios de referencia diferentes)
 - Mixagem de voz com trilha musical de fundo (Web Audio API no client-side)
 - Painel administrativo para gerenciar vozes, variacoes e trilhas
 - Upload de trilhas com processamento inteligente (trim 80s + MP3 encoding)
-- Geracao de voz via PHP proxy (bypassa timeout do Vercel)
+- Geracao de voz via PHP proxy com SSE streaming (bypassa timeout do Vercel)
+- GPU local (RTX 3060) com tunnel automatico (loca.lt)
 
 **Publico-alvo**: Estudios de gravacao, produtoras de conteudo, agencias de publicidade.
 
@@ -36,7 +37,9 @@
 | Backend | Next.js API Routes | Serverless no Vercel |
 | Banco de Dados | PostgreSQL (Neon) | Prisma ORM |
 | Armazenamento de Audio | **PHP Hosting** (sorteiomax.com.br) | Substituiu Vercel Blob (blob removido) |
-| IA/TTS | OmniVoice (HuggingFace Space) | `k2-fsa-omnivoice.hf.space` via Gradio API |
+| IA/TTS | OmniVoice (GPU Local) | RTX 3060 12GB via omnivoice-demo, Gradio API v2 |
+| Tunnel | Localtunnel (npx) | https://xxxx.loca.lt, SSE compativel, atualizacao automatica |
+| Audio Trimmer | Python 3 (trim_audio.py) | Corta ref audio para max 10s (evita CUDA OOM) |
 | Mixagem | Web Audio API (client-side) | OfflineAudioContext + AudioBuffer |
 | Encodign de Audio | lamejs (CDN) | MP3 encoding no navegador (trilhas grandes) |
 | Autenticacao | Custom cookie-based | SHA-256 hash + timestamp, cookie httpOnly |
@@ -71,26 +74,28 @@
 │  ┌────────────┐  │   │  ┌─────────────────────┐  │
 │  │ API Routes │──┼──▶│  │ upload.php (normal) │  │
 │  │ /generate  │  │   │  │ upload-direct.php   │  │
-│  │ /php-gen   │──┼──▶│  │ generate.php ──────┼──┼──▶ HF Space
+│  │ /php-gen   │──┼──▶│  │ generate.php ──────┼──┼──▶ GPU Local
 │  │ /upload-*  │──┼──▶│  │ delete.php         │  │
 │  │ /voices    │  │   │  │ upload-chunk.php    │  │
-│  │ /tracks    │  │   │  │ audios/{ref,track}/ │  │
-│  │ /auth      │  │   │  └─────────────────────┘  │
-│  └─────┬──────┘  │   └──────────────────────────┘
-│        │         │
-│  ┌─────▼──────┐  │
-│  │ PostgreSQL │  │   ┌──────────────────────────┐
-│  │ (Neon)     │  │   │  HuggingFace Space       │
-│  │ Voices     │  │   │  k2-fsa-omnivoice        │
-│  │ Variations │  │   │  Gradio _clone_fn (TTS)  │
-│  │ Tracks     │  │   │  Upload API              │
-│  └────────────┘  │   └──────────────────────────┘
-└──────────────────┘
+│  │ /tracks    │  │   │  │ update_tunnel.php   │  │
+│  │ /auth      │  │   │  │ trim_audio.py       │  │
+│  └─────┬──────┘  │   │  │ audios/{ref,track}/ │  │
+│        │         │   │  └─────────────────────┘  │
+│  ┌─────▼──────┐  │   └──────────────────────────┘
+│  │ PostgreSQL │  │
+│  │ (Neon)     │  │   ┌──────────────────────────────────┐
+│  │ Voices     │  │   │  GPU LOCAL (PC Windows)          │
+│  │ Variations │  │   │  RTX 3060 12GB                   │
+│  │ Tracks     │  │   │  omnivoice-demo :7860            │
+│  └────────────┘  │   │  Gradio API v2 (_clone_fn)       │
+└──────────────────┘   │  PYTORCH_CUDA_ALLOC_CONF        │
+                       └──────────────────────────────────┘
 ```
 
-### Duas rotas de geracao de voz:
-1. **PHP Proxy** (`/api/php-generate`): Browser → Vercel (proxy rapido) → PHP → HF Space. PHP faz o trabalho pesado (polling ate ~4.5 min). **Rota principal em uso.**
-2. **Vercel Direto** (`/api/generate`): Vercel → HF Space direto. Limitado a 300s (requer Pro). **Fallback.**
+### Rota de geracao de voz (atual):
+1. **PHP Direto via SSE** (generate.php): Browser → PHP (via token HMAC) → Localtunnel → GPU Local → audio de volta. PHP faz download do ref audio, trim para 10s, upload para GPU, SSE streaming ate resultado. **Rota principal em uso.**
+2. **PHP Proxy** (`/api/php-generate`): Browser → Vercel (proxy) → PHP → GPU Local. **Fallback via Vercel.**
+3. **Vercel Direto** (`/api/generate`): Vercel → GPU Local direto. Limitado a 300s (requer Pro). **Fallback.**
 
 ---
 
@@ -102,15 +107,20 @@ Omnivoice/
 │   ├── schema.prisma              # 3 models: Voice, VoiceVariation, Track
 │   └── migrations/
 ├── php-server/                    # SERVIDOR PHP (hospedado em sorteiomax.com.br)
-│   ├── config.php                 # API_KEY, BASE_URL, MAX_SIZE (50MB), ALLOWED_TYPES
+│   ├── config.php                 # API_KEY, BASE_URL, HF_SPACE_URL (tunnel), MAX_SIZE (50MB), ALLOWED_TYPES
 │   ├── upload.php                 # Upload normal + suporte chunked upload
 │   ├── upload-direct.php          # Upload direto navegador→PHP (token HMAC)
 │   ├── upload-chunk.php           # Upload por chunks (remonta no server)
 │   ├── delete.php                 # Delete arquivos de audio
-│   ├── generate.php               # Geracao TTS via HF Space (bypass timeout Vercel)
+│   ├── generate.php               # v4: TTS via GPU local (SSE + trim audio 10s)
+│   ├── update_tunnel.php          # Atualiza URL do tunnel no config.php via API
+│   ├── trim_audio.py              # Python puro: corta MP3/WAV para max 10s (evita CUDA OOM)
 │   ├── info.php                   # Diagnostico PHP (remover apos uso)
 │   ├── .htaccess                  # Limites: 50MB upload, 600s execution
 │   └── README.txt                 # Instrucoes de instalacao
+├── local-server/                  # SERVIDOR LOCAL (PC Windows com GPU)
+│   ├── iniciar.bat                # Ativa conda, inicia omnivoice-demo, mata porta 7860
+│   └── start_tunnel.ps1           # PowerShell: cria tunnel + atualiza config.php remotamente
 ├── src/
 │   ├── app/
 │   │   ├── layout.tsx             # Root layout (Geist font, Sonner toaster)
@@ -338,6 +348,7 @@ A mixagem de voz + trilha e feita inteiramente no browser:
 ```
 API_KEY = 'vozpro_2024_a8f7d9e2b4c1m6n3p5q0r9s2t8u1'
 BASE_URL = 'https://sorteiomax.com.br/omnivoice'
+HF_SPACE_URL = 'https://xxxx.loca.lt'
 MAX_SIZE = 50MB
 UPLOAD_DIR = __DIR__ . '/audios/'
 ALLOWED_CATEGORIES = ['ref', 'track', 'generated']
@@ -360,7 +371,9 @@ omnivoice/
 ├── upload-direct.php   # Upload direto navegador→PHP (token HMAC)
 ├── upload-chunk.php    # Upload por chunks (remonta no server)
 ├── delete.php          # Delete arquivos
-├── generate.php        # Geracao TTS via HF Space
+├── generate.php        # Geracao TTS via GPU local (SSE + trim audio 10s)
+├── update_tunnel.php   # Atualiza HF_SPACE_URL no config.php via API
+├── trim_audio.py       # Python puro: corta MP3/WAV para max 10s (evita CUDA OOM)
 ├── .htaccess
 └── audios/
     ├── ref/            # Audios de referencia de voz
@@ -368,6 +381,45 @@ omnivoice/
     ├── generated/      # Reservado
     └── chunks/         # Temp (auto-limpo)
 ```
+
+---
+
+## 10.1 GPU LOCAL - CONFIGURACAO
+
+### Requisitos
+- Windows 10/11 com placa de video NVIDIA (minimo 12GB VRAM)
+- **Miniconda3** instalado (ambiente `omnivoice`)
+- **Node.js** 18+ (para localtunnel via npx)
+- **loca.lt** configurado (aceitar prompt no primeiro acesso)
+- **omnivoice-demo** clonado (k2-fsa/omnivoice)
+- **PyTorch** com suporte CUDA
+
+### Arquivos locais
+```
+local-server/
+├── iniciar.bat          # Script principal: ativa conda, mata porta 7860, inicia omnivoice-demo
+└── start_tunnel.ps1     # PowerShell: cria tunnel localtunnel + atualiza config.php remotamente
+```
+
+### Como funciona
+1. **iniciar.bat** roda ao ligar o PC (ou manualmente):
+   - Ativa o ambiente conda `omnivoice`
+   - Mata qualquer processo Python na porta 7860 (`taskkill /F /IM python.exe`)
+   - Inicia `omnivoice-demo` na porta 7860
+2. **start_tunnel.ps1** roda apos o servidor estar ativo:
+   - Cria um tunnel via `npx localtunnel --port 7860`
+   - Extrai a URL gerada (ex: `https://random-name.loca.lt`)
+   - Faz HTTP POST para `update_tunnel.php` no PHP server com a nova URL
+   - O PHP atualiza `HF_SPACE_URL` no `config.php`
+   - O Vercel le o novo URL via `/api/generate-config`
+3. **generate.php** usa `HF_SPACE_URL` do `config.php` para se conectar a GPU local
+4. **trim_audio.py** e chamado pelo `generate.php` antes de enviar o ref audio para a GPU
+
+### Limitacoes da GPU
+- **Max 10s de ref audio**: GPU 12GB da CUDA OOM com audios maiores. `trim_audio.py` corta automaticamente.
+- **Recomendacao 3-10s**: Audios de referencia entre 3 e 10 segundos funcionam melhor.
+- **PC precisa estar ligado**: A geracao de voz so funciona quando o PC com GPU esta ligado e o tunnel esta ativo.
+- **CUDA OOM**: Se ocorrer, reiniciar o servidor omnivoice (iniciar.bat resolve).
 
 ---
 
@@ -420,6 +472,18 @@ omnivoice/
 | Delete de voz nao removia arquivos do servidor | Adicionado deleteFromAudioServer() no cascade delete |
 | Trilhas longas quebravam o sistema | Limite de 80s + trim automatico via OfflineAudioContext |
 
+### Fase 4 - GPU Local + Tunnel
+| Problema | Solucao |
+|----------|---------|
+| Cloudflare Quick Tunnel nao suporta SSE | Trocado para Localtunnel |
+| ngrok requer conta autenticada | Trocado para Localtunnel |
+| CUDA Out of Memory | trim_audio.py corta ref audio para max 10s |
+| Tunnel URL muda a cada reinicio | start_tunnel.ps1 + update_tunnel.php atualizam automaticamente |
+| omnivoice-demo nao reconhecido no CMD | Ativacao Conda no iniciar.bat |
+| Erro porta 7860 em uso | taskkill python.exe no iniciar.bat |
+| Start-Process falha com npx | Start-Job + cmd /c no PowerShell |
+| Servidor sem ffmpeg | trim_audio.py Python puro (MP3 frame headers) |
+
 ---
 
 ## 13. DECISOES ARQUITETURAIS
@@ -433,6 +497,9 @@ omnivoice/
 | Cookie-based auth em vez de JWT | Mais simples, sem dependencia de biblioteca, httpOnly seguro |
 | Prisma generate no build (nao migrate deploy) | migrate deploy precisa de conexao com banco durante build |
 | Deferred upload (so envia ao clicar Salvar) | Melhor UX: usuario pode cancelar antes de enviar |
+| GPU local em vez de HF Space | Sem quota, sem custo, mais rapido, melhor controle |
+| Localtunnel em vez de Cloudflare/ngrok | Gratuito, sem cadastro, suporta SSE |
+| Audio trimming automatico | Evita CUDA OOM na GPU 12GB, melhora qualidade |
 
 ---
 
@@ -441,7 +508,7 @@ omnivoice/
 | Limitacao | Impacto | Possivel Solucao |
 |-----------|---------|-----------------|
 | Vercel Hobby timeout 60s | Rotas que nao usam PHP proxy | Upgrade Vercel Pro |
-| Audios de referencia no HF Space | Podem ser perdidos se Space reiniciar | Ja mitigado: armazenamento permanente no PHP |
+| PC precisa estar ligado para gerar voz | Geracao TTS indisponivel se PC desligado | Servidor dedicado ou cloud GPU (RunPod, etc) |
 | Sem sistema de usuarios | So uma conta admin | Implementar auth completa quando necessario |
 | Trilhas limitadas a 80s | Pode ser curto pra alguns casos | Aumentar MAX_DURATION ou usar chunked upload |
 | Sem processamento server-side de audio | Nao tem ffmpeg no Vercel | PHP server tem ffmpeg disponivel para uso futuro |
