@@ -20,19 +20,20 @@ import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
 
 /**
- * Comprimir SOMENTE arquivos WAV/FLAC (nao comprimidos).
- * MP3/OGG/M4A ja sao comprimidos — comprimir novamente so perde qualidade!
+ * Comprimir arquivos grandes para < 4MB usando OfflineAudioContext (INSTANTANEO).
+ * Para trilhas musicais, usa STEREO (soa muito melhor que mono).
+ * Calcula sample rate automaticamente para garantir que caiba no limite.
  *
- * Para WAV/FLAC grandes, converte para WAV 22050Hz mono (qualidade otima para trilha de fundo).
- * Calcula sample rate automaticamente para garantir < 4MB (limite seguro do Vercel 4.5MB).
- *
- * Exemplos:
- * - MP3 5MB → envia original (qualidade 100%)
- * - WAV 8MB (1min) → WAV 22050Hz mono ~2MB (qualidade otima)
- * - WAV 30MB (3min) → WAV 11025Hz mono ~2.5MB
+ * Qualidade por duracao (stereo):
+ * - Ate 1.5 min → 44100Hz (CD quality) — perfeito
+ * - Ate 3 min → 22050Hz — muito bom
+ * - Ate 4 min → 16000Hz — bom
+ * - Ate 6 min → 11025Hz — aceitavel para trilha de fundo
+ * - Mais que 6 min → 8000Hz — funcional
  */
-const MAX_COMPRESSED_SIZE = 4 * 1024 * 1024 // 4MB (seguro para o limite 4.5MB do Vercel)
-const SAMPLE_RATES = [22050, 16000, 11025, 8000] // do melhor para o menor
+const MAX_UPLOAD_SIZE = 4 * 1024 * 1024 // 4MB
+const SAMPLE_RATES = [44100, 22050, 16000, 11025, 8000]
+const NUM_CHANNELS = 2 // stereo — soa muito melhor pra musica
 
 async function compressAudioFile(file: File): Promise<{ blob: Blob; name: string }> {
   const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
@@ -41,45 +42,39 @@ async function compressAudioFile(file: File): Promise<{ blob: Blob; name: string
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
 
   // Arquivos ja pequenos nao precisam de compressao
-  if (file.size < MAX_COMPRESSED_SIZE) {
+  if (file.size < MAX_UPLOAD_SIZE) {
     await audioCtx.close()
     return { blob: file, name: file.name }
   }
 
-  // Calcular sample rate ideal: tamanho WAV = duration * sampleRate * 2 (16-bit mono) + 44 header
-  // Precisamos: duration * sampleRate * 2 + 44 < MAX_COMPRESSED_SIZE
-  // Entao: sampleRate < (MAX_COMPRESSED_SIZE - 44) / (duration * 2)
-  const maxSampleRate = Math.floor((MAX_COMPRESSED_SIZE - 44) / (audioBuffer.duration * 2))
+  // Calcular sample rate: tamanho WAV = duration * sampleRate * channels * 2 + 44
+  const maxSampleRate = Math.floor((MAX_UPLOAD_SIZE - 44) / (audioBuffer.duration * NUM_CHANNELS * 2))
 
-  // Escolher o melhor sample rate que caiba no limite
+  // Escolher o melhor sample rate que caiba
   let targetSampleRate = SAMPLE_RATES.find(sr => sr <= maxSampleRate) || SAMPLE_RATES[SAMPLE_RATES.length - 1]
 
-  // Se nenhum sample rate padrao serve (audio mt longo), usar o menor possivel
-  if (targetSampleRate > maxSampleRate && SAMPLE_RATES[SAMPLE_RATES.length - 1] > maxSampleRate) {
+  // Se nenhum serve (audio muito longo), usar o menor
+  if (targetSampleRate > maxSampleRate) {
     targetSampleRate = Math.max(8000, maxSampleRate)
   }
 
-  const numChannels = 1 // mono
   const length = Math.ceil(audioBuffer.duration * targetSampleRate)
 
-  const offlineCtx = new OfflineAudioContext(numChannels, length, targetSampleRate)
+  const offlineCtx = new OfflineAudioContext(NUM_CHANNELS, length, targetSampleRate)
   const source = offlineCtx.createBufferSource()
   source.buffer = audioBuffer
   source.connect(offlineCtx.destination)
   source.start(0)
 
-  // Renderiza INSTANTANEAMENTE (nao tempo real!)
+  // INSTANTANEOO (nao tempo real!)
   const resampledBuffer = await offlineCtx.startRendering()
-
-  // Converte para WAV
   const wavBlob = encodeAudioBufferToWav(resampledBuffer)
 
+  await audioCtx.close()
   const baseName = file.name.replace(/\.[^.]+$/, '')
   const finalMB = (wavBlob.size / (1024 * 1024)).toFixed(1)
   const originalMB = (file.size / (1024 * 1024)).toFixed(1)
-  console.log(`[Admin] Compressao: ${originalMB}MB → ${finalMB}MB (${targetSampleRate}Hz mono)`)
-
-  await audioCtx.close()
+  console.log(`[Admin] Compressao: ${originalMB}MB → ${finalMB}MB (${targetSampleRate}Hz stereo, ${Math.round(audioBuffer.duration)}s)`)
   return { blob: wavBlob, name: baseName + '.wav' }
 }
 
@@ -137,52 +132,6 @@ function writeWavString(view: DataView, offset: number, str: string) {
   for (let i = 0; i < str.length; i++) {
     view.setUint8(offset + i, str.charCodeAt(i))
   }
-}
-
-/**
- * Upload direto ao PHP (bypassa limite 4.5MB do Vercel).
- * Para arquivos grandes, envia direto navegador→PHP sem perda de qualidade.
- */
-async function uploadDirectToPHP(
-  blob: Blob,
-  filename: string,
-  tipo: string = 'track'
-): Promise<{ url: string; arquivo: string }> {
-  // Step 1: obter token do Vercel
-  const tokenRes = await fetch('/api/upload-token')
-  const tokenData = await tokenRes.json()
-  if (!tokenData.uploadUrl || !tokenData.token) {
-    throw new Error('Erro ao obter token de upload')
-  }
-
-  const uploadUrl = tokenData.uploadUrl
-  console.log(`[UploadDirect] URL: ${uploadUrl}, Token: ${tokenData.token.substring(0, 20)}...`)
-
-  // Step 2: upload direto ao PHP
-  const formData = new FormData()
-  formData.append('arquivo', blob, filename)
-  formData.append('tipo', tipo)
-
-  const uploadRes = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: { 'X-Upload-Token': tokenData.token },
-    body: formData,
-  })
-
-  // Verificar se a resposta é JSON
-  const contentType = uploadRes.headers.get('content-type') || ''
-  if (!contentType.includes('application/json')) {
-    const text = await uploadRes.text().catch(() => '(vazio)')
-    throw new Error(`Servidor respondeu com erro ${uploadRes.status}: ${text.substring(0, 200)}`)
-  }
-
-  const uploadData = await uploadRes.json()
-  if (!uploadData.sucesso) {
-    throw new Error(uploadData.erro || 'Erro no upload para o servidor')
-  }
-
-  console.log(`[UploadDirect] OK: ${uploadData.arquivo}`)
-  return { url: uploadData.url, arquivo: uploadData.arquivo }
 }
 
 interface VoiceVariation {
@@ -574,10 +523,19 @@ export default function AdminDashboard() {
         return
       }
 
-      // Sempre envia original — qualidade 100%, sem compressao
-      setPendingTrackFile({ blob: file, name: file.name })
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
-      toast.success(`Arquivo pronto (${sizeMB}MB)`)
+      if (file.size >= MAX_UPLOAD_SIZE) {
+        // Arquivo grande: comprime instantaneamente
+        const durationHint = file.size > 8 * 1024 * 1024 ? ' (trilha longa, qualidade reduzida)' : ''
+        toast.info(`Comprimindo arquivo${durationHint}...`)
+        const compressed = await compressAudioFile(file)
+        setPendingTrackFile({ blob: compressed.blob, name: compressed.name })
+        const sizeMB = (compressed.blob.size / (1024 * 1024)).toFixed(1)
+        const origMB = (file.size / (1024 * 1024)).toFixed(1)
+        toast.success(`Pronto: ${origMB}MB → ${sizeMB}MB`)
+      } else {
+        setPendingTrackFile({ blob: file, name: file.name })
+        toast.success(`Arquivo pronto (${(file.size / (1024 * 1024)).toFixed(1)}MB)`)
+      }
     } catch (err) {
       console.error('Error preparing file:', err)
       toast.error('Erro ao processar o arquivo')
@@ -597,20 +555,18 @@ export default function AdminDashboard() {
 
       if (pendingTrackFile) {
         setUploadingTrack(true)
-        const fileSizeMB = pendingTrackFile.blob.size / (1024 * 1024)
+        toast.info('Enviando arquivo...')
 
-        if (fileSizeMB < 4) {
-          // Arquivo pequeno: proxy Vercel (confiavel, sem CORS)
-          toast.info('Enviando arquivo...')
+        const formData = new FormData()
+        formData.append('file', pendingTrackFile.blob, pendingTrackFile.name)
 
-          const formData = new FormData()
-          formData.append('file', pendingTrackFile.blob, pendingTrackFile.name)
+        const uploadRes = await fetch('/api/upload-track', {
+          method: 'POST',
+          body: formData,
+        })
 
-          const uploadRes = await fetch('/api/upload-track', {
-            method: 'POST',
-            body: formData,
-          })
-
+        const contentType = uploadRes.headers.get('content-type') || ''
+        if (contentType.includes('application/json')) {
           const uploadData = await uploadRes.json()
           if (uploadRes.ok && (uploadData.path || uploadData.url)) {
             audioUrl = uploadData.path || uploadData.url
@@ -621,46 +577,9 @@ export default function AdminDashboard() {
             return
           }
         } else {
-          // Arquivo grande: upload direto ao PHP (sem limite de tamanho, qualidade 100%)
-          toast.info('Enviando arquivo grande direto ao servidor...')
-          try {
-            const result = await uploadDirectToPHP(pendingTrackFile.blob, pendingTrackFile.name, 'track')
-            audioUrl = result.url
-            audioFilename = result.arquivo
-          } catch (directErr) {
-            console.error('[Track] Upload direto falhou:', directErr)
-            // Fallback: tenta proxy Vercel (pode falhar se arquivo > 4.5MB)
-            toast.info('Tentando método alternativo...')
-            try {
-              const formData = new FormData()
-              formData.append('file', pendingTrackFile.blob, pendingTrackFile.name)
-              const uploadRes = await fetch('/api/upload-track', { method: 'POST', body: formData })
-              const contentType = uploadRes.headers.get('content-type') || ''
-
-              if (contentType.includes('application/json')) {
-                const uploadData = await uploadRes.json()
-                if (uploadRes.ok && (uploadData.path || uploadData.url)) {
-                  audioUrl = uploadData.path || uploadData.url
-                  audioFilename = uploadData.filename || ''
-                } else {
-                  setUploadingTrack(false)
-                  toast.error(uploadData.error || 'Erro no upload. Arquivo muito grande para o servidor.')
-                  return
-                }
-              } else {
-                // Vercel retornou HTML (provavelmente 413 Request Entity Too Large)
-                console.error('[Track] Vercel rejeitou arquivo grande (provavelmente 413)', uploadRes.status)
-                setUploadingTrack(false)
-                toast.error(`Arquivo muito grande (${fileSizeMB.toFixed(1)}MB). O servidor não aceita arquivos acima de ~4MB por este método.`)
-                return
-              }
-            } catch (fallbackErr) {
-              console.error('[Track] Fallback tambem falhou:', fallbackErr)
-              setUploadingTrack(false)
-              toast.error('Erro ao enviar arquivo. Tente um arquivo menor.')
-              return
-            }
-          }
+          setUploadingTrack(false)
+          toast.error(`Erro no servidor (${uploadRes.status}). Tente novamente.`)
+          return
         }
 
         setTrackFilePath(audioUrl)
