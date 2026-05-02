@@ -1,8 +1,8 @@
 <?php
 // generate.php - Geracao de voz TTS via OmniVoice (HuggingFace Space)
-// Este arquivo BYPASSA o Vercel para evitar o timeout de 60s do plano Hobby
-// Recebe os parametros via POST JSON e retorna audio base64
-// v2: Retry robusto + heartbeat fix + 404 handling
+// Bypassa o Vercel para evitar o timeout de 60s do plano Hobby
+// v3: SSE Streaming persistente (conexao aberta ate resultado)
+//      Igual ao site oficial do Gradio, via HTTP
 
 set_time_limit(0);
 ini_set('max_input_time', 0);
@@ -70,8 +70,8 @@ if (!$input) {
 
 $texto = $input['text'] ?? '';
 $idioma = $input['language'] ?? 'Auto';
-$refAudioUrl = $input['refAudioUrl'] ?? '';   // URL do PHP server (local)
-$refAudioPath = $input['refAudioPath'] ?? '';  // Path no HF Space (fallback)
+$refAudioUrl = $input['refAudioUrl'] ?? '';
+$refAudioPath = $input['refAudioPath'] ?? '';
 $refText = $input['refText'] ?? '';
 $instruct = $input['instruct'] ?? '';
 $refAudioName = $input['refAudioName'] ?? 'ref_audio.wav';
@@ -81,7 +81,6 @@ $guidanceScale = $input['guidanceScale'] ?? 2.0;
 
 debugLog('Input recebido', 'info', "texto: " . mb_substr($texto, 0, 50) . " | idioma: $idioma | steps: $numStep");
 
-// Validacoes
 if (empty(trim($texto))) {
     returnError('Texto e obrigatorio', 400);
 }
@@ -92,13 +91,12 @@ if (empty($refAudioUrl) && empty($refAudioPath)) {
 $hfUrl = defined('HF_SPACE_URL') ? HF_SPACE_URL : 'https://k2-fsa-omnivoice.hf.space';
 debugLog('HF Space', 'info', $hfUrl);
 
-// ===================== FUNCOES HELPER =====================
+// ===================== FUNCOES =====================
 
 /**
- * Faz download do audio de referencia do PHP server
+ * Baixa audio de referencia do servidor PHP
  */
 function downloadRefAudio($url, $name) {
-    global $debugSteps, $debugStart;
     debugLog('Download ref audio', 'info', 'de: ' . mb_substr($url, 0, 80));
     $tempFile = tempnam(sys_get_temp_dir(), 'vp_ref_') . '.' . pathinfo($name, PATHINFO_EXTENSION);
 
@@ -118,18 +116,17 @@ function downloadRefAudio($url, $name) {
     if ($dlOk && $dlHttpCode == 200 && filesize($tempFile) > 0) {
         debugLog('Download ref audio', 'ok', round(filesize($tempFile) / 1024) . 'KB');
         return $tempFile;
-    } else {
-        debugLog('Download ref audio', 'error', "HTTP $dlHttpCode");
-        if (file_exists($tempFile)) unlink($tempFile);
-        return null;
     }
+    debugLog('Download ref audio', 'error', "HTTP $dlHttpCode");
+    if (file_exists($tempFile)) unlink($tempFile);
+    return null;
 }
 
 /**
- * Faz upload de arquivo local para o HF Space
+ * Upload de arquivo local para HF Space
  */
 function uploadToHF($filePath, $fileName, $hfUrl) {
-    debugLog('Upload para HF', 'info', 'enviando arquivo...');
+    debugLog('Upload para HF', 'info', 'enviando...');
 
     $ch = curl_init($hfUrl . '/gradio_api/upload');
     $cfile = new CURLFile($filePath, mime_content_type($filePath), $fileName);
@@ -140,102 +137,93 @@ function uploadToHF($filePath, $fileName, $hfUrl) {
         CURLOPT_TIMEOUT => 120,
         CURLOPT_SSL_VERIFYPEER => false,
     ]);
-    $uploadResp = curl_exec($ch);
-    $uploadCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($uploadCode == 200 && $uploadResp) {
-        $uploadData = json_decode($uploadResp, true);
-        if (is_array($uploadData) && count($uploadData) > 0) {
-            debugLog('Upload para HF', 'ok', $uploadData[0]);
-            return $uploadData[0];
-        } else {
-            debugLog('Upload para HF', 'error', 'resposta inesperada: ' . mb_substr($uploadResp, 0, 200));
+    if ($code == 200 && $resp) {
+        $data = json_decode($resp, true);
+        if (is_array($data) && count($data) > 0) {
+            debugLog('Upload para HF', 'ok', $data[0]);
+            return $data[0];
         }
-    } else {
-        debugLog('Upload para HF', 'error', "HTTP $uploadCode: " . mb_substr($uploadResp ?: 'sem resposta', 0, 200));
     }
+    debugLog('Upload para HF', 'error', "HTTP $code");
     return null;
 }
 
 /**
- * Submete job ao Gradio e retorna event_id ou null
+ * Submete job ao Gradio, retorna event_id ou null
  */
 function submitToGradio($gradioData, $hfUrl) {
     debugLog('Submit Gradio', 'info', 'enviando job...');
 
-    $submitBody = json_encode(['data' => $gradioData]);
-
     $ch = curl_init($hfUrl . '/gradio_api/call/_clone_fn');
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => $submitBody,
+        CURLOPT_POSTFIELDS => json_encode(['data' => $gradioData]),
         CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 60,
         CURLOPT_SSL_VERIFYPEER => false,
     ]);
-    $submitResp = curl_exec($ch);
-    $submitCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($submitCode != 200 || !$submitResp) {
-        debugLog('Submit Gradio', 'error', "HTTP $submitCode");
+    if ($code != 200 || !$resp) {
+        debugLog('Submit Gradio', 'error', "HTTP $code");
         return null;
     }
 
-    $submitData = json_decode($submitResp, true);
-    $eventId = $submitData['event_id'] ?? null;
+    $data = json_decode($resp, true);
+    $eventId = $data['event_id'] ?? null;
 
     if ($eventId) {
         debugLog('Submit Gradio', 'ok', "event_id: $eventId");
     } else {
-        debugLog('Submit Gradio', 'error', 'sem event_id: ' . mb_substr($submitResp, 0, 200));
+        debugLog('Submit Gradio', 'error', 'sem event_id');
     }
 
     return $eventId;
 }
 
 /**
- * Poll por resultado do Gradio. Retorna:
- *   'complete' => audioUrl (string)
- *   'error_null' => null (retry recommended)
- *   'error_404' => null (retry recommended)
- *   'error_real' => errorMsg (string, don't retry)
- *   'timeout' => null
+ * SSE Streaming - CONEXAO PERSISTENTE que fica aberta ate o resultado chegar.
+ * Igual ao site oficial do Gradio funciona.
+ * 
+ * Ao inves de fazer 180 requests HTTP separados (polling),
+ * faz UMA conexao e le os eventos conforme chegam (heartbeats, complete, error).
  */
-function pollGradioResult($eventId, $hfUrl, $maxPolls = 90, $pollIntervalUs = 1500000) {
-    for ($i = 0; $i < $maxPolls; $i++) {
-        usleep($pollIntervalUs);
+function streamSSEForResult($eventId, $hfUrl, $timeoutSec = 180) {
+    debugLog('SSE Stream', 'info', "Abrindo conexao persistente para $eventId...");
 
-        $ch = curl_init($hfUrl . '/gradio_api/call/_clone_fn/' . $eventId);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 30,
-            CURLOPT_HTTPHEADER => ['Accept: text/event-stream'],
-            CURLOPT_SSL_VERIFYPEER => false,
-        ]);
-        $pollResp = curl_exec($ch);
-        $pollCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+    $audioUrl = null;
+    $error = null;
+    $buffer = '';
+    $heartbeatCount = 0;
+    $startTime = time();
 
-        // 404 = event_id perdido (worker crashou/reiniciou)
-        if ($pollCode == 404) {
-            debugLog('Poll', 'error', "404 - event_id $eventId perdido (worker crashou?)");
-            return ['status' => 'error_404'];
+    $ch = curl_init($hfUrl . '/gradio_api/call/_clone_fn/' . $eventId);
+    
+    // Callback que processa os chunks em tempo real
+    $writeFn = function($ch, $chunk) use (&$buffer, &$audioUrl, &$error, &$heartbeatCount, &$startTime, $timeoutSec) {
+        $buffer .= $chunk;
+
+        // Timeout check
+        if (time() - $startTime > $timeoutSec) {
+            return -1; // aborta o curl
         }
 
-        if ($pollCode != 200 || !$pollResp) {
-            if ($i % 15 == 0) {
-                debugLog('Poll', 'warn', "HTTP $pollCode na tentativa " . ($i + 1));
-            }
-            continue;
-        }
-
-        // Parsear blocos SSE
-        $blocks = explode("\n\n", trim($pollResp));
+        // Processar blocos SSE completos
+        $blocks = explode("\n\n", $buffer);
+        // Manter ultimo bloco possivelmente incompleto
+        $buffer = array_pop($blocks) !== null ? array_pop($blocks) : '';
 
         foreach ($blocks as $block) {
+            $block = trim($block);
+            if (empty($block)) continue;
+
             $lines = explode("\n", $block);
             $eventType = '';
             $eventData = '';
@@ -249,196 +237,226 @@ function pollGradioResult($eventId, $hfUrl, $maxPolls = 90, $pollIntervalUs = 15
                 }
             }
 
-            // Evento COMPLETE = audio gerado
+            // COMPLETE = audio gerado!
             if ($eventType === 'complete' && !empty($eventData)) {
-                debugLog('Poll', 'ok', "complete na tentativa " . ($i + 1));
-
+                debugLog('SSE Stream', 'ok', 'Evento COMPLETE recebido!');
                 $resultData = json_decode($eventData, true);
-                $audioUrl = null;
-
                 if (is_array($resultData) && count($resultData) >= 2) {
-                    $audioOutput = $resultData[0];
-                    if (isset($audioOutput['url'])) {
-                        $audioUrl = $audioOutput['url'];
-                    } elseif (isset($audioOutput['path'])) {
-                        $audioUrl = $hfUrl . '/gradio_api/file=' . $audioOutput['path'];
+                    $output = $resultData[0];
+                    if (isset($output['url'])) {
+                        $audioUrl = $output['url'];
+                    } elseif (isset($output['path'])) {
+                        $audioUrl = $hfUrl . '/gradio_api/file=' . $output['path'];
                     }
                 }
-
                 if ($audioUrl) {
-                    debugLog('Audio gerado', 'ok', mb_substr($audioUrl, 0, 100));
-                    return ['status' => 'complete', 'audioUrl' => $audioUrl];
+                    debugLog('SSE Stream', 'ok', 'Audio URL: ' . mb_substr($audioUrl, 0, 80));
                 } else {
-                    return ['status' => 'error_real', 'message' => 'Audio gerado mas sem URL no output'];
+                    $error = 'Sem URL no output';
                 }
+                return -1; // encerra a conexao
             }
 
-            // Evento ERROR
+            // ERROR
             if ($eventType === 'error') {
-                debugLog('Gradio ERROR', 'error', mb_substr($eventData ?: 'vazio', 0, 500));
+                debugLog('SSE Stream', 'error', 'Evento ERROR: ' . mb_substr($eventData ?: 'vazio', 0, 300));
 
-                $isNullError = empty($eventData) || $eventData === 'null';
-                $is404Error = strpos($eventData, '404') !== false;
-
-                if ($isNullError) {
-                    debugLog('Gradio retry', 'warn', 'Null error - job perdido/crashed');
-                    return ['status' => 'error_null'];
+                if (empty($eventData) || $eventData === 'null') {
+                    $error = 'null';
+                } elseif (strpos($eventData, '404') !== false) {
+                    $error = '404';
+                } else {
+                    $errParsed = json_decode($eventData, true);
+                    $error = $errParsed['error'] ?? $errParsed['message'] ?? 'Erro na geracao';
                 }
-
-                if ($is404Error) {
-                    debugLog('Gradio retry', 'warn', '404 error - event_id perdido');
-                    return ['status' => 'error_404'];
-                }
-
-                // Erro real (texto, OOM, etc) - nao retry
-                $errorMsg = 'Erro na geracao pelo servidor de IA';
-                $errParsed = json_decode($eventData, true);
-                if ($errParsed) {
-                    $errorMsg = $errParsed['error'] ?? $errParsed['message'] ?? $errorMsg;
-                } elseif (strlen($eventData) > 5 && strlen($eventData) < 500) {
-                    $errorMsg = $eventData;
-                }
-                return ['status' => 'error_real', 'message' => $errorMsg];
+                return -1; // encerra a conexao
             }
 
-            // Heartbeat = Gradio ainda processando, NAO parar!
+            // HEARTBEAT = conexao viva, continuar
             if ($eventType === 'heartbeat') {
-                if ($i % 15 == 0) {
-                    debugLog('Poll', 'info', "Heartbeat (ainda processando, tentativa " . ($i + 1) . ")");
+                $heartbeatCount++;
+                if ($heartbeatCount <= 3 || $heartbeatCount % 10 === 0) {
+                    debugLog('SSE Stream', 'info', "Heartbeat #$heartbeatCount (conexao ativa...)");
                 }
-                // Continua o loop normalmente
             }
         }
+
+        return strlen($chunk); // continuar lendo
+    };
+
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => false, // NAO esperar tudo - stream!
+        CURLOPT_TIMEOUT => $timeoutSec,
+        CURLOPT_HTTPHEADER => ['Accept: text/event-stream'],
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_WRITEFUNCTION => $writeFn,
+    ]);
+
+    curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    // Verificar resultado
+    if ($audioUrl) {
+        debugLog('SSE Stream', 'ok', "Resultado obtido apos $heartbeatCount heartbeats");
+        return ['status' => 'complete', 'audioUrl' => $audioUrl];
     }
 
-    return ['status' => 'timeout'];
+    if ($error) {
+        return ['status' => 'error', 'error' => $error];
+    }
+
+    if ($httpCode == 404) {
+        debugLog('SSE Stream', 'error', '404 - event_id perdido');
+        return ['status' => 'error', 'error' => '404'];
+    }
+
+    if (!empty($curlError)) {
+        debugLog('SSE Stream', 'warn', "Erro curl: $curlError");
+        return ['status' => 'error', 'error' => 'connection_lost'];
+    }
+
+    if (time() - $startTime >= $timeoutSec) {
+        debugLog('SSE Stream', 'warn', "Timeout apos {$timeoutSec}s");
+        return ['status' => 'error', 'error' => 'timeout'];
+    }
+
+    debugLog('SSE Stream', 'warn', "Stream encerrou sem resultado ($heartbeatCount heartbeats)");
+    return ['status' => 'error', 'error' => 'stream_ended'];
+}
+
+/**
+ * Executa o fluxo completo: upload + submit + SSE stream
+ */
+function runGeneration($gradioData, $refAudioFile, $refAudioName, $hfUrl) {
+    // Upload para HF
+    if ($refAudioFile && file_exists($refAudioFile)) {
+        $path = uploadToHF($refAudioFile, $refAudioName, $hfUrl);
+        if (!$path) {
+            return ['audioUrl' => null, 'error' => 'Falha no upload do audio para HF Space'];
+        }
+        $gradioData[2]['path'] = $path;
+    }
+
+    // Submit com retry
+    $eventId = null;
+    for ($s = 0; $s < 3 && !$eventId; $s++) {
+        if ($s > 0) {
+            debugLog('Submit retry', 'warn', "Tentativa " . ($s + 1) . "/2");
+            sleep(3);
+        }
+        $eventId = submitToGradio($gradioData, $hfUrl);
+    }
+
+    if (!$eventId) {
+        return ['audioUrl' => null, 'error' => 'Falha ao enviar job para o Gradio'];
+    }
+
+    // SSE Stream persistente
+    debugLog('Geracao', 'info', "Aguardando resultado via SSE...");
+    $result = streamSSEForResult($eventId, $hfUrl, 180);
+
+    if ($result['status'] === 'complete') {
+        return ['audioUrl' => $result['audioUrl'], 'error' => null];
+    }
+
+    return ['audioUrl' => null, 'error' => $result['error'] ?? 'unknown'];
 }
 
 // ===================== FLUXO PRINCIPAL COM RETRY =====================
 
 $audioUrl = null;
 $tempRefFile = null;
-$refAudioFile = null;
-$hfFilePath = null;
-$maxRetries = 3;
 
-// Download ref audio (faz uma vez, reusa)
+// Download ref audio (uma vez, reusa)
 if (!empty($refAudioUrl)) {
     $tempRefFile = downloadRefAudio($refAudioUrl, $refAudioName);
-    if ($tempRefFile) {
-        $refAudioFile = $tempRefFile;
-    }
 }
 
-// Fallback para path existente no HF
-if (!$refAudioFile && !empty($refAudioPath)) {
-    $hfFilePath = $refAudioPath;
-    debugLog('Fallback HF path', 'info', $hfFilePath);
+if (!$tempRefFile && !empty($refAudioPath)) {
+    debugLog('Fallback HF path', 'info', $refAudioPath);
+    $audioUrl = null; // vai usar uploadToHF com path existente
 }
 
-if (!$refAudioFile && !$hfFilePath) {
-    returnError('Nao foi possivel obter o audio de referencia');
-}
+// Montar dados do Gradio
+$gradioData = [
+    $texto,
+    $idioma,
+    [
+        'path' => $refAudioPath ?? '',
+        'orig_name' => $refAudioName,
+        'mime_type' => (pathinfo($refAudioName, PATHINFO_EXTENSION) === 'mp3') ? 'audio/mpeg' : 'audio/wav',
+        'is_stream' => false,
+        'meta' => ['_type' => 'gradio.FileData']
+    ],
+    $refText,
+    $instruct,
+    (int)$numStep,
+    (float)$guidanceScale,
+    true,    // denoise
+    (float)$speed,
+    null,    // duration
+    true,    // preprocess_prompt
+    true     // postprocess_output
+];
 
-// Tentar gerar com retry
+// Tentar gerar com retry (ate 3 tentativas completas)
+$maxRetries = 3;
+$lastError = '';
+
 for ($attempt = 0; $attempt < $maxRetries && !$audioUrl; $attempt++) {
     if ($attempt > 0) {
-        debugLog('Retry', 'info', "Tentativa " . ($attempt + 1) . "/$maxRetries - aguardando " . ($attempt * 5) . "s...");
-        sleep($attempt * 5);
+        $waitSec = 5 * $attempt;
+        debugLog('Retry', 'info', "Tentativa " . ($attempt + 1) . "/$maxRetries - aguardando ${waitSec}s...");
+        sleep($waitSec);
+    } else {
+        debugLog('Geracao', 'info', 'Iniciando geracao (SSE Streaming)...');
     }
 
-    // Upload para HF (ou re-upload se retry)
-    $currentHfPath = null;
-    if ($refAudioFile && file_exists($refAudioFile)) {
-        $uploadName = $attempt > 0 ? 'retry_' . time() . '_' . $refAudioName : $refAudioName;
-        $currentHfPath = uploadToHF($refAudioFile, $uploadName, $hfUrl);
-    }
+    $result = runGeneration($gradioData, $tempRefFile, $refAudioName, $hfUrl);
 
-    if (!$currentHfPath) {
-        $currentHfPath = $hfFilePath; // usar path antigo como fallback
-    }
-
-    if (!$currentHfPath) {
-        debugLog('Upload HF', 'error', 'Falhou em todas as tentativas de upload');
+    if ($result['audioUrl']) {
+        $audioUrl = $result['audioUrl'];
+        if ($attempt > 0) {
+            debugLog('Retry', 'ok', "Sucesso na tentativa " . ($attempt + 1) . "!");
+        }
         break;
     }
 
-    // Montar dados do Gradio
-    $gradioData = [
-        $texto,
-        $idioma,
-        [
-            'path' => $currentHfPath,
-            'orig_name' => $refAudioName,
-            'mime_type' => (pathinfo($refAudioName, PATHINFO_EXTENSION) === 'mp3') ? 'audio/mpeg' : 'audio/wav',
-            'is_stream' => false,
-            'meta' => ['_type' => 'gradio.FileData']
-        ],
-        $refText,
-        $instruct,
-        (int)$numStep,
-        (float)$guidanceScale,
-        true,    // denoise
-        (float)$speed,
-        null,    // duration
-        true,    // preprocess_prompt
-        true     // postprocess_output
-    ];
+    $lastError = $result['error'];
 
-    // Submit com retry (ate 2x no submit)
-    $eventId = null;
-    for ($submitRetry = 0; $submitRetry < 2 && !$eventId; $submitRetry++) {
-        if ($submitRetry > 0) {
-            debugLog('Submit retry', 'warn', "Retry submit " . $submitRetry . "/1 - aguardando 5s...");
-            sleep(5);
-            // Re-upload com nome fresco
-            if ($refAudioFile && file_exists($refAudioFile)) {
-                $freshName = 'retry_' . time() . '_' . $refAudioName;
-                $freshPath = uploadToHF($refAudioFile, $freshName, $hfUrl);
-                if ($freshPath) {
-                    $gradioData[2]['path'] = $freshPath;
-                    $gradioData[2]['orig_name'] = $freshName;
-                }
-            }
-        }
-        $eventId = submitToGradio($gradioData, $hfUrl);
-    }
-
-    if (!$eventId) {
-        debugLog('Retry', 'warn', "Submit falhou na tentativa " . ($attempt + 1));
-        continue; // proxima tentativa do loop principal
-    }
-
-    // Poll resultado
-    debugLog('Polling', 'info', "aguardando resultado de $eventId...");
-    $pollResult = pollGradioResult($eventId, $hfUrl);
-
-    switch ($pollResult['status']) {
-        case 'complete':
-            $audioUrl = $pollResult['audioUrl'];
-            debugLog('FINAL', 'ok', $attempt > 0 ? "Sucesso na tentativa " . ($attempt + 1) : "Sucesso na primeira tentativa");
+    // So retry erros retriable (null, 404, timeout, conexao perdida, HTTP 5xx)
+    $retryableErrors = ['null', '404', 'timeout', 'connection_lost', 'stream_ended', 'HTTP 5'];
+    $shouldRetry = false;
+    foreach ($retryableErrors as $re) {
+        if (stripos($lastError, $re) !== false) {
+            $shouldRetry = true;
             break;
-
-        case 'error_null':
-        case 'error_404':
-            debugLog('Retry', 'warn', ($pollResult['status'] === 'error_null' ? 'Null error' : '404') . " - job perdido, vai reiniciar...");
-            break; // continua o loop principal (retry)
-
-        case 'error_real':
-            if ($tempRefFile && file_exists($tempRefFile)) unlink($tempRefFile);
-            returnError($pollResult['message'], 500);
-
-        case 'timeout':
-            debugLog('Retry', 'warn', "Timeout no polling da tentativa " . ($attempt + 1));
-            break; // continua o loop principal (retry)
+        }
     }
+
+    if (!$shouldRetry) {
+        debugLog('Retry', 'error', "Erro nao-retriable: $lastError");
+        break;
+    }
+
+    debugLog('Retry', 'warn', "Erro retriable: $lastError");
 }
 
 // Limpar temp
 if ($tempRefFile && file_exists($tempRefFile)) unlink($tempRefFile);
 
 if (!$audioUrl) {
-    returnError('Falha apos ' . $maxRetries . ' tentativas. O servidor de IA pode estar instavel.', 504);
+    $userMsg = 'Erro na geracao pelo servidor de IA.';
+    if ($lastError === 'null') {
+        $userMsg = 'Servidor de IA instavel. Tente novamente em instantes.';
+    } elseif ($lastError === '404') {
+        $userMsg = 'Servidor de IA reiniciou. Tente novamente.';
+    } elseif ($lastError === 'timeout') {
+        $userMsg = 'Tempo limite excedido na geracao.';
+    }
+    returnError($userMsg, 504);
 }
 
 // ===================== BAIXAR AUDIO GERADO =====================
@@ -459,7 +477,7 @@ curl_close($ch);
 fclose($fp);
 
 if (!$dlOk || $dlCode != 200 || filesize($tempAudioFile) == 0) {
-    if ($tempAudioFile && file_exists($tempAudioFile)) unlink($tempAudioFile);
+    if (file_exists($tempAudioFile)) unlink($tempAudioFile);
     returnError("Falha ao baixar audio gerado (HTTP $dlCode)");
 }
 
@@ -470,18 +488,17 @@ debugLog('Download audio gerado', 'ok', round($audioSize / 1024) . 'KB');
 debugLog('Base64 encode', 'info', 'convertendo...');
 $audioBase64 = base64_encode(file_get_contents($tempAudioFile));
 
-// Detectar mime type
 $ext = strtolower(pathinfo($audioUrl, PATHINFO_EXTENSION));
 $mimeType = ($ext === 'mp3') ? 'audio/mpeg' : 'audio/wav';
 
 $dataUri = 'data:' . $mimeType . ';base64,' . $audioBase64;
 debugLog('Base64 encode', 'ok', round(strlen($audioBase64) / 1024) . 'KB base64');
 
-// ===================== LIMPAR ARQUIVOS TEMP =====================
+// Limpar
 if ($tempAudioFile && file_exists($tempAudioFile)) unlink($tempAudioFile);
 
 // ===================== RETORNAR =====================
-debugLog('FINAL', 'ok', 'audio pronto via PHP (sem Vercel)');
+debugLog('FINAL', 'ok', 'audio pronto via PHP (SSE Streaming)');
 
 echo json_encode([
     'audioUrl' => $dataUri,
