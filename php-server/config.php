@@ -24,7 +24,7 @@ define('UPLOAD_DIR', __DIR__ . '/audios/');
 define('ALLOWED_CATEGORIES', ['ref', 'track', 'generated']);
 
 // URL do HuggingFace Space OmniVoice (usado pelo generate.php)
-define('HF_SPACE_URL', 'https://k2-fsa-omnivoice.hf.space');
+define('HF_SPACE_URL', 'https://hereby-shopper-aid-producer.trycloudflare.com');
 
 // Habilitar logs
 define('ENABLE_LOGS', true);

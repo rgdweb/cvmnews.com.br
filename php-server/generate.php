@@ -51,8 +51,8 @@ if (count($parts) !== 2) {
 $timestamp = (int)$parts[0];
 $receivedHmac = $parts[1];
 
-// Token expira em 15 minutos (geracao pode demorar)
-if (time() - $timestamp > 900) {
+// Token expira em 30 minutos (geracao na GPU local pode demorar)
+if (time() - $timestamp > 1800) {
     http_response_code(401);
     echo json_encode(['erro' => 'Token expirado, tente novamente']);
     exit;
@@ -200,7 +200,8 @@ function submitToGradio($gradioData, $hfUrl) {
         CURLOPT_POSTFIELDS => json_encode(['data' => $gradioData]),
         CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 60,
+        CURLOPT_TIMEOUT => 120,
+        CURLOPT_CONNECTTIMEOUT => 30,
         CURLOPT_SSL_VERIFYPEER => false,
     ]);
     $resp = curl_exec($ch);
@@ -308,6 +309,7 @@ function streamSSEForResult($eventId, $hfUrl, $timeoutSec = 180) {
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => false,
         CURLOPT_TIMEOUT => $timeoutSec,
+        CURLOPT_CONNECTTIMEOUT => 30,
         CURLOPT_HTTPHEADER => ['Accept: text/event-stream'],
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_WRITEFUNCTION => $writeFn,
@@ -369,7 +371,7 @@ function runGeneration($gradioData, $refAudioFile, $refAudioName, $hfUrl) {
     }
 
     debugLog('Geracao', 'info', "Aguardando resultado via SSE...");
-    $result = streamSSEForResult($eventId, $hfUrl, 180);
+    $result = streamSSEForResult($eventId, $hfUrl, 600);
 
     if ($result['status'] === 'complete') {
         return ['audioUrl' => $result['audioUrl'], 'error' => null];
