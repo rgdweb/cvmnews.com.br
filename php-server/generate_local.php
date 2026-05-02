@@ -208,8 +208,14 @@ function trimAudioToMaxSeconds($filePath, $maxSeconds = 10) {
     $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
     $trimmedFile = tempnam(sys_get_temp_dir(), 'vp_trim_') . '.' . $ext;
 
-    // No Windows XAMPP: usar "python" em vez de "python3"
-    $pythonCmd = PHP_OS_FAMILY === 'Windows' ? 'python' : 'python3';
+    // No Windows XAMPP: usar o Python do Conda (o "python" do Windows abre a Microsoft Store)
+    $pythonCmd = 'C:\\Users\\Administrador\\Miniconda3\\python.exe';
+    if (PHP_OS_FAMILY !== 'Windows') {
+        $pythonCmd = 'python3';
+    }
+    if (!file_exists($pythonCmd)) {
+        $pythonCmd = 'python3';
+    }
 
     $cmd = $pythonCmd . ' ' . escapeshellarg($trimScript) . ' '
          . escapeshellarg($filePath) . ' '
