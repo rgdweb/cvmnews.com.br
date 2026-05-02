@@ -336,15 +336,44 @@ export default function VozProClient() {
         guidanceScale,
       }
 
-      // URL destino: proxy Vercel -> PHP (sem CORS!) ou fallback Vercel API direta
-      const generateUrl = usePhpGenerate ? '/api/php-generate' : '/api/generate'
+      let res: Response
 
-      const res = await fetch(generateUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      })
+      if (usePhpGenerate) {
+        // ===== PHP DIRETO: browser -> PHP (bypass Vercel timeout!) =====
+        // 1. Obter token HMAC do Vercel (rapido, <1s)
+        const tokenRes = await fetch('/api/generate-token')
+        if (!tokenRes.ok) {
+          toast.error('Erro ao obter token de geracao')
+          return
+        }
+        const { generateUrl: phpDirectUrl, token } = await tokenRes.json()
+
+        if (!phpDirectUrl || !token) {
+          toast.error('Servidor PHP nao configurado corretamente')
+          return
+        }
+
+        console.log('[VozPro] Gerando via PHP direto (sem Vercel proxy)...')
+
+        // 2. Chamar PHP diretamente (sem Vercel no meio!)
+        res = await fetch(phpDirectUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Generate-Token': token,
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        })
+      } else {
+        // ===== Vercei API direta (sem PHP) =====
+        res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        })
+      }
 
       if (!res.ok) {
         let errorMsg = `Erro do servidor (${res.status})`
@@ -365,9 +394,14 @@ export default function VozProClient() {
           }
         } catch {}
 
-        // Mensagem especifica para 504 (timeout do Vercel)
+        // Mensagem especifica para 504 (timeout do Vercel ou PHP)
         if (res.status === 504) {
-          errorMsg = 'O servidor demorou mais que o esperado e a conexao foi encerrada (timeout 504).'
+          errorMsg = 'A geracao de voz demorou demais e excedeu o tempo limite.'
+        }
+
+        // Mensagem especifica para 401 (token invalido/expirado)
+        if (res.status === 401) {
+          errorMsg = 'Token de geracao invalido. Tente novamente.'
         }
 
         console.error('[VozPro] Generate error:', errorMsg, { debugData })
@@ -389,8 +423,10 @@ export default function VozProClient() {
 
         toast.error(errorMsg, {
           description: res.status === 504
-            ? 'A geracao de voz demorou demais. Tente um texto mais curto ou aguarde alguns minutos.'
-            : 'Aguarde alguns segundos e tente novamente.'
+            ? 'O servidor de IA esta lento. Tente um texto mais curto ou aguarde alguns minutos.'
+            : res.status === 401
+              ? 'Recarregue a pagina e tente novamente.'
+              : 'Aguarde alguns segundos e tente novamente.'
         })
         return
       }
@@ -429,7 +465,7 @@ export default function VozProClient() {
           setAudioUrl(data.audioUrl)
           setMixedAudioUrl(mixedDataUri)
           setIsMixed(true)
-          toast.success(`Áudio gerado com trilha "${selectedTrack.name}"!${data.viaPhp ? ' (via PHP)' : ''}`)
+          toast.success(`Audio gerado com trilha "${selectedTrack.name}"!${data.viaDirectPhp ? ' (PHP direto)' : data.viaPhp ? ' (via PHP)' : ''}`)
         } catch (mixErr) {
           console.error('[VozPro] Client-side mixing failed:', mixErr)
           setAudioUrl(data.audioUrl)
@@ -455,14 +491,14 @@ export default function VozProClient() {
       const elapsed = Date.now() - genStartTime
 
       if (err instanceof DOMException && err.name === 'AbortError') {
-        // Timeout do frontend (120s)
-        toast.error('Tempo limite excedido', { description: 'A geração demorou mais de 2 minutos. Tente um texto mais curto.' })
+        // Timeout do frontend (5 min)
+        toast.error('Tempo limite excedido', { description: 'A geracao demorou mais de 5 minutos. Tente um texto mais curto.' })
         setLastGenResponse({
-          error: 'Timeout do frontend (120s) — abortado automaticamente',
+          error: 'Timeout do frontend (5 min) — abortado automaticamente',
           debug: {
             totalDuration: elapsed,
             steps: [
-              { time: new Date().toISOString(), step: 'Timeout Frontend', status: 'error', detail: `AbortController abortou após 120s (${(elapsed / 1000).toFixed(0)}s decorridos). O servidor pode ter demorado mais que o limite do Vercel (60s Hobby / 300s Pro).`, duration: elapsed }
+              { time: new Date().toISOString(), step: 'Timeout Frontend', status: 'error', detail: `AbortController abortou apos 5min (${(elapsed / 1000).toFixed(0)}s decorridos).`, duration: elapsed }
             ]
           }
         })
@@ -954,7 +990,7 @@ export default function VozProClient() {
                         </p>
                         {generatingTime >= 45 && (
                           <p className="text-[10px] text-yellow-500/70">
-                            Se demorar muito, será cancelado automaticamente (limite: 120s)
+                            A geracao pode levar alguns minutos, dependendo do texto e servidor.
                           </p>
                         )}
                       </div>
