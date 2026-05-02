@@ -21,7 +21,6 @@ Write-Host ""
 Write-Host "[2/2] Abrindo localtunnel..." -ForegroundColor Yellow
 Write-Host ""
 
-# Rodar localtunnel e capturar a saida
 $outputFile = "$env:TEMP\lt_output.txt"
 Remove-Item $outputFile -Force -ErrorAction SilentlyContinue
 
@@ -30,7 +29,6 @@ $job = Start-Job -ScriptBlock {
     cmd /c "npx localtunnel --port $p 2>&1" | Out-File -FilePath $using:outputFile -Encoding ascii
 } -ArgumentList $port
 
-# Aguardar URL (ate 30 segundos)
 $url = $null
 for ($i = 0; $i -lt 60; $i++) {
     Start-Sleep -Milliseconds 500
@@ -50,7 +48,8 @@ if ($url) {
     Write-Host ""
 
     try {
-        $updateUrl = "$serverUpdate?auth=$auth&url=$([System.Web.HttpUtility]::UrlEncode($url))"
+        $encodedUrl = [uri]::EscapeDataString($url)
+        $updateUrl = "$serverUpdate?auth=$auth&url=$encodedUrl"
         $null = Invoke-WebRequest -Uri $updateUrl -TimeoutSec 15 -UseBasicParsing -ErrorAction Stop
         Write-Host "[OK] Servidor atualizado automaticamente!" -ForegroundColor Green
     } catch {
@@ -62,7 +61,6 @@ if ($url) {
     Write-Host "Pressione Ctrl+C para parar." -ForegroundColor DarkGray
     Write-Host ""
 
-    # Manter script rodando
     try {
         Wait-Job $job | Out-Null
     } catch {
