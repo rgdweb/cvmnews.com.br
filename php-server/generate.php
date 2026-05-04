@@ -402,6 +402,8 @@ function runGeneration($gradioData, $refAudioFile, $refAudioName, $hfUrl) {
             return ['audioUrl' => null, 'error' => 'Falha no upload do audio para HF Space'];
         }
         $gradioData[2]['path'] = $path;
+        $gradioData[2]['url'] = $hfUrl . '/gradio_api/file=' . $path;
+        $gradioData[2]['size'] = filesize($refAudioFile);
     }
 
     $eventId = null;
@@ -442,23 +444,24 @@ if (!$tempRefFile && !empty($refAudioPath)) {
 
 $gradioData = [
     $texto,
-    $idioma,
+    'Auto',  // Auto detecta (interface do OmniVoice usa Auto)
     [
         'path' => $refAudioPath ?? '',
+        'url' => '',  // preenchido apos upload
         'orig_name' => $refAudioName,
+        'size' => $tempRefFile ? filesize($tempRefFile) : 0,
         'mime_type' => (pathinfo($refAudioName, PATHINFO_EXTENSION) === 'mp3') ? 'audio/mpeg' : 'audio/wav',
-        'is_stream' => false,
         'meta' => ['_type' => 'gradio.FileData']
     ],
-    $refText,
-    $instruct,
+    '',        // refText: vazio (interface do OmniVoice envia vazio!)
+    null,      // instruct: null (interface do OmniVoice envia null!)
     (int)$numStep,
     (float)$guidanceScale,
-    true,
-    (float)$speed,
-    null,
-    true,
-    true
+    true,      // denoise
+    (int)$speed, // speed como int
+    0,         // duration: 0 (interface envia 0, nao null!)
+    true,      // preprocess
+    true       // postprocess
 ];
 
 $maxRetries = 3;
