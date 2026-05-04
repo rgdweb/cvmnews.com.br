@@ -91,31 +91,39 @@ async function mixAudioClientSide(
   const trackArrayBuffer = await trackResponse.arrayBuffer()
   const trackBuffer = await audioCtx.decodeAudioData(trackArrayBuffer)
 
-  // Duration = voice duration (shortest)
+  // Duration = voice duration
   const duration = voiceBuffer.duration
   const sampleRate = voiceBuffer.sampleRate
-  const length = Math.ceil(duration * sampleRate)
+  const length = Math.round(duration * sampleRate)
 
-  // Create offline context for mixing
-  const offlineCtx = new OfflineAudioContext(
-    Math.max(voiceBuffer.numberOfChannels, trackBuffer.numberOfChannels),
-    length,
-    sampleRate
-  )
+  // Force MONO output - preserves voice quality, avoids stereo up-mix artifacts
+  const offlineCtx = new OfflineAudioContext(1, length, sampleRate)
 
-  // Voice source (full volume)
+  // Compressor to prevent track from clipping/distorting the voice
+  const compressor = offlineCtx.createDynamicsCompressor()
+  compressor.threshold.value = -12
+  compressor.knee.value = 10
+  compressor.ratio.value = 4
+  compressor.attack.value = 0.003
+  compressor.release.value = 0.15
+  compressor.connect(offlineCtx.destination)
+
+  // Voice source (full volume, direct to compressor)
   const voiceSource = offlineCtx.createBufferSource()
   voiceSource.buffer = voiceBuffer
-  voiceSource.connect(offlineCtx.destination)
+  const voiceGain = offlineCtx.createGain()
+  voiceGain.gain.value = 1.0
+  voiceSource.connect(voiceGain)
+  voiceGain.connect(compressor)
   voiceSource.start(0)
 
-  // Track source (with volume control)
+  // Track source (reduced volume, through compressor)
   const trackSource = offlineCtx.createBufferSource()
   trackSource.buffer = trackBuffer
-  const gainNode = offlineCtx.createGain()
-  gainNode.gain.value = Math.max(0, Math.min(1, trackVolume))
-  trackSource.connect(gainNode)
-  gainNode.connect(offlineCtx.destination)
+  const trackGain = offlineCtx.createGain()
+  trackGain.gain.value = Math.max(0, Math.min(0.6, trackVolume * 0.6)) // Cap track volume
+  trackSource.connect(trackGain)
+  trackGain.connect(compressor)
   trackSource.start(0)
 
   // Render mixed audio
