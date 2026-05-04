@@ -30,6 +30,15 @@ if (!file_exists($configFile)) {
 // Parse do config.php (formato INI)
 $config = parse_ini_file($configFile);
 
+if ($config === false) {
+    echo json_encode([
+        'status' => 'offline',
+        'tunnelUrl' => '',
+        'message' => 'Erro ao ler config.php'
+    ]);
+    exit;
+}
+
 $tunnelUrl = trim($config['tunnel_url'] ?? '');
 
 if (empty($tunnelUrl)) {
