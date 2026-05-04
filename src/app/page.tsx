@@ -228,6 +228,7 @@ export default function VozProClient() {
   const [lastGenResponse, setLastGenResponse] = useState<Record<string, unknown> | null>(null)
   const [debugOpen, setDebugOpen] = useState(false)
   const [usePhpGenerate, setUsePhpGenerate] = useState(false)
+  const [useTunnelGenerate, setUseTunnelGenerate] = useState(true) // GPU local via tunnel (padrao)
 
   const resultAudioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -265,6 +266,8 @@ export default function VozProClient() {
         if (configRes.ok) {
           const configData = await configRes.json()
           setUsePhpGenerate(!!configData.phpServerUrl)
+          // Se tem tunnel disponivel, usa ele por padrao (prioridade: tunnel > php > hf)
+          setUseTunnelGenerate(true)
         }
       } catch {
         toast.error('Erro ao carregar dados')
@@ -338,9 +341,22 @@ export default function VozProClient() {
 
       let res: Response
 
-      if (usePhpGenerate) {
+      if (useTunnelGenerate) {
+        // ===== TUNNEL DIRETO: Vercel -> GPU local via cloudflared =====
+        console.log('[VozPro] Gerando via tunnel (GPU local)...')
+        const tunnelBody = {
+          ...body,
+          referenceAudioUrl: selectedVariation?.refAudioServerUrl || body.refAudioUrl,
+          referenceAudioName: body.refAudioName || 'ref_audio.wav',
+        }
+        res = await fetch('/api/tunnel-generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tunnelBody),
+          signal: controller.signal,
+        })
+      } else if (usePhpGenerate) {
         // ===== PHP DIRETO: browser -> PHP (bypass Vercel timeout!) =====
-        // 1. Obter token HMAC do Vercel (rapido, <1s)
         const tokenRes = await fetch('/api/generate-token')
         if (!tokenRes.ok) {
           toast.error('Erro ao obter token de geracao')
@@ -355,7 +371,6 @@ export default function VozProClient() {
 
         console.log('[VozPro] Gerando via PHP direto (sem Vercel proxy)...')
 
-        // 2. Chamar PHP diretamente (sem Vercel no meio!)
         res = await fetch(phpDirectUrl, {
           method: 'POST',
           headers: {
@@ -366,7 +381,7 @@ export default function VozProClient() {
           signal: controller.signal,
         })
       } else {
-        // ===== Vercei API direta (sem PHP) =====
+        // ===== Vercel API direta (HF Space) =====
         res = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
