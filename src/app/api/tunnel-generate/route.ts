@@ -236,7 +236,7 @@ export async function POST(req: NextRequest) {
       referenceAudioName,
       text,
       language = 'Auto',
-      refText = '',
+      refText = '',  // IGNORADO - sempre vazio para evitar alucinacao
       instruct = null,
       speed = 1,
       numStep = 32,

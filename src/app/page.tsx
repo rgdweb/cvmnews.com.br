@@ -339,7 +339,7 @@ export default function VozProClient() {
         language,
         refAudioUrl: selectedVariation?.refAudioServerUrl || '',
         refAudioPath: selectedVariation?.refAudioPath || '',
-        refText: selectedVariation?.refText || '',
+        refText: '',  // SEMPRE vazio - texto no refText causa alucinacao (fala "to", "ba", outra lingua)
         instruct: instructStr,
         refAudioName: selectedVariation?.refAudioName || 'ref_audio.wav',
         speed,
