@@ -28,10 +28,10 @@ export interface TextChunk {
 // ============================================================
 
 const PAUSE_DURATION: Record<string, number> = {
-  ',': 200,     // vírgula → pausa curta
-  ';': 300,     // ponto e vírgula → pausa média
-  '.': 500,     // ponto final → pausa longa
-  '!': 600,     // exclamação → pausa expressiva
+  ',': 100,     // vírgula → pausa curta
+  ';': 250,     // ponto e vírgula → pausa média
+  '.': 450,     // ponto final → pausa longa
+  '!': 500,     // exclamação → pausa expressiva
   '?': 600,     // interrogação → pausa expressiva
 }
 
