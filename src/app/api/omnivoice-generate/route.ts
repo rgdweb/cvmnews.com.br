@@ -443,12 +443,12 @@ export async function GET() {
         if (healthRes.ok) {
           const info = await healthRes.json()
           const endpoints = info?.named_endpoints || {}
+          // Gradio API retorna nomes com "/" prefixo: "/_design_fn", "/_clone_fn"
+          // Verifica com e sem slash para ser compativel com diferentes versoes
+          const hasDesign = !!endpoints['/_design_fn'] || !!endpoints['_design_fn']
+          const hasClone = !!endpoints['/_clone_fn'] || !!endpoints['_clone_fn']
           // Se tem _design_fn, e OmniVoice. Se so tem _clone_fn, pode ser F5-TTS
-          reachable = !!endpoints['_design_fn']
-          if (!reachable) {
-            // F5-TTS tambem serve via clone, mas sem design
-            reachable = !!endpoints['_clone_fn']
-          }
+          reachable = hasDesign || hasClone
         }
       }
     }
