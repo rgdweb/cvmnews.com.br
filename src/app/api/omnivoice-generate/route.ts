@@ -4,7 +4,22 @@ import { NextRequest, NextResponse } from 'next/server'
 // Usa API Gradio nativa do OmniVoice com parametros corretos
 // NÃO altera nenhum fluxo existente do F5-TTS (tunnel-generate)
 
-const OMNIVOICE_URL = process.env.OMNIVOICE_URL || process.env.HF_SPACE_URL || ''
+const HOSTGATOR_BASE = 'https://sorteiomax.com.br/omnivoice'
+
+async function getTunnelUrl(debug: ReturnType<typeof createDebug>): Promise<string> {
+  try {
+    const res = await fetch(`${HOSTGATOR_BASE}/get_tunnel.php`, { signal: AbortSignal.timeout(10000) })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    if (data.status !== 'online' || !data.tunnelUrl) {
+      throw new Error(data.message || 'GPU offline')
+    }
+    debug.log('Tunnel URL', 'ok', data.tunnelUrl.substring(0, 60) + '...')
+    return data.tunnelUrl
+  } catch (err) {
+    throw new Error('GPU offline: ' + (err instanceof Error ? err.message : String(err)))
+  }
+}
 
 export const maxDuration = 300
 
@@ -223,13 +238,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Texto e obrigatorio' }, { status: 400 })
     }
 
-    const effectiveUrl = OMNIVOICE_URL
-    if (!effectiveUrl) {
-      return NextResponse.json({
-        error: 'OmniVoice nao configurado. Defina OMNIVOICE_URL no ambiente.',
-        debug: debug.result(),
-      }, { status: 503 })
-    }
+    // Obter tunnel URL dinamicamente do HostGator (igual F5-TTS)
+    debug.log('Tunnel', 'info', 'Descobrindo URL do tunnel...')
+    const effectiveUrl = await getTunnelUrl(debug)
 
     const startTime = Date.now()
 
@@ -412,18 +423,35 @@ export async function POST(request: NextRequest) {
 // ============================================================
 
 export async function GET() {
-  const effectiveUrl = OMNIVOICE_URL || process.env.HF_SPACE_URL || ''
-
+  // Tenta obter tunnel URL do HostGator (igual F5-TTS)
   let reachable = false
-  if (effectiveUrl) {
-    try {
-      const res = await fetch(effectiveUrl + '/gradio_api/info/', {
-        signal: AbortSignal.timeout(8000),
-      })
-      reachable = res.ok
-    } catch {
-      reachable = false
+  let effectiveUrl = ''
+
+  try {
+    const res = await fetch(`${HOSTGATOR_BASE}/get_tunnel.php`, { signal: AbortSignal.timeout(8000) })
+    if (res.ok) {
+      const data = await res.json()
+      if (data.status === 'online' && data.tunnelUrl) {
+        effectiveUrl = data.tunnelUrl
+        // Verifica se o Gradio API responde
+        const healthRes = await fetch(effectiveUrl + '/gradio_api/info/', {
+          signal: AbortSignal.timeout(8000),
+        })
+        // Verifica se tem _design_fn (endpoint exclusivo do OmniVoice)
+        if (healthRes.ok) {
+          const info = await healthRes.json()
+          const endpoints = info?.named_endpoints || {}
+          // Se tem _design_fn, e OmniVoice. Se so tem _clone_fn, pode ser F5-TTS
+          reachable = !!endpoints['_design_fn']
+          if (!reachable) {
+            // F5-TTS tambem serve via clone, mas sem design
+            reachable = !!endpoints['_clone_fn']
+          }
+        }
+      }
     }
+  } catch {
+    reachable = false
   }
 
   return NextResponse.json({
