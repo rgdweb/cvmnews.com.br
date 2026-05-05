@@ -2,15 +2,16 @@
  * Audio Concatenator v2 — Concatena áudios WAV com qualidade profissional
  * 
  * Pipeline de pós-processamento:
- * 1. Trim de silêncio (corta silêncio morto do início/fim de cada chunk)
+ * 1. Trim de silêncio (corta silêncio morto do INÍCIO de cada chunk — preserva final)
  * 2. Normalização de volume (RMS — todas frases no mesmo nível)
  * 3. Silêncio real entre frases (pausas em ms) — PCM puro, sem header
- * 4. Crossfade entre chunks (50ms — transição suave)
- * 5. Fade-out final (200ms — sem corte abrupto)
+ * 4. Concatenação direta (sem crossfade — preserva vogais finais)
+ * 5. Fade-out final (150ms — suave, sem corte abrupto)
  * 
  * Funciona com WAV PCM 16-bit (mono/estéreo).
  * 
- * v2: Refatorado — trabalho com PCM cru, bounds checking em tudo.
+ * v2: Trabalho com PCM cru, bounds checking.
+ * v3: Trim só no início (preserva vogais finais), crossfade desativado.
  */
 
 // ============================================================
@@ -32,17 +33,17 @@ export interface ConcatenationResult {
 
 export interface ConcatenationConfig {
   crossfadeMs: number      // crossfade entre chunks (0 = sem crossfade)
-  trimSilenceMs: number    // trim de silêncio no início/fim de cada chunk
+  trimSilenceMs: number    // trim de silêncio no INÍCIO de cada chunk (preserva final)
   normalizeVolume: boolean // normaliza RMS entre chunks
   fadeOutMs: number        // fade-out final
   targetRmsDb: number      // volume alvo para normalização (-16 dB)
 }
 
 const DEFAULT_CONFIG: ConcatenationConfig = {
-  crossfadeMs: 50,
-  trimSilenceMs: 80,
+  crossfadeMs: 0,       // DESATIVADO — crossfade corta vogais finais
+  trimSilenceMs: 80,     // só corta silêncio do INÍCIO (não do final)
   normalizeVolume: true,
-  fadeOutMs: 200,
+  fadeOutMs: 150,        // fade-out final suave (150ms)
   targetRmsDb: -16,
 }
 
@@ -127,9 +128,11 @@ function writeSample16(buf: Buffer, pos: number, value: number): void {
 // ============================================================
 
 /**
- * Corta silêncio morto do início e fim do áudio.
+ * Corta silêncio morto do INÍCIO do áudio.
+ * NÃO corta o final — preserva a vogal final da frase.
+ * O F5-TTS já aplica postprocess_output que corta silêncio do final.
  */
-export function trimSilence(wavBuffer: Buffer, trimMs: number): Buffer {
+export function trimSilenceStart(wavBuffer: Buffer, trimMs: number): Buffer {
   const format = parseWavHeader(wavBuffer)
   if (!format || format.bitsPerSample !== 16) return wavBuffer
 
@@ -138,7 +141,7 @@ export function trimSilence(wavBuffer: Buffer, trimMs: number): Buffer {
   const dataStart = 44
   const dataEnd = safeDataEnd(wavBuffer, format)
 
-  // Encontrar início real
+  // Encontrar início real (primeiro sample acima do threshold)
   let startByte = dataStart
   const startLimit = Math.min(dataStart + maxTrimBytes, dataEnd)
   for (let i = dataStart; i < startLimit; i += format.blockAlign) {
@@ -149,28 +152,16 @@ export function trimSilence(wavBuffer: Buffer, trimMs: number): Buffer {
     }
   }
 
-  // Encontrar fim real
-  let endByte = dataStart
-  const endLimit = Math.max(dataEnd - maxTrimBytes, dataStart)
-  for (let i = dataEnd - format.blockAlign; i >= endLimit; i -= format.blockAlign) {
-    const sample = Math.abs(readSample16(wavBuffer, i))
-    if (sample > threshold) {
-      endByte = i + format.blockAlign
-      break
-    }
-  }
+  // Se o início já está ok, retornar original
+  if (startByte === dataStart) return wavBuffer
 
-  // Se não encontrou áudio significativo, retornar original
-  if (endByte <= startByte) return wavBuffer
+  // Construir novo WAV sem o silêncio do início
+  const trimmedSize = dataEnd - startByte
+  if (trimmedSize <= 0) return wavBuffer
 
-  const trimmedSize = endByte - startByte
-  const originalDataSize = dataEnd - dataStart
-  if (trimmedSize >= originalDataSize) return wavBuffer
-
-  // Construir novo WAV com dados aparados
   const output = Buffer.concat([
     buildWavHeader(format, trimmedSize),
-    wavBuffer.subarray(startByte, Math.min(endByte, dataEnd)),
+    wavBuffer.subarray(startByte, dataEnd),
   ])
 
   return output
@@ -356,7 +347,7 @@ export function concatenateAudioBuffers(
   // Se só tem 1 chunk, aplicar trim + normalize + fade-out
   if (chunks.length === 1) {
     let buffer = chunks[0].buffer
-    if (cfg.trimSilenceMs > 0) buffer = trimSilence(buffer, cfg.trimSilenceMs)
+    if (cfg.trimSilenceMs > 0) buffer = trimSilenceStart(buffer, cfg.trimSilenceMs)
     if (cfg.normalizeVolume) buffer = normalizeVolume(buffer, cfg.targetRmsDb)
     if (cfg.fadeOutMs > 0) buffer = applyFadeOut(buffer, cfg.fadeOutMs)
 
@@ -385,9 +376,9 @@ export function concatenateAudioBuffers(
   for (let i = 0; i < chunks.length; i++) {
     let buf = chunks[i].buffer
 
-    // Trim silêncio
+    // Trim silêncio (só início — preserva vogal final)
     if (cfg.trimSilenceMs > 0) {
-      buf = trimSilence(buf, cfg.trimSilenceMs)
+      buf = trimSilenceStart(buf, cfg.trimSilenceMs)
     }
 
     // Normalizar volume
