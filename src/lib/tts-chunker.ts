@@ -28,7 +28,7 @@ export interface TextChunk {
 // ============================================================
 
 const PAUSE_DURATION: Record<string, number> = {
-  ',': 50,      // vírgula → pausa mínima
+  ',': 25,      // vírgula → pausa mínima
   ';': 180,     // ponto e vírgula → pausa média
   '.': 380,     // ponto final → pausa longa
   '!': 420,     // exclamação → pausa expressiva
