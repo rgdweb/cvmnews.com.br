@@ -91,6 +91,50 @@ const LANGUAGES = [
 ]
 
 /**
+ * Converte descrição em texto do Voice Design para os parâmetros estruturados do OmniVoice.
+ * OmniVoice _design_fn usa dropdowns (gender, age, pitch, style, accent), não texto livre.
+ */
+function parseVoiceDesignToParams(text: string): { gender: string; age: string; pitch: string; style: string; accent: string } {
+  const t = text.toLowerCase().trim()
+
+  let gender = 'Auto'
+  if (t.includes('female') || t.includes('mulher') || t.includes('feminina') || t.includes('fêmea')) gender = 'Female / 女'
+  else if (t.includes('male') || t.includes('homem') || t.includes('masculino') || t.includes('macho')) gender = 'Male / 男'
+
+  let age = 'Auto'
+  if (t.includes('child') || t.includes('criança') || t.includes('crianca')) age = 'Child / 儿童'
+  else if (t.includes('teen') || t.includes('adolescente')) age = 'Teenager / 少年'
+  else if (t.includes('young') || t.includes('jovem')) age = 'Young Adult / 青年'
+  else if (t.includes('middle-aged') || t.includes('meia-idade') || t.includes('meia idade')) age = 'Middle-aged / 中年'
+  else if (t.includes('elderly') || t.includes('idoso') || t.includes('velho') || t.includes('old')) age = 'Elderly / 老年'
+
+  let pitch = 'Auto'
+  if (t.includes('very low pitch') || t.includes('muito grave')) pitch = 'Very Low Pitch / 极低音调'
+  else if (t.includes('low pitch') || t.includes('grave')) pitch = 'Low Pitch / 低音调'
+  else if (t.includes('moderate pitch') || t.includes('tom médio') || t.includes('tom medio')) pitch = 'Moderate Pitch / 中音调'
+  else if (t.includes('high pitch') || t.includes('agudo')) pitch = 'High Pitch / 高音调'
+  else if (t.includes('very high pitch') || t.includes('muito agudo')) pitch = 'Very High Pitch / 极高音调'
+
+  // Style só aceita "Auto" e "Whisper" no OmniVoice
+  let style = 'Auto'
+  if (t.includes('whisper') || t.includes('sussurr') || t.includes('sussurro') || t.includes('segredo')) style = 'Whisper / 耳语'
+
+  let accent = 'Auto'
+  if (t.includes('american') || t.includes('americano') || t.includes('eua')) accent = 'American Accent / 美式口音'
+  else if (t.includes('british') || t.includes('britânico') || t.includes('britanico') || t.includes('inglês') || t.includes('ingles')) accent = 'British Accent / 英国口音'
+  else if (t.includes('australian') || t.includes('australiano')) accent = 'Australian Accent / 澳大利亚口音'
+  else if (t.includes('brazilian') || t.includes('brasileiro') || t.includes('portuguese') || t.includes('português') || t.includes('portugues') || t.includes('pt-br')) accent = 'Portuguese Accent / 葡萄牙口音'
+  else if (t.includes('canadian') || t.includes('canadense')) accent = 'Canadian Accent / 加拿大口音'
+  else if (t.includes('indian')) accent = 'Indian Accent / 印度口音'
+  else if (t.includes('korean') || t.includes('coreano')) accent = 'Korean Accent / 韩国口音'
+  else if (t.includes('japanese') || t.includes('japonês') || t.includes('japones')) accent = 'Japanese Accent / 日本口音'
+  else if (t.includes('russian') || t.includes('russo')) accent = 'Russian Accent / 俄罗斯口音'
+  else if (t.includes('chinese') || t.includes('chinês') || t.includes('chines')) accent = 'Chinese Accent / 中国口音'
+
+  return { gender, age, pitch, style, accent }
+}
+
+/**
  * Mix voice audio (base64 data URI) with track audio (URL) using Web Audio API.
  * Com DUCKING: música começa alta, reduz quando a voz entra, volta alta, fade-out final.
  * Returns a base64 data URI of the mixed audio.
@@ -393,8 +437,7 @@ export default function VozProClient() {
       return
     }
     if (voiceMode === 'design' && !voiceDesignInstruct.trim()) {
-      toast.error('Descreva a voz desejada (ex: female, low pitch, british accent)')
-      return
+      // OK - sem descrição, OmniVoice vai usar todos os params como Auto
     }
     // Voice Design e Auto Voice so funcionam com OmniVoice
     if ((voiceMode === 'design' || voiceMode === 'auto') && ttsModel !== 'omnivoice') {
@@ -449,10 +492,15 @@ export default function VozProClient() {
       if (ttsModel === 'omnivoice') {
         console.log(`[VozPro] Gerando via OmniVoice... modo: ${voiceMode}`)
 
+        // Design: parseia texto para dropdowns do OmniVoice. Auto: tudo Auto. Clone: não usa.
+        const isAutoMode = voiceMode === 'auto'
+        const isDesignMode = voiceMode === 'design'
+        const designParams = isDesignMode ? parseVoiceDesignToParams(voiceDesignInstruct) : { gender: 'Auto', age: 'Auto', pitch: 'Auto', style: 'Auto', accent: 'Auto' }
+
         const ovBody: Record<string, unknown> = {
           text: text.trim(),
           mode: voiceMode,
-          instruct: voiceMode === 'design' ? voiceDesignInstruct : instructStr,
+          instruct: '', // _design_fn não usa instruct (usa dropdowns)
           referenceAudioUrl: voiceMode === 'clone' ? (uploadedVoiceUrl || selectedVariation?.refAudioServerUrl || '') : '',
           referenceAudioName: voiceMode === 'clone' ? (uploadedVoiceFile?.name || selectedVariation?.refAudioName || 'ref_audio.wav') : '',
           refText: '',
@@ -460,11 +508,11 @@ export default function VozProClient() {
           speed: 1.0,
           language: 'Auto',
           // Voice Design params (usados pelo _design_fn endpoint)
-          gender: selectedVoice?.gender || 'Auto',
-          age: selectedVoice?.age || 'Auto',
-          pitch: selectedVoice?.pitch || 'Auto',
-          style: voiceMode === 'design' ? voiceDesignInstruct : 'Auto',
-          accent: selectedVoice?.accent || 'Auto',
+          gender: isAutoMode ? 'Auto' : (isDesignMode ? designParams.gender : 'Auto'),
+          age: isAutoMode ? 'Auto' : (isDesignMode ? designParams.age : 'Auto'),
+          pitch: isAutoMode ? 'Auto' : (isDesignMode ? designParams.pitch : 'Auto'),
+          style: isAutoMode ? 'Auto' : (isDesignMode ? designParams.style : 'Auto'),
+          accent: isAutoMode ? 'Auto' : (isDesignMode ? designParams.accent : 'Auto'),
         }
 
         res = await fetch('/api/omnivoice-generate', {
@@ -998,11 +1046,20 @@ export default function VozProClient() {
                     <Input
                       value={voiceDesignInstruct}
                       onChange={(e) => setVoiceDesignInstruct(e.target.value)}
-                      placeholder="female, low pitch, british accent"
+                      placeholder="female, young, low pitch, whisper, british accent"
                       className="bg-white/5 border-white/10 text-white"
                     />
                     <p className="text-[10px] text-slate-600">
-                      Combine atributos: gender (male/female), pitch (low/high), accent (british/brazilian), age (young/old), style (whisper)
+                      Atributos: <b>gender</b> (male/female), <b>age</b> (child/teen/young/old), <b>pitch</b> (low/moderate/high), <b>style</b> (whisper), <b>accent</b> (brazilian/british/american/japanese)
+                    </p>
+                  </div>
+                )}
+
+                {/* Auto mode hint */}
+                {voiceMode === 'auto' && (
+                  <div className="pt-2 border-t border-white/10">
+                    <p className="text-xs text-blue-300/70 text-center">
+                      O OmniVoice vai criar uma voz aleatória. Cada geração será diferente!
                     </p>
                   </div>
                 )}
