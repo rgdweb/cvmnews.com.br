@@ -1,14 +1,16 @@
 /**
- * Audio Concatenator — Concatena áudios WAV com qualidade profissional
+ * Audio Concatenator v2 — Concatena áudios WAV com qualidade profissional
  * 
  * Pipeline de pós-processamento:
  * 1. Trim de silêncio (corta silêncio morto do início/fim de cada chunk)
  * 2. Normalização de volume (RMS — todas frases no mesmo nível)
- * 3. Crossfade entre chunks (50ms — transição suave)
- * 4. Silêncio real entre frases (pausas em ms)
+ * 3. Silêncio real entre frases (pausas em ms) — PCM puro, sem header
+ * 4. Crossfade entre chunks (50ms — transição suave)
  * 5. Fade-out final (200ms — sem corte abrupto)
  * 
  * Funciona com WAV PCM 16-bit (mono/estéreo).
+ * 
+ * v2: Refatorado — trabalho com PCM cru, bounds checking em tudo.
  */
 
 // ============================================================
@@ -38,7 +40,7 @@ export interface ConcatenationConfig {
 
 const DEFAULT_CONFIG: ConcatenationConfig = {
   crossfadeMs: 50,
-  trimSilenceMs: 80,       // 80ms de silêncio morto pra cortar
+  trimSilenceMs: 80,
   normalizeVolume: true,
   fadeOutMs: 200,
   targetRmsDb: -16,
@@ -101,12 +103,22 @@ function msToBytes(ms: number, format: WavFormat): number {
   return Math.round(ms * bytesPerMs(format))
 }
 
-/** Lê sample 16-bit em posição absoluta (incluindo header offset) */
+/**
+ * Retorna o final seguro dos dados PCM em um buffer WAV.
+ * Usa Math.min(dataSize, buffer.length - 44) para evitar overflow.
+ */
+function safeDataEnd(buffer: Buffer, format: WavFormat): number {
+  return Math.min(44 + format.dataSize, buffer.length)
+}
+
+/** Lê sample 16-bit com bounds checking */
 function readSample16(buf: Buffer, pos: number): number {
+  if (pos < 0 || pos + 1 >= buf.length) return 0
   return buf.readInt16LE(pos)
 }
 
 function writeSample16(buf: Buffer, pos: number, value: number): void {
+  if (pos < 0 || pos + 1 >= buf.length) return
   buf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(value))), pos)
 }
 
@@ -116,18 +128,17 @@ function writeSample16(buf: Buffer, pos: number, value: number): void {
 
 /**
  * Corta silêncio morto do início e fim do áudio.
- * Silêncio = samples abaixo de um threshold (muito baixos).
  */
 export function trimSilence(wavBuffer: Buffer, trimMs: number): Buffer {
   const format = parseWavHeader(wavBuffer)
   if (!format || format.bitsPerSample !== 16) return wavBuffer
 
-  const threshold = 200 // samples abaixo de ~200 são silêncio
+  const threshold = 200
   const maxTrimBytes = msToBytes(trimMs, format)
   const dataStart = 44
-  const dataEnd = 44 + format.dataSize
+  const dataEnd = safeDataEnd(wavBuffer, format)
 
-  // Encontrar início real (primeiro sample acima do threshold)
+  // Encontrar início real
   let startByte = dataStart
   const startLimit = Math.min(dataStart + maxTrimBytes, dataEnd)
   for (let i = dataStart; i < startLimit; i += format.blockAlign) {
@@ -138,8 +149,8 @@ export function trimSilence(wavBuffer: Buffer, trimMs: number): Buffer {
     }
   }
 
-  // Encontrar fim real (último sample acima do threshold)
-  let endByte = dataEnd
+  // Encontrar fim real
+  let endByte = dataStart
   const endLimit = Math.max(dataEnd - maxTrimBytes, dataStart)
   for (let i = dataEnd - format.blockAlign; i >= endLimit; i -= format.blockAlign) {
     const sample = Math.abs(readSample16(wavBuffer, i))
@@ -149,14 +160,17 @@ export function trimSilence(wavBuffer: Buffer, trimMs: number): Buffer {
     }
   }
 
+  // Se não encontrou áudio significativo, retornar original
+  if (endByte <= startByte) return wavBuffer
+
   const trimmedSize = endByte - startByte
-  if (trimmedSize <= 0 || trimmedSize >= format.dataSize) return wavBuffer
+  const originalDataSize = dataEnd - dataStart
+  if (trimmedSize >= originalDataSize) return wavBuffer
 
   // Construir novo WAV com dados aparados
-  const newDataSize = trimmedSize
   const output = Buffer.concat([
-    buildWavHeader(format, newDataSize),
-    wavBuffer.subarray(startByte, endByte),
+    buildWavHeader(format, trimmedSize),
+    wavBuffer.subarray(startByte, Math.min(endByte, dataEnd)),
   ])
 
   return output
@@ -166,19 +180,16 @@ export function trimSilence(wavBuffer: Buffer, trimMs: number): Buffer {
 // NORMALIZAÇÃO DE VOLUME (RMS)
 // ============================================================
 
-/**
- * Calcula o RMS (Root Mean Square) de um buffer WAV em dB.
- */
 function calculateRmsDb(wavBuffer: Buffer): number {
   const format = parseWavHeader(wavBuffer)
   if (!format || format.bitsPerSample !== 16) return 0
 
   const dataStart = 44
-  const dataEnd = 44 + format.dataSize
+  const dataEnd = safeDataEnd(wavBuffer, format)
   let sumSquares = 0
   let count = 0
 
-  for (let i = dataStart; i < dataEnd; i += format.blockAlign) {
+  for (let i = dataStart; i + 1 < dataEnd; i += 2) {
     const sample = readSample16(wavBuffer, i)
     sumSquares += sample * sample
     count++
@@ -189,10 +200,6 @@ function calculateRmsDb(wavBuffer: Buffer): number {
   return 20 * Math.log10(rms / 32768)
 }
 
-/**
- * Normaliza o volume de um áudio para um RMS alvo.
- * Aplica ganho linear sem clipar.
- */
 export function normalizeVolume(wavBuffer: Buffer, targetRmsDb: number = -16): Buffer {
   const format = parseWavHeader(wavBuffer)
   if (!format || format.bitsPerSample !== 16) return wavBuffer
@@ -204,15 +211,15 @@ export function normalizeVolume(wavBuffer: Buffer, targetRmsDb: number = -16): B
   const gainLinear = Math.pow(10, gainDb / 20)
 
   // Limitar ganho para não distorcer
-  const clampedGain = Math.min(gainLinear, 2.0) // max 2x
+  const clampedGain = Math.min(gainLinear, 2.0)
 
-  if (Math.abs(clampedGain - 1.0) < 0.05) return wavBuffer // diferença insignificante
+  if (Math.abs(clampedGain - 1.0) < 0.05) return wavBuffer
 
   const output = Buffer.from(wavBuffer)
   const dataStart = 44
-  const dataEnd = 44 + format.dataSize
+  const dataEnd = safeDataEnd(wavBuffer, format)
 
-  for (let i = dataStart; i < dataEnd; i += 2) {
+  for (let i = dataStart; i + 1 < dataEnd; i += 2) {
     const sample = readSample16(output, i)
     writeSample16(output, i, sample * clampedGain)
   }
@@ -221,77 +228,84 @@ export function normalizeVolume(wavBuffer: Buffer, targetRmsDb: number = -16): B
 }
 
 // ============================================================
-// CROSSFADE ENTRE CHUNKS
+// EXTRAIR PCM CRU
 // ============================================================
 
 /**
- * Aplica crossfade entre o final de chunk A e o início de chunk B.
- * Durante a região de overlap, o volume de A diminui e o de B aumenta.
- * 
- * A: [...audio...][fade-out region]
- * B: [fade-in region][...audio...]
- * Resultado: [...audio...][crossfade mix][...audio...]
+ * Extrai dados PCM puros de um buffer WAV (sem header).
+ * Retorna Buffer com apenas os samples de áudio.
  */
-function crossfadeBuffers(
-  bufferA: Buffer, bufferB: Buffer,
+function extractPcmData(wavBuffer: Buffer): { pcm: Buffer; format: WavFormat } {
+  const format = parseWavHeader(wavBuffer)
+  if (!format) {
+    throw new Error('Buffer não é WAV válido')
+  }
+  const dataEnd = safeDataEnd(wavBuffer, format)
+  const pcm = wavBuffer.subarray(44, dataEnd)
+  return { pcm, format }
+}
+
+// ============================================================
+// CROSSFADE ENTRE CHUNKS (PCM puro)
+// ============================================================
+
+/**
+ * Aplica crossfade entre o final do PCM A e o início do PCM B.
+ * Retorna um novo buffer PCM (sem header) com o mix.
+ */
+function crossfadePcm(
+  pcmA: Buffer, pcmB: Buffer,
   format: WavFormat,
   crossfadeMs: number
 ): Buffer {
   const crossfadeBytes = msToBytes(crossfadeMs, format)
-  const is16bit = format.bitsPerSample === 16
-  if (!is16bit || crossfadeBytes < format.blockAlign) {
-    // Sem crossfade suficiente, concatenação simples
-    return Buffer.concat([bufferA, bufferB])
+
+  if (format.bitsPerSample !== 16 || crossfadeBytes < format.blockAlign || pcmA.length === 0 || pcmB.length === 0) {
+    return Buffer.concat([pcmA, pcmB])
   }
-
-  // Dados A (completo)
-  const dataAStart = 44
-  const dataAEnd = 44 + parseWavHeader(bufferA)!.dataSize
-
-  // Dados B (completo)
-  const dataBStart = 44
-  const dataBEnd = 44 + parseWavHeader(bufferB)!.dataSize
 
   // Limitar crossfade ao menor dos dois lados
-  const maxFadeA = dataAEnd - dataAStart
-  const maxFadeB = dataBEnd - dataBStart
-  const actualFadeBytes = Math.min(crossfadeBytes, maxFadeA, maxFadeB)
+  const actualFadeBytes = Math.min(crossfadeBytes, pcmA.length, pcmB.length)
 
   if (actualFadeBytes < format.blockAlign) {
-    return Buffer.concat([bufferA, bufferB])
+    return Buffer.concat([pcmA, pcmB])
   }
 
-  // Montar output:
-  // [header][dados A sem final][crossfade][dados B sem início]
-  const partASize = dataAEnd - dataAStart - actualFadeBytes
-  const partBSize = dataBEnd - dataBStart - actualFadeBytes
-  const totalDataSize = partASize + actualFadeBytes + partBSize
+  const partASize = pcmA.length - actualFadeBytes
+  const partBSize = pcmB.length - actualFadeBytes
+  const totalSize = partASize + actualFadeBytes + partBSize
 
-  const output = Buffer.concat([
-    buildWavHeader(format, totalDataSize),
-    bufferA.subarray(dataAStart, dataAStart + partASize),  // A sem final
-  ])
+  // Alocar buffer final
+  const output = Buffer.alloc(totalSize)
+
+  // Copiar parte A (sem final)
+  pcmA.copy(output, 0, 0, partASize)
 
   // Crossfade region — mix de A (fade-out) e B (fade-in)
-  const fadeStartA = dataAEnd - actualFadeBytes
-  const fadeStartB = dataBStart
-
   for (let i = 0; i < actualFadeBytes; i += format.blockAlign) {
-    const progress = i / actualFadeBytes // 0 a 1
-    const gainA = 1 - progress  // fade-out
-    const gainB = progress       // fade-in
+    const progress = i / actualFadeBytes
+    const gainA = 1 - progress
+    const gainB = progress
 
     for (let ch = 0; ch < format.numChannels; ch++) {
-      const sampleA = readSample16(bufferA, fadeStartA + i + ch * 2)
-      const sampleB = readSample16(bufferB, fadeStartB + i + ch * 2)
+      const posA = partASize + i + ch * 2
+      const posB = i + ch * 2
+      const posOut = partASize + i + ch * 2
+
+      const sampleA = (posA + 1 < pcmA.length) ? pcmA.readInt16LE(posA) : 0
+      const sampleB = (posB + 1 < pcmB.length) ? pcmB.readInt16LE(posB) : 0
       const mixed = Math.round(sampleA * gainA + sampleB * gainB)
-      writeSample16(output, 44 + partASize + i + ch * 2, mixed)
+
+      if (posOut + 1 < output.length) {
+        output.writeInt16LE(Math.max(-32768, Math.min(32767, mixed)), posOut)
+      }
     }
   }
 
-  // Adicionar resto de B
-  const restB = bufferB.subarray(fadeStartB + actualFadeBytes, dataBEnd)
-  return Buffer.concat([output, restB])
+  // Copiar parte B (sem início)
+  pcmB.copy(output, partASize + actualFadeBytes, actualFadeBytes, pcmB.length)
+
+  return output
 }
 
 // ============================================================
@@ -302,13 +316,14 @@ export function applyFadeOut(wavBuffer: Buffer, fadeOutMs: number): Buffer {
   const format = parseWavHeader(wavBuffer)
   if (!format || format.bitsPerSample !== 16) return wavBuffer
 
-  const fadeOutBytes = Math.min(msToBytes(fadeOutMs, format), format.dataSize)
+  const dataEnd = safeDataEnd(wavBuffer, format)
+  const fadeOutBytes = Math.min(msToBytes(fadeOutMs, format), dataEnd - 44)
   if (fadeOutBytes <= 0) return wavBuffer
 
   const output = Buffer.from(wavBuffer)
-  const fadeStart = 44 + format.dataSize - fadeOutBytes
+  const fadeStart = dataEnd - fadeOutBytes
 
-  for (let i = fadeStart; i < 44 + format.dataSize; i += 2) {
+  for (let i = fadeStart; i + 1 < dataEnd; i += 2) {
     const progress = (i - fadeStart) / fadeOutBytes
     const factor = 1 - progress
     const sample = readSample16(output, i)
@@ -323,12 +338,10 @@ export function applyFadeOut(wavBuffer: Buffer, fadeOutMs: number): Buffer {
 // ============================================================
 
 /**
- * Concatena múltiplos chunks com qualidade profissional:
- * 1. Trim de silêncio
- * 2. Normalização de volume
- * 3. Crossfade entre chunks
- * 4. Silêncio real entre frases
- * 5. Fade-out final
+ * Concatena múltiplos chunks com qualidade profissional.
+ * 
+ * v2: Trabalha com PCM cru internamente — sem headers no meio.
+ *     Bounds checking em todas as operações de leitura/escrita.
  */
 export function concatenateAudioBuffers(
   chunks: AudioChunk[],
@@ -340,7 +353,7 @@ export function concatenateAudioBuffers(
     throw new Error('Nenhum chunk de áudio para concatenar')
   }
 
-  // Se só tem 1 chunk, aplicar trim + fade-out
+  // Se só tem 1 chunk, aplicar trim + normalize + fade-out
   if (chunks.length === 1) {
     let buffer = chunks[0].buffer
     if (cfg.trimSilenceMs > 0) buffer = trimSilence(buffer, cfg.trimSilenceMs)
@@ -348,12 +361,13 @@ export function concatenateAudioBuffers(
     if (cfg.fadeOutMs > 0) buffer = applyFadeOut(buffer, cfg.fadeOutMs)
 
     const format = parseWavHeader(buffer)!
+    const actualDataSize = Math.min(format.dataSize, buffer.length - 44)
     return {
       buffer,
       format: 'wav',
-      totalDurationMs: Math.round(format.dataSize / bytesPerMs(format)),
+      totalDurationMs: Math.round(actualDataSize / bytesPerMs(format)),
       chunkCount: 1,
-      chunksInfo: [{ index: 0, durationMs: Math.round(format.dataSize / bytesPerMs(format)), pauseAfterMs: 0 }],
+      chunksInfo: [{ index: 0, durationMs: Math.round(actualDataSize / bytesPerMs(format)), pauseAfterMs: 0 }],
     }
   }
 
@@ -365,9 +379,11 @@ export function concatenateAudioBuffers(
   const format = parseWavHeader(chunks[0].buffer)!
   const chunksInfo: ConcatenationResult['chunksInfo'] = []
 
-  // Passo 1: Pré-processar cada chunk (trim + normalize)
-  const processedChunks = chunks.map((chunk, i) => {
-    let buf = chunk.buffer
+  // Passo 1: Pré-processar cada chunk (trim + normalize) e extrair PCM
+  const pcmChunks: Buffer[] = []
+
+  for (let i = 0; i < chunks.length; i++) {
+    let buf = chunks[i].buffer
 
     // Trim silêncio
     if (cfg.trimSilenceMs > 0) {
@@ -379,51 +395,52 @@ export function concatenateAudioBuffers(
       buf = normalizeVolume(buf, cfg.targetRmsDb)
     }
 
-    const fmt = parseWavHeader(buf)!
-    const durationMs = Math.round(fmt.dataSize / bytesPerMs(fmt))
-    chunksInfo.push({ index: i, durationMs, pauseAfterMs: chunk.pauseAfterMs })
+    // Extrair PCM cru
+    const { pcm } = extractPcmData(buf)
+    const durationMs = Math.round(pcm.length / bytesPerMs(format))
+    chunksInfo.push({ index: i, durationMs, pauseAfterMs: chunks[i].pauseAfterMs })
+    pcmChunks.push(pcm)
+  }
 
-    return { buffer: buf, durationMs }
-  })
+  // Passo 2: Concatenar PCM com silêncio + crossfade
+  let currentPcm = pcmChunks[0]
 
-  // Passo 2: Concatenar com crossfade + silêncio
-  let currentBuffer = processedChunks[0].buffer
-
-  for (let i = 1; i < processedChunks.length; i++) {
+  for (let i = 1; i < pcmChunks.length; i++) {
     const prevPauseMs = chunks[i - 1].pauseAfterMs
 
     if (prevPauseMs > 0) {
-      // Inserir silêncio entre chunks
+      // Inserir silêncio como PCM puro (sem header WAV!)
       const silenceBytes = msToBytes(prevPauseMs, format)
-      const silence = Buffer.alloc(silenceBytes)
-      const silenceWav = Buffer.concat([buildWavHeader(format, silenceBytes), silence])
-      currentBuffer = crossfadeBuffers(currentBuffer, silenceWav, format, 0)
+      const silence = Buffer.alloc(silenceBytes, 0) // PCM silêncio = zeros
+      currentPcm = Buffer.concat([currentPcm, silence])
     }
 
     // Crossfade + concatenar próximo chunk
-    currentBuffer = crossfadeBuffers(currentBuffer, processedChunks[i].buffer, format, cfg.crossfadeMs)
+    if (cfg.crossfadeMs > 0) {
+      currentPcm = crossfadePcm(currentPcm, pcmChunks[i], format, cfg.crossfadeMs)
+    } else {
+      currentPcm = Buffer.concat([currentPcm, pcmChunks[i]])
+    }
   }
 
-  // Passo 3: Fade-out final
-  if (cfg.fadeOutMs > 0) {
-    currentBuffer = applyFadeOut(currentBuffer, cfg.fadeOutMs)
-  }
+  // Passo 3: Montar WAV final (header + PCM)
+  const finalWav = Buffer.concat([
+    buildWavHeader(format, currentPcm.length),
+    currentPcm,
+  ])
 
-  const finalFormat = parseWavHeader(currentBuffer)!
-  const totalDurationMs = Math.round(finalFormat.dataSize / bytesPerMs(finalFormat))
+  // Passo 4: Fade-out final
+  const withFade = cfg.fadeOutMs > 0 ? applyFadeOut(finalWav, cfg.fadeOutMs) : finalWav
+
+  const finalFormat = parseWavHeader(withFade)!
+  const actualDataSize = Math.min(finalFormat.dataSize, withFade.length - 44)
+  const totalDurationMs = Math.round(actualDataSize / bytesPerMs(finalFormat))
 
   return {
-    buffer: currentBuffer,
+    buffer: withFade,
     format: 'wav',
     totalDurationMs,
     chunkCount: chunks.length,
     chunksInfo,
   }
-}
-
-/** Estima duração do WAV em ms */
-function estimateWavDuration(buffer: Buffer): number {
-  const format = parseWavHeader(buffer)
-  if (!format) return 0
-  return Math.round(format.dataSize / bytesPerMs(format))
 }

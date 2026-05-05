@@ -299,10 +299,7 @@ async function generateWithChunking(
   debug.log('Concatenacao', 'ok',
     `${concatenated.totalDurationMs}ms total (${concatenated.chunkCount} chunks, ${(concatenated.buffer.length / 1024).toFixed(1)}KB)`)
 
-  // 4. Aplicar fade-out suave (200ms) no final
-  const withFade = applyFadeOut(concatenated.buffer, 200)
-
-  return { finalBuffer: withFade, chunks }
+  return { finalBuffer: concatenated.buffer, chunks }
 }
 
 // ============================================================
