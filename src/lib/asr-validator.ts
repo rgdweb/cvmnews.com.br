@@ -10,7 +10,6 @@
  * Se ASR falhar/timar, retorna o áudio original (graceful degradation).
  */
 
-// @ts-expect-error — z-ai-web-dev-sdk é resolvido em runtime pelo Next.js
 import ZAI from 'z-ai-web-dev-sdk'
 
 // ============================================================
