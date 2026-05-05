@@ -17,6 +17,14 @@ export async function PUT(
     const { id } = await params
     const body = await req.json()
 
+    // Se trocou o audio, apaga o arquivo antigo do servidor
+    if (body.refAudioFilename !== undefined || body.refAudioPath !== undefined) {
+      const oldVariation = await db.voiceVariation.findUnique({ where: { id } })
+      if (oldVariation?.refAudioFilename && oldVariation.refAudioFilename !== body.refAudioFilename) {
+        await deleteFromAudioServer(oldVariation.refAudioFilename, 'ref')
+      }
+    }
+
     const variation = await db.voiceVariation.update({
       where: { id },
       data: {

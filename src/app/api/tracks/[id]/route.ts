@@ -17,6 +17,21 @@ export async function PUT(
     const { id } = await params
     const body = await req.json()
 
+    // Se trocou o audio, apaga o arquivo antigo do servidor
+    if (body.audioPath !== undefined) {
+      const oldTrack = await db.track.findUnique({ where: { id } })
+      if (oldTrack?.audioPath) {
+        const oldFilename = oldTrack.audioPath.split('/').pop()
+        if (oldFilename && oldFilename !== body.audioPath.split('/').pop()) {
+          try {
+            await deleteFromAudioServer(oldFilename, 'track')
+          } catch (err) {
+            console.error('[Track] Failed to delete old audio on update:', err)
+          }
+        }
+      }
+    }
+
     const track = await db.track.update({
       where: { id },
       data: {
