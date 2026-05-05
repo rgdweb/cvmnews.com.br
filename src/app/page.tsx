@@ -396,6 +396,11 @@ export default function VozProClient() {
       toast.error('Descreva a voz desejada (ex: female, low pitch, british accent)')
       return
     }
+    // Voice Design e Auto Voice so funcionam com OmniVoice
+    if ((voiceMode === 'design' || voiceMode === 'auto') && ttsModel !== 'omnivoice') {
+      toast.error('Voice Design e Auto Voice só funcionam com OmniVoice. Troque o modelo TTS.')
+      return
+    }
 
     setIsGenerating(true)
     setAudioUrl(null)
