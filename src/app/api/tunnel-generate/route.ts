@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateGeneratedAudio, shouldRetry, formatValidationLog, type ValidationResult } from '@/lib/asr-validator'
 
 // POST /api/tunnel-generate - Geracao direta via tunnel cloudflared
 // Sem HostGator intermediario - audio vai LIMPO pro GPU local
 // Usa os mesmos endpoints Gradio que o /api/generate usa pro HF Space
+//
+// CAMADA 2: ASR Validator — apos gerar, transcreve e compara com texto original.
+// Se detectar alucinacao ("to", "ba", outra lingua), regenera automaticamente.
 
 export const maxDuration = 300
 
 const HOSTGATOR_BASE = 'https://sorteiomax.com.br/omnivoice'
+
+// Configuração do ASR validator
+const ASR_MAX_RETRIES = 3  // max regenerações se ASR detectar problema
 
 function createDebug() {
   const steps: { time: string; step: string; status: string; detail?: string; duration?: number }[] = []
@@ -224,6 +231,43 @@ async function streamResult(
   }
 }
 
+/**
+ * Gera audio TTS (submit + stream + download) — uma tentativa
+ * Retorna o buffer do audio ou null se falhou
+ */
+async function generateOnce(
+  tunnelUrl: string,
+  data: unknown[],
+  debug: ReturnType<typeof createDebug>
+): Promise<{ buffer: Buffer; audioUrl: string; mimeType: string } | null> {
+  // Submeter job com retry
+  let eventId: string | null = null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      debug.log('Submit retry', 'warn', `Tentativa ${attempt + 1}/3`)
+      await new Promise(r => setTimeout(r, 3000))
+    }
+    eventId = await submitJob(tunnelUrl, data, debug)
+    if (eventId) break
+  }
+
+  if (!eventId) return null
+
+  // SSE Stream - receber resultado
+  const result = await streamResult(tunnelUrl, eventId, debug, 180000)
+  if (!result.audioUrl) return null
+
+  // Baixar audio gerado
+  const voiceRes = await fetch(result.audioUrl)
+  if (!voiceRes.ok) return null
+
+  const voiceBuffer = Buffer.from(await voiceRes.arrayBuffer())
+  const mimeType = result.audioUrl.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav'
+  debug.log('Download', 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB`)
+
+  return { buffer: voiceBuffer, audioUrl: result.audioUrl, mimeType }
+}
+
 // POST /api/tunnel-generate
 export async function POST(req: NextRequest) {
   const debug = createDebug()
@@ -241,6 +285,7 @@ export async function POST(req: NextRequest) {
       speed = 1,
       numStep = 32,
       guidanceScale = 2.0,
+      skipASR = false,  // permite pular ASR se necessario (fallback)
     } = body
 
     if (!text || !text.trim()) {
@@ -278,7 +323,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Montar dados do Gradio (mesmo formato que /api/generate usa pro HF Space)
-    const data = [
+    const gradioData = [
       text,
       language,
       {
@@ -301,51 +346,105 @@ export async function POST(req: NextRequest) {
 
     debug.log('Parametros', 'info', `lang:${language} speed:${speed} steps:${numStep} cfg:${guidanceScale}`)
 
-    // 5. Submeter job com retry
-    let eventId: string | null = null
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) {
-        debug.log('Submit retry', 'warn', `Tentativa ${attempt + 1}/3`)
-        await new Promise(r => setTimeout(r, 3000))
+    // =============================================================
+    // 5. GERAR + VALIDAR COM ASR (loop de qualidade)
+    // Gera o audio, valida com ASR, se ruim regenera até ASR_MAX_RETRIES
+    // Se ASR indisponível, retorna audio sem validação (graceful degradation)
+    // =============================================================
+    let bestResult: { buffer: Buffer; mimeType: string } | null = null
+    let bestValidation: ValidationResult | null = null
+    let validationAttempt = 0
+
+    for (validationAttempt = 1; validationAttempt <= ASR_MAX_RETRIES; validationAttempt++) {
+      if (validationAttempt > 1) {
+        debug.log('ASR Retry', 'warn', `Regenerando (tentativa ${validationAttempt}/${ASR_MAX_RETRIES})...`)
+        await new Promise(r => setTimeout(r, 2000)) // pequena pausa entre tentativas
       }
-      eventId = await submitJob(tunnelUrl, data, debug)
-      if (eventId) break
+
+      // 5a. Gerar audio
+      debug.log('Geracao', 'info', `Gerando audio (tentativa ${validationAttempt}/${ASR_MAX_RETRIES})...`)
+      const generated = await generateOnce(tunnelUrl, gradioData, debug)
+
+      if (!generated) {
+        debug.log('Geracao', 'error', 'Falha na geracao')
+        continue
+      }
+
+      // Sempre guarda o melhor resultado (primeiro que gerou)
+      if (!bestResult) {
+        bestResult = { buffer: generated.buffer, mimeType: generated.mimeType }
+      }
+
+      // 5b. Validar com ASR (se não foi desativado pelo frontend)
+      if (skipASR) {
+        debug.log('ASR', 'info', 'Validacao ASR desativada pelo frontend')
+        bestResult = { buffer: generated.buffer, mimeType: generated.mimeType }
+        bestValidation = null
+        break
+      }
+
+      debug.log('ASR', 'info', 'Validando audio gerado com ASR...')
+      const validation = await validateGeneratedAudio(
+        new Uint8Array(generated.buffer).buffer as ArrayBuffer,
+        text
+      )
+      debug.log('ASR', validation.valid ? 'ok' : 'warn', formatValidationLog(validation))
+      bestValidation = validation
+
+      // Se válido, usa esse audio!
+      if (validation.valid) {
+        bestResult = { buffer: generated.buffer, mimeType: generated.mimeType }
+        break
+      }
+
+      // Se inválido mas ASR não funcionou (graceful degradation), aceita
+      if (!shouldRetry(validation)) {
+        debug.log('ASR', 'info', 'ASR indisponível, aceitando audio sem validacao')
+        bestResult = { buffer: generated.buffer, mimeType: generated.mimeType }
+        break
+      }
+
+      // Inválido e vale retry — continua o loop
+      debug.log('ASR', 'warn', `Audio rejeitado, tentando novamente (${validationAttempt}/${ASR_MAX_RETRIES})`)
     }
 
-    if (!eventId) {
-      return NextResponse.json({ error: 'Falha ao enviar job para GPU', debug: debug.result() }, { status: 502 })
+    // 6. Verificar se conseguiu gerar pelo menos um audio
+    if (!bestResult) {
+      return NextResponse.json({
+        error: 'GPU nao conseguiu gerar audio apos varias tentativas',
+        debug: debug.result(),
+      }, { status: 500 })
     }
 
-    // 6. SSE Stream - receber resultado
-    debug.log('Geracao', 'info', 'Aguardando resultado da GPU...')
-    const result = await streamResult(tunnelUrl, eventId, debug, 180000)
+    // 7. Montar resposta
+    const voiceDataUri = `data:${bestResult.mimeType};base64,${bestResult.buffer.toString('base64')}`
 
-    if (!result.audioUrl) {
-      const userMsg = result.error === 'timeout'
-        ? 'GPU demorou demais. Tente novamente.'
-        : `Erro na geracao: ${result.error}`
-      return NextResponse.json({ error: userMsg, debug: debug.result() }, { status: 500 })
-    }
-
-    // 7. Baixar audio gerado e retornar como base64
-    debug.log('Download', 'info', 'Baixando audio gerado...')
-    const voiceRes = await fetch(result.audioUrl)
-    if (!voiceRes.ok) {
-      return NextResponse.json({ error: 'Falha ao baixar audio gerado', debug: debug.result() }, { status: 502 })
-    }
-    const voiceBuffer = Buffer.from(await voiceRes.arrayBuffer())
-    debug.log('Download', 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB`)
-
-    const voiceMimeType = result.audioUrl.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav'
-    const voiceDataUri = `data:${voiceMimeType};base64,${voiceBuffer.toString('base64')}`
-
-    debug.log('FINAL', 'ok', `Total: ${(debug.result().totalDuration / 1000).toFixed(1)}s`)
-
-    return NextResponse.json({
+    const response: Record<string, unknown> = {
       audioUrl: voiceDataUri,
       viaTunnel: true,
       debug: debug.result(),
-    })
+    }
+
+    // Incluir info da validação ASR no response (útil para debug e UI)
+    if (bestValidation) {
+      response.asrValidation = {
+        valid: bestValidation.valid,
+        attempts: validationAttempt,
+        transcription: bestValidation.transcription,
+        confidence: Math.round(bestValidation.confidence * 100),
+        wordCoverage: Math.round(bestValidation.wordCoverage * 100),
+        issues: bestValidation.issues,
+      }
+      // Se após todas tentativas ainda tá inválido, adiciona aviso
+      if (!bestValidation.valid) {
+        response.asrWarning = true
+        response.asrMessage = `Audio pode conter imperfeicoes apos ${ASR_MAX_RETRIES} tentativas. Tente outra voz ou texto mais curto.`
+      }
+    }
+
+    debug.log('FINAL', 'ok', `Total: ${(debug.result().totalDuration / 1000).toFixed(1)}s | ASR tentativas: ${validationAttempt}`)
+
+    return NextResponse.json(response)
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro interno'
     debug.log('EXCEPTION', 'error', msg)

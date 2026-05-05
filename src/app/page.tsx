@@ -506,6 +506,23 @@ export default function VozProClient() {
         toast.success('Áudio gerado com sucesso!')
       }
 
+      // Feedback do ASR Validator (camada 2 de qualidade)
+      if (data.asrWarning) {
+        toast.warning('Qualidade da voz', {
+          description: data.asrMessage || 'O audio pode conter imperfeicoes. Tente outra voz ou texto mais curto.',
+          duration: 6000,
+        })
+      } else if (data.asrValidation && !data.asrValidation.valid) {
+        // ASR rejeitou mas não houve retry (texto curto, etc)
+        console.warn('[VozPro] ASR rejeitou:', data.asrValidation)
+      } else if (data.asrValidation?.attempts > 1) {
+        // ASR regenerou automaticamente (tudo ok agora)
+        toast.success('Qualidade verificada', {
+          description: `Audio regenerado automaticamente (${data.asrValidation.attempts} tentativas).`,
+          duration: 4000,
+        })
+      }
+
       if (data.warning) {
         toast.warning(data.warning)
       }
