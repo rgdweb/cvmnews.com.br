@@ -504,9 +504,9 @@ export default function VozProClient() {
           referenceAudioUrl: voiceMode === 'clone' ? (uploadedVoiceUrl || selectedVariation?.refAudioServerUrl || '') : '',
           referenceAudioName: voiceMode === 'clone' ? (uploadedVoiceFile?.name || selectedVariation?.refAudioName || 'ref_audio.wav') : '',
           refText: '',
-          numStep: 16, // OmniVoice: 16 = rapido, 32 = qualidade
+          numStep: 32, // OmniVoice: 32 = qualidade (padrao), 16 = rapido mas pode errar palavras
           speed: 1.0,
-          language: 'Auto',
+          language: language, // usa o idioma selecionado pelo usuario (Portuguese, Auto, etc)
           // Voice Design params (usados pelo _design_fn endpoint)
           gender: isAutoMode ? 'Auto' : (isDesignMode ? designParams.gender : 'Auto'),
           age: isAutoMode ? 'Auto' : (isDesignMode ? designParams.age : 'Auto'),
