@@ -163,25 +163,25 @@ async function streamResult(
           debug.log('SSE Stream', 'ok', 'Evento COMPLETE recebido!')
           try {
             const resultData = JSON.parse(eventData)
-            // OmniVoice retorna [info_text, audio_output]
+            // Gradio retorna [audio_output (FileData), status_text]
             if (!Array.isArray(resultData) || resultData.length < 2) {
               return { audioUrl: null, error: 'Formato inesperado' }
             }
-            const infoText = resultData[0]
-            const audioOutput = resultData[1]
+            const audioOutput = resultData[0]
+            const statusText = resultData[1]
             let audioUrl: string | null = null
             if (audioOutput?.url) audioUrl = audioOutput.url
             else if (audioOutput?.path) audioUrl = `${baseUrl}/gradio_api/file=${audioOutput.path}`
             if (audioUrl) {
               debug.log('SSE Stream', 'ok', `Audio: ${audioUrl.substring(0, 80)}`)
-              // Extrair RTF do info text se disponivel
-              const rtfMatch = infoText?.match(/RTF[:\s]*([\d.]+)/)
+              // Extrair RTF do status text se disponivel
+              const rtfMatch = (statusText as string)?.match(/RTF[:\s]*([\d.]+)/)
               if (rtfMatch) {
                 debug.log('SSE Stream', 'ok', `RTF: ${rtfMatch[1]}`)
               }
               return { audioUrl, error: null }
             }
-            return { audioUrl: null, error: 'Sem URL no output' }
+            return { audioUrl: null, error: `Sem URL no output. status: ${statusText?.substring?.(0, 100) || 'vazio'}` }
           } catch { return { audioUrl: null, error: 'Parse error' } }
         }
 
