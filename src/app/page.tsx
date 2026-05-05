@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -11,7 +12,8 @@ import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import {
   AudioWaveform, Sparkles, Loader2, Download, Play, Pause, Square,
-  Volume2, Music, Mic, ChevronRight, Settings2, Globe, Bug, Copy, ChevronDown
+  Volume2, Music, Mic, ChevronRight, Settings2, Globe, Bug, Copy, ChevronDown,
+  Upload, CheckCircle2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
@@ -300,6 +302,13 @@ export default function VozProClient() {
   const [usePhpGenerate, setUsePhpGenerate] = useState(false)
   const [useTunnelGenerate, setUseTunnelGenerate] = useState(true) // GPU local via tunnel (padrao)
 
+  // Voice mode: clone (ref_audio) | design (instruct only) | auto (random)
+  const [voiceMode, setVoiceMode] = useState<'clone' | 'design' | 'auto'>('clone')
+  const [voiceDesignInstruct, setVoiceDesignInstruct] = useState('')
+  const [enableFrontendUpload, setEnableFrontendUpload] = useState(false) // liberado via admin
+  const [uploadedVoiceFile, setUploadedVoiceFile] = useState<File | null>(null)
+  const [uploadedVoiceUrl, setUploadedVoiceUrl] = useState<string | null>(null)
+
   const resultAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Get selected voice and variation
@@ -363,8 +372,14 @@ export default function VozProClient() {
       toast.error('Digite o texto para sintetizar')
       return
     }
-    if (!selectedVariationId) {
-      toast.error('Selecione uma variação de voz')
+
+    // Validar baseado no modo de voz
+    if (voiceMode === 'clone' && !selectedVariationId && !uploadedVoiceUrl) {
+      toast.error('Selecione uma variação de voz ou faça upload de um áudio')
+      return
+    }
+    if (voiceMode === 'design' && !voiceDesignInstruct.trim()) {
+      toast.error('Descreva a voz desejada (ex: female, low pitch, british accent)')
       return
     }
 
@@ -413,11 +428,30 @@ export default function VozProClient() {
 
       if (useTunnelGenerate) {
         // ===== TUNNEL DIRETO: Vercel -> GPU local via cloudflared =====
-        console.log('[VozPro] Gerando via tunnel (GPU local)...')
+        console.log(`[VozPro] Gerando via tunnel (GPU local)... modo: ${voiceMode}`)
+
+        // Determinar instruct baseado no modo
+        let finalInstruct = instructStr
+        if (voiceMode === 'design') {
+          finalInstruct = voiceDesignInstruct
+        }
+
+        // Determinar audio de referencia
+        let refUrl = selectedVariation?.refAudioServerUrl || body.refAudioUrl
+        let refName = body.refAudioName || 'ref_audio.wav'
+
+        // Se tem upload de voz do frontend, usa ele
+        if (voiceMode === 'clone' && uploadedVoiceUrl) {
+          refUrl = uploadedVoiceUrl
+          refName = uploadedVoiceFile?.name || 'uploaded_voice.wav'
+        }
+
         const tunnelBody = {
           ...body,
-          referenceAudioUrl: selectedVariation?.refAudioServerUrl || body.refAudioUrl,
-          referenceAudioName: body.refAudioName || 'ref_audio.wav',
+          referenceAudioUrl: voiceMode !== 'clone' ? undefined : refUrl,
+          referenceAudioName: voiceMode !== 'clone' ? undefined : refName,
+          instruct: finalInstruct,
+          voiceMode,
           useChunking: true,  // modo prosódia: gera frase por frase com pausas reais
         }
         res = await fetch('/api/tunnel-generate', {
@@ -801,6 +835,143 @@ export default function VozProClient() {
                     )}
                   </>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Voice Mode Selector + Upload + Design */}
+            <Card className="bg-white/5 border-white/10 backdrop-blur">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white flex items-center gap-2 text-lg">
+                  <Mic className="w-5 h-5 text-purple-400" />
+                  Modo de Voz
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Mode buttons */}
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setVoiceMode('clone')}
+                    className={`p-3 rounded-xl border text-center transition-all ${
+                      voiceMode === 'clone'
+                        ? 'border-violet-500 bg-violet-500/20'
+                        : 'border-white/10 bg-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="text-lg mb-1">🎙️</div>
+                    <div className={`text-xs font-medium ${voiceMode === 'clone' ? 'text-violet-200' : 'text-slate-400'}`}>
+                      Clonar Voz
+                    </div>
+                    <div className="text-[10px] text-slate-600 mt-1">Usa áudio de referência</div>
+                  </button>
+                  <button
+                    onClick={() => setVoiceMode('design')}
+                    className={`p-3 rounded-xl border text-center transition-all ${
+                      voiceMode === 'design'
+                        ? 'border-purple-500 bg-purple-500/20'
+                        : 'border-white/10 bg-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="text-lg mb-1">✨</div>
+                    <div className={`text-xs font-medium ${voiceMode === 'design' ? 'text-purple-200' : 'text-slate-400'}`}>
+                      Voice Design
+                    </div>
+                    <div className="text-[10px] text-slate-600 mt-1">Cria voz com descrição</div>
+                  </button>
+                  <button
+                    onClick={() => setVoiceMode('auto')}
+                    className={`p-3 rounded-xl border text-center transition-all ${
+                      voiceMode === 'auto'
+                        ? 'border-blue-500 bg-blue-500/20'
+                        : 'border-white/10 bg-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="text-lg mb-1">🎲</div>
+                    <div className={`text-xs font-medium ${voiceMode === 'auto' ? 'text-blue-200' : 'text-slate-400'}`}>
+                      Voz Auto
+                    </div>
+                    <div className="text-[10px] text-slate-600 mt-1">Modelo escolhe sozinho</div>
+                  </button>
+                </div>
+
+                {/* Voice Design input */}
+                {voiceMode === 'design' && (
+                  <div className="space-y-2 pt-2 border-t border-white/10">
+                    <label className="text-sm text-slate-400">Descreva a voz desejada</label>
+                    <Input
+                      value={voiceDesignInstruct}
+                      onChange={(e) => setVoiceDesignInstruct(e.target.value)}
+                      placeholder="female, low pitch, british accent"
+                      className="bg-white/5 border-white/10 text-white"
+                    />
+                    <p className="text-[10px] text-slate-600">
+                      Combine atributos: gender (male/female), pitch (low/high), accent (british/brazilian), age (young/old), style (whisper)
+                    </p>
+                  </div>
+                )}
+
+                {/* Upload voz (no modo clone) */}
+                {voiceMode === 'clone' && (
+                  <div className="space-y-2 pt-2 border-t border-white/10">
+                    <label className="text-sm text-slate-400">Upload de Voz (opcional)</label>
+                    <div className="flex items-center gap-3">
+                      <label className="cursor-pointer px-4 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-sm text-slate-300 transition-colors">
+                        <input
+                          type="file"
+                          accept="audio/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0]
+                            if (!file) return
+                            setUploadedVoiceFile(file)
+                            toast.info('Enviando áudio...')
+                            const formData = new FormData()
+                            formData.append('file', file)
+                            try {
+                              const res = await fetch('/api/upload-voice', {
+                                method: 'POST',
+                                body: formData,
+                              })
+                              const data = await res.json()
+                              if (data.serverUrl) {
+                                setUploadedVoiceUrl(data.serverUrl)
+                                toast.success(`Áudio "${file.name}" carregado!`)
+                              } else {
+                                toast.error(data.error || 'Falha no upload')
+                              }
+                            } catch {
+                              toast.error('Erro ao enviar áudio')
+                            }
+                          }}
+                          className="hidden"
+                        />
+                        <Upload className="w-4 h-4 inline mr-1" />
+                        Enviar Áudio
+                      </label>
+                      {uploadedVoiceUrl && (
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-green-400" />
+                          <span className="text-xs text-green-300 truncate max-w-[150px]">
+                            {uploadedVoiceFile?.name}
+                          </span>
+                          <button
+                            onClick={() => { setUploadedVoiceUrl(null); setUploadedVoiceFile(null) }}
+                            className="text-slate-500 hover:text-red-400 text-xs"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-600">Áudio de 3-10 segundos. Substitui a voz selecionada acima.</p>
+                  </div>
+                )}
+
+                {/* Pronúncia CMU */}
+                <div className="space-y-2 pt-2 border-t border-white/10">
+                  <label className="text-sm text-slate-400">Dica: Controle de Pronúncia</label>
+                  <p className="text-[10px] text-slate-600">
+                    Use colchetes para corrigir pronúncia: "He plays the [B EY1 S] guitar"
+                  </p>
+                </div>
               </CardContent>
             </Card>
 

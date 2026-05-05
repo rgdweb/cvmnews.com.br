@@ -363,6 +363,7 @@ export async function POST(req: NextRequest) {
       guidanceScale = 2.0,
       skipASR = false,
       useChunking = true,  // CHUNKING ativo por padrao (controle de prosódia)
+      voiceMode = 'clone', // 'clone' (ref_audio) | 'design' (instruct only) | 'auto' (nenhum)
     } = body
 
     if (!text || !text.trim()) {
@@ -373,43 +374,56 @@ export async function POST(req: NextRequest) {
     debug.log('Tunnel', 'info', 'Descobrindo URL do tunnel...')
     const tunnelUrl = await getTunnelUrl(debug)
 
-    // 2. Obter audio de referencia
-    debug.log('Ref Audio', 'info', 'Baixando audio de referencia...')
-    let audioBuffer: ArrayBuffer
+    // 2. Obter audio de referencia (APENAS no modo clone)
+    debug.log('Voice Mode', 'info', `Modo: ${voiceMode}`)
+    let audioBuffer: ArrayBuffer | null = null
+    let fileName = 'reference.wav'
+    let filePath: string | null = null
 
-    if (referenceAudioBase64) {
-      const base64Data = referenceAudioBase64.replace(/^data:audio\/\w+;base64,/, '')
-      audioBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0)).buffer
-      debug.log('Ref Audio', 'ok', `Base64: ${(audioBuffer.byteLength / 1024).toFixed(1)}KB`)
-    } else if (referenceAudioUrl) {
-      const audioRes = await fetch(referenceAudioUrl)
-      if (!audioRes.ok) throw new Error('Falha ao baixar audio de referencia')
-      audioBuffer = await audioRes.arrayBuffer()
-      debug.log('Ref Audio', 'ok', `Download: ${(audioBuffer.byteLength / 1024).toFixed(1)}KB`)
-    } else {
-      return NextResponse.json({ error: 'Audio de referencia obrigatório', debug: debug.result() }, { status: 400 })
-    }
+    if (voiceMode === 'clone') {
+      debug.log('Ref Audio', 'info', 'Baixando audio de referencia...')
+      if (referenceAudioBase64) {
+        const base64Data = referenceAudioBase64.replace(/^data:audio\/\w+;base64,/, '')
+        audioBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0)).buffer
+        debug.log('Ref Audio', 'ok', `Base64: ${(audioBuffer.byteLength / 1024).toFixed(1)}KB`)
+      } else if (referenceAudioUrl) {
+        const audioRes = await fetch(referenceAudioUrl)
+        if (!audioRes.ok) throw new Error('Falha ao baixar audio de referencia')
+        audioBuffer = await audioRes.arrayBuffer()
+        debug.log('Ref Audio', 'ok', `Download: ${(audioBuffer.byteLength / 1024).toFixed(1)}KB`)
+      } else {
+        return NextResponse.json({ error: 'Audio de referencia obrigatório no modo clone', debug: debug.result() }, { status: 400 })
+      }
 
-    const fileName = referenceAudioName || 'reference.wav'
+      fileName = referenceAudioName || 'reference.wav'
 
-    // 3. Upload pro Gradio via tunnel (UMA VEZ — referencia compartilhada entre chunks)
-    debug.log('Upload', 'info', 'Enviando audio pro Gradio...')
-    const filePath = await uploadToGradio(tunnelUrl, audioBuffer, fileName, debug)
-    if (!filePath) {
-      return NextResponse.json({ error: 'Falha no upload do audio', debug: debug.result() }, { status: 502 })
+      // 3. Upload pro Gradio via tunnel (UMA VEZ — referencia compartilhada entre chunks)
+      debug.log('Upload', 'info', 'Enviando audio pro Gradio...')
+      filePath = await uploadToGradio(tunnelUrl, audioBuffer, fileName, debug)
+      if (!filePath) {
+        return NextResponse.json({ error: 'Falha no upload do audio', debug: debug.result() }, { status: 502 })
+      }
+    } else if (voiceMode === 'design') {
+      if (!instruct || !instruct.trim()) {
+        return NextResponse.json({ error: 'Instruct obrigatório no modo Voice Design (ex: female, low pitch)', debug: debug.result() }, { status: 400 })
+      }
+      debug.log('Voice Design', 'ok', `Instruct: "${instruct}" (sem audio de referencia)`)
+    } else if (voiceMode === 'auto') {
+      debug.log('Auto Voice', 'ok', 'Voz automatica — modelo escolhe sozinho')
     }
 
     // 4. Montar dados BASE do Gradio (texto será substituído por chunk)
+    // No modo design/auto, ref_audio é null (vazio)
     const gradioBaseData = [
       text,  // placeholder — será substituído por cada chunk
       language,
-      {
+      filePath ? {
         path: filePath,
         orig_name: fileName,
         mime_type: fileName.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav',
         is_stream: false,
         meta: { _type: 'gradio.FileData' },
-      },
+      } : null, // null no modo design/auto
       refText,
       instruct || '',
       numStep || 32,
