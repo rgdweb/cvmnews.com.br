@@ -346,6 +346,7 @@ export default function VozProClient() {
   const [usePhpGenerate, setUsePhpGenerate] = useState(false)
   const [useTunnelGenerate, setUseTunnelGenerate] = useState(true) // GPU local via tunnel (padrao)
   const [ttsModel, setTtsModel] = useState<'f5tts' | 'omnivoice'>('f5tts') // F5-TTS (padrao) ou OmniVoice (rapido)
+  const [omnivoicePhpUrl, setOmnivoicePhpUrl] = useState<string | null>(null) // PHP direto disponivel pro OmniVoice?
 
   // Voice mode: clone (ref_audio) | design (instruct only) | auto (random)
   const [voiceMode, setVoiceMode] = useState<'clone' | 'design' | 'auto'>('clone')
@@ -393,6 +394,16 @@ export default function VozProClient() {
           const configData = await configRes.json()
           setUsePhpGenerate(!!configData.phpServerUrl)
           setUseTunnelGenerate(true)
+          // Verificar se OmniVoice PHP direto esta disponivel
+          if (configData.phpServerUrl) {
+            try {
+              const ovTokenRes = await fetch('/api/omnivoice-token')
+              if (ovTokenRes.ok) {
+                const ovTokenData = await ovTokenRes.json()
+                if (ovTokenData.generateUrl) setOmnivoicePhpUrl(ovTokenData.generateUrl)
+              }
+            } catch { /* OmniVoice PHP nao disponivel */ }
+          }
         }
         if (settingsRes.ok) {
           const settingsData = await settingsRes.json()
@@ -490,8 +501,6 @@ export default function VozProClient() {
 
       // ===== OMNIVOICE: Modelo rapido (RTF 0.025) =====
       if (ttsModel === 'omnivoice') {
-        console.log(`[VozPro] Gerando via OmniVoice... modo: ${voiceMode}`)
-
         // Design: parseia texto para dropdowns do OmniVoice. Auto: tudo Auto. Clone: não usa.
         const isAutoMode = voiceMode === 'auto'
         const isDesignMode = voiceMode === 'design'
@@ -515,12 +524,46 @@ export default function VozProClient() {
           accent: isAutoMode ? 'Auto' : (isDesignMode ? designParams.accent : 'Auto'),
         }
 
-        res = await fetch('/api/omnivoice-generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(ovBody),
-          signal: controller.signal,
-        })
+        if (omnivoicePhpUrl) {
+          // ===== OMNIVOICE PHP DIRETO: browser -> PHP sorteiomax -> tunnel -> GPU (ZERO Vercel) =====
+          console.log('[VozPro] Gerando via OmniVoice PHP direto (bypassa Vercel)...')
+          const tokenRes = await fetch('/api/omnivoice-token')
+          if (!tokenRes.ok) {
+            toast.error('Erro ao obter token OmniVoice')
+            return
+          }
+          const { generateUrl: phpDirectUrl, token } = await tokenRes.json()
+
+          if (!phpDirectUrl || !token) {
+            toast.error('OmniVoice PHP nao configurado, usando Vercel...')
+            // Fallback pra Vercel
+            res = await fetch('/api/omnivoice-generate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(ovBody),
+              signal: controller.signal,
+            })
+          } else {
+            res = await fetch(phpDirectUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Generate-Token': token,
+              },
+              body: JSON.stringify(ovBody),
+              signal: controller.signal,
+            })
+          }
+        } else {
+          // ===== OMNIVOICE VIA VERCEL (fallback) =====
+          console.log('[VozPro] Gerando via OmniVoice via Vercel (sem PHP direto)...')
+          res = await fetch('/api/omnivoice-generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(ovBody),
+            signal: controller.signal,
+          })
+        }
       } else if (useTunnelGenerate) {
         // ===== TUNNEL DIRETO: Vercel -> GPU local via cloudflared =====
         console.log(`[VozPro] Gerando via tunnel (GPU local)... modo: ${voiceMode}`)
@@ -753,7 +796,7 @@ export default function VozProClient() {
       setIsGenerating(false)
       setGeneratingTime(0)
     }
-  }, [text, selectedVariationId, language, speed, numStep, guidanceScale, trackEnabled, selectedTrackId, trackVolume, duckVolume, fadeInMs, duckFadeMs, unduckFadeMs, fadeOutMs, musicStartLeadMs])
+  }, [text, selectedVariationId, language, speed, numStep, guidanceScale, trackEnabled, selectedTrackId, trackVolume, duckVolume, fadeInMs, duckFadeMs, unduckFadeMs, fadeOutMs, musicStartLeadMs, omnivoicePhpUrl])
 
   // Get the active audio URL
   const activeAudioUrl = mixedAudioUrl || audioUrl
