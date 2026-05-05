@@ -2,12 +2,15 @@
  * TTS Text Preprocessor — Melhora a interpretação de pontuação pelo F5-TTS
  * 
  * O F5-TTS tende a:
- * - Ignorar vírgulas e pontos (fala tudo junto)
- * - Colar a última sílaba de uma palavra com a primeira da próxima
+ * - Ignorar pontos/vírgulas (fala tudo junto)
+ * - Cortar a última palavra da frase (não finaliza direito)
  * - Não fazer pausas entre frases
  * 
- * Este módulo pré-processa o texto ANTES de enviar pro modelo,
- * forçando pausas naturais sem alterar o conteúdo.
+ * ATENÇÃO: O modelo LÊ os caracteres literais. Não adicionar "..." porque
+ * ele vai TENTAR FALAR "ponto ponto ponto". Em vez disso, usar:
+ * - Newlines (\n) entre frases = quebra de sentença natural do modelo
+ * - Espaços extras ao redor de pontuação = micro-pausa
+ * - Repetir última palavra levemente no final = garante que finalize
  */
 
 // ============================================================
@@ -15,21 +18,21 @@
 // ============================================================
 
 interface PreprocessConfig {
-  enabled: boolean           // master switch
-  strongPunctuation: boolean // usa ... para pontos (! ? .)
-  commaPause: boolean        // adiciona pausa depois de vírgulas
-  sentenceBreak: boolean     // quebra frases longas
-  maxSentenceLength: number  // max palavras por frase antes de quebrar
-  removeDoubleSpaces: boolean
+  enabled: boolean
+  useNewlines: boolean     // quebra de linha entre frases (pause natural)
+  commaSpace: boolean      // espaço extra depois de vírgula
+  repeatLastWord: boolean  // repete última palavra com pontuação (evita corte)
+  sentenceBreak: boolean   // quebra frases muito longas
+  maxSentenceLength: number
 }
 
 const DEFAULT_CONFIG: PreprocessConfig = {
   enabled: true,
-  strongPunctuation: true,
-  commaPause: true,
+  useNewlines: true,
+  commaSpace: true,
+  repeatLastWord: true,    // repete ultima palavra da frase (evita corte no final)
   sentenceBreak: true,
-  maxSentenceLength: 25,
-  removeDoubleSpaces: true,
+  maxSentenceLength: 20,
 }
 
 // ============================================================
@@ -37,128 +40,134 @@ const DEFAULT_CONFIG: PreprocessConfig = {
 // ============================================================
 
 /**
- * Pré-processa texto para TTS — adiciona pausas e melhora pontuação
+ * Pré-processa texto para TTS
  * 
  * Transformações:
- * - "." "!" "?" → " ... " (pausa longa)
- * - "," → " , " (pausa curta com espaço)
- * - ";" ":" → " , " (pausa média)
- * - Frases muito longas → quebra com " ... "
- * - "..." → mantém (já é pausa)
- * - Aspas → mantém
+ * - ". ! ?" → ".\n" (newline = quebra de sentença forte)
+ * - "," → ", " (espaço extra = micro-pausa)
+ * - ";" ":" → ".\n" (quebra de sentença média)
+ * - Frases longas → quebra com newline
+ * - NÃO adiciona caracteres faláveis (!!!)
  */
 export function preprocessTTS(text: string, config: Partial<PreprocessConfig> = {}): string {
   const cfg = { ...DEFAULT_CONFIG, ...config }
-  
+
   if (!cfg.enabled) return text
 
   let result = text
-  
-  // 1. Preservar reticências (não dobrar)
-  // Já tem "..." → mantém como está
-  
-  // 2. Pontuação forte (. ! ?) → " ..." (força pausa longa)
-  if (cfg.strongPunctuation) {
-    result = result.replace(/([.!?])\s*/g, ' ... ')
-    
-    // Mas se já tinha "..." antes da pontuação, limpa
-    result = result.replace(/\.{4,}/g, '...')
-    result = result.replace(/\.\s*\.\s*\.\s*[.!?]/g, '...')
+
+  // 1. Reticências existentes → newline (são usadas como pausa, converter para quebra)
+  result = result.replace(/\.{3,}/g, '.\n')
+
+  // 2. Pontuação forte (. ! ?) → newline (quebra de sentença)
+  if (cfg.useNewlines) {
+    // Cada pontuação forte vira uma nova linha
+    result = result.replace(/([.!?])\s*/g, '$1\n')
   }
-  
-  // 3. Vírgula → " , " (pausa curta)
-  if (cfg.commaPause) {
-    result = result.replace(/,\s*/g, ' , ')
+
+  // 3. Vírgula → espaço extra depois (micro-pausa, sem adicionar caracteres)
+  if (cfg.commaSpace) {
+    result = result.replace(/,\s*/g, ',  ')  // 2 espaços depois de vírgula
   }
-  
-  // 4. Ponto e vírgula / dois pontos → " , " (pausa média)
-  result = result.replace(/[;:]\s*/g, ' , ')
-  
-  // 5. Frases muito longas → quebrar a cada N palavras
+
+  // 4. Ponto e vírgula / dois pontos → newline (pausa média)
+  result = result.replace(/[;:]\s*/g, '.\n')
+
+  // 5. Limpar newlines múltiplos
+  result = result.replace(/\n{2,}/g, '\n')
+
+  // 6. Limpar espaços múltiplos (dentro de cada linha)
+  result = result.split('\n').map(line => line.trim().replace(/  +/g, ' ')).join('\n')
+
+  // 7. Frases muito longas → quebrar com newline
   if (cfg.sentenceBreak) {
     result = breakLongSentences(result, cfg.maxSentenceLength)
   }
-  
-  // 6. Limpar espaços múltiplos (mas preservar espaços antes de pontuação)
-  if (cfg.removeDoubleSpaces) {
-    result = result.replace(/  +/g, ' ')
+
+  // 8. Repetir última palavra de cada frase (opcional — para vozes que cortam)
+  if (cfg.repeatLastWord) {
+    result = repeatLastWordOfSentences(result)
   }
-  
-  // 7. Limpar espaços no inicio/fim
+
+  // 9. Limpar linhas vazias
+  result = result.split('\n').filter(line => line.trim().length > 0).join('\n')
+
+  // 10. Trim final
   result = result.trim()
-  
-  // 8. Remover pontuação solta no final (ex: "texto ... " → "texto ...")
-  result = result.replace(/\s+([.,;:!?])\s*$/g, '$1')
-  
+
   return result
+}
+
+// ============================================================
+// REPETIR ÚLTIMA PALAVRA (opcional)
+// ============================================================
+
+/**
+ * Repete a última palavra de cada frase com pontuação.
+ * Ex: "Olá, seja bem-vindo à nossa plataforma." 
+ * → "Olá, seja bem-vindo à nossa plataforma. plataforma."
+ * 
+ * Isso faz o modelo articular a última palavra duas vezes,
+ * garantindo que ela saia completa na segunda vez.
+ */
+function repeatLastWordOfSentences(text: string): string {
+  return text.split('\n').map(line => {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.length < 5) return trimmed
+
+    // Pega a última palavra (sem pontuação)
+    const words = trimmed.split(/\s+/)
+    const lastWord = words[words.length - 1].replace(/[,;:.!?]+$/, '')
+    
+    if (lastWord.length < 3) return trimmed // ignora palavras muito curtas
+
+    // Repete a última palavra com ponto
+    return trimmed + ' ' + lastWord + '.'
+  }).join('\n')
 }
 
 // ============================================================
 // QUEBRA DE FRASES LONGAS
 // ============================================================
 
-/**
- * Quebra frases com mais de maxWords palavras.
- * Insere " ... " no ponto mais natural (após vírgula, ou a cada maxWords).
- */
 function breakLongSentences(text: string, maxWords: number): string {
-  // Divide em segmentos pelas reticências/pausas (não quebra dentro delas)
-  const segments = text.split(/(\s*\.{3}\s*)/)
-  
-  const result = segments.map(segment => {
-    // Se é reticência, mantém
-    if (/^\s*\.{3}\s*$/.test(segment)) return segment
-    
-    // Verifica se o segmento é muito longo
-    const words = segment.trim().split(/\s+/)
-    if (words.length <= maxWords) return segment
-    
-    // Procura pontos naturais para quebrar (vírgulas, "e", "mas", "porque", etc)
+  return text.split('\n').map(line => {
+    const words = line.trim().split(/\s+/)
+    if (words.length <= maxWords) return line.trim()
+
+    // Procura ponto natural para quebrar
     return breakAtNaturalPoints(words, maxWords)
-  })
-  
-  return result.join('')
+  }).join('\n')
 }
 
-/**
- * Quebra array de palavras nos pontos naturais de respiração
- */
 function breakAtNaturalPoints(words: string[], maxWords: number): string {
-  const breakWords = ['e', 'mas', 'porem', 'contudo', 'porque', 'pois', 'portanto', 'alem', 'tambem', 'quando', 'onde', 'como', 'que', 'para', 'com', 'mais', 'nao', 'se', 'ou']
-  
-  const result: string[] = []
-  let count = 0
-  
-  for (let i = 0; i < words.length; i++) {
-    const word = words[i]
-    const isBreakPoint = breakWords.includes(word.toLowerCase().replace(/[,;:.!?]/g, ''))
-    
-    result.push(word)
-    count++
-    
-    // Se atingiu o limite e a próxima palavra é um ponto natural de pausa
-    if (count >= maxWords - 3 && i < words.length - 1) {
-      const nextWord = words[i + 1].toLowerCase().replace(/[,;:.!?]/g, '')
-      
-      if (isBreakPoint || breakWords.includes(nextWord)) {
-        // Remove pontuação da última palavra e adiciona ...
-        const lastIdx = result.length - 1
-        const lastWord = result[lastIdx].replace(/[,;:.!?]+$/, '')
-        result[lastIdx] = lastWord
-        result.push(' ...')
-        count = 0
-      }
+  const breakWords = ['e', 'mas', 'porem', 'contudo', 'porque', 'pois', 'portanto', 'alem', 'tambem', 'quando', 'onde', 'como', 'para', 'com', 'mais', 'nao', 'se', 'ou']
+
+  const sentences: string[][] = [[]]
+  let currentCount = 0
+
+  for (const word of words) {
+    const cleanWord = word.toLowerCase().replace(/[,;:.!?]/g, '')
+    const isBreakWord = breakWords.includes(cleanWord)
+
+    sentences[sentences.length - 1].push(word)
+    currentCount++
+
+    // Quebra se atingiu o limite e a próxima é ponto natural
+    if (currentCount >= maxWords && isBreakWord) {
+      sentences.push([])
+      currentCount = 0
     }
-    
-    // Hard limit — força quebra
-    if (count >= maxWords) {
-      const lastIdx = result.length - 1
-      const lastWord = result[lastIdx].replace(/[,;:.!?]+$/, '')
-      result[lastIdx] = lastWord
-      result.push(' ...')
-      count = 0
+
+    // Hard limit
+    if (currentCount >= maxWords + 5) {
+      sentences.push([])
+      currentCount = 0
     }
   }
-  
-  return result.join(' ')
+
+  return sentences
+    .map(s => s.join(' ').trim())
+    .filter(s => s.length > 0)
+    .join('\n')
 }
