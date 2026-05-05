@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -55,4 +55,12 @@ model Track {
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model SystemSetting {
+  id    String @id @default(cuid())
+  key   String @unique // e.g. "enableVoiceUpload"
+  value String @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

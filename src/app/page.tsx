@@ -321,10 +321,11 @@ export default function VozProClient() {
     const loadData = async () => {
       setLoading(true)
       try {
-        const [voicesRes, tracksRes, configRes] = await Promise.all([
+        const [voicesRes, tracksRes, configRes, settingsRes] = await Promise.all([
           fetch('/api/voices'),
           fetch('/api/tracks'),
           fetch('/api/generate-config'),
+          fetch('/api/settings'),
         ])
         if (voicesRes.ok) {
           const voicesData = await voicesRes.json()
@@ -347,6 +348,10 @@ export default function VozProClient() {
           setUsePhpGenerate(!!configData.phpServerUrl)
           // Se tem tunnel disponivel, usa ele por padrao (prioridade: tunnel > php > hf)
           setUseTunnelGenerate(true)
+        }
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json()
+          setEnableFrontendUpload(!!settingsData.enableVoiceUpload)
         }
       } catch {
         toast.error('Erro ao carregar dados')
@@ -909,8 +914,8 @@ export default function VozProClient() {
                   </div>
                 )}
 
-                {/* Upload voz (no modo clone) */}
-                {voiceMode === 'clone' && (
+                {/* Upload voz (no modo clone) - somente se liberado pelo admin */}
+                {voiceMode === 'clone' && enableFrontendUpload && (
                   <div className="space-y-2 pt-2 border-t border-white/10">
                     <label className="text-sm text-slate-400">Upload de Voz (opcional)</label>
                     <div className="flex items-center gap-3">

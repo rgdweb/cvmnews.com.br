@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import {
   AudioWaveform, LogOut, Plus, Trash2, Edit, Upload, Music, Mic,
-  Loader2, RefreshCw, Volume2, FileAudio, CheckCircle2
+  Loader2, RefreshCw, Volume2, FileAudio, CheckCircle2, Settings2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
@@ -250,6 +250,10 @@ export default function AdminDashboard() {
   // Pending track file (not uploaded yet, waiting for save)
   const [pendingTrackFile, setPendingTrackFile] = useState<{ blob: Blob; name: string } | null>(null)
 
+  // Settings state
+  const [enableVoiceUpload, setEnableVoiceUpload] = useState(false)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
+
   // Check auth
   useEffect(() => {
     fetch('/api/auth/verify').then(res => res.json()).then(data => {
@@ -265,14 +269,20 @@ export default function AdminDashboard() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [voicesRes, tracksRes, configRes] = await Promise.all([
+      const [voicesRes, tracksRes, configRes, settingsRes] = await Promise.all([
         fetch('/api/admin/voices'),
         fetch('/api/admin/tracks'),
         fetch('/api/server-config'),
+        fetch('/api/admin/settings'),
       ])
       if (voicesRes.ok) setVoices(await voicesRes.json())
       if (tracksRes.ok) setTracks(await tracksRes.json())
       if (configRes.ok) setAudioServerConfig(await configRes.json())
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json()
+        setEnableVoiceUpload(settingsData.enableVoiceUpload === 'true')
+        setSettingsLoaded(true)
+      }
     } catch {
       toast.error('Erro ao carregar dados')
     } finally {
@@ -665,6 +675,22 @@ export default function AdminDashboard() {
     }
   }
 
+  // --- SETTINGS ---
+  const handleToggleVoiceUpload = async () => {
+    const newValue = !enableVoiceUpload
+    try {
+      await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'enableVoiceUpload', value: String(newValue) }),
+      })
+      setEnableVoiceUpload(newValue)
+      toast.success(newValue ? 'Upload de voz ativado no painel do cliente' : 'Upload de voz desativado')
+    } catch {
+      toast.error('Erro ao salvar configuração')
+    }
+  }
+
   if (!authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
@@ -713,6 +739,10 @@ export default function AdminDashboard() {
             <TabsTrigger value="tracks" className="data-[state=active]:bg-violet-600 data-[state=active]:text-white gap-2">
               <Music className="w-4 h-4" />
               Trilhas ({tracks.length})
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="data-[state=active]:bg-violet-600 data-[state=active]:text-white gap-2">
+              <Settings2 className="w-4 h-4" />
+              Config
             </TabsTrigger>
           </TabsList>
 
@@ -1396,6 +1426,48 @@ export default function AdminDashboard() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          {/* SETTINGS TAB */}
+          <TabsContent value="settings" className="space-y-4 mt-4">
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Settings2 className="w-5 h-5 text-violet-400" />
+                  Configurações do Sistema
+                </CardTitle>
+                <CardDescription className="text-slate-400">
+                  Controle o que os clientes podem acessar no painel principal
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Toggle: Upload de Voz */}
+                <div className="flex items-center justify-between p-4 rounded-lg bg-slate-900/50 border border-slate-700">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Upload className="w-4 h-4 text-slate-400" />
+                      <Label className="text-sm font-medium text-white">Upload de Voz no Cliente</Label>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {enableVoiceUpload
+                        ? 'Os clientes podem enviar proprios audios de referencia para clonar vozes'
+                        : 'Os clientes so podem usar as vozes cadastradas pelo admin'}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settingsLoaded ? enableVoiceUpload : false}
+                    onCheckedChange={handleToggleVoiceUpload}
+                  />
+                </div>
+
+                {!settingsLoaded && (
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Carregando configurações...
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
