@@ -397,10 +397,14 @@ export async function POST(req: NextRequest) {
         break
       }
 
-      // Se inválido mas ASR não funcionou (graceful degradation), aceita
+      // Se inválido, checa se vale retry
       if (!shouldRetry(validation)) {
-        debug.log('ASR', 'info', 'ASR indisponível, aceitando audio sem validacao')
+        const reason = validation.method === 'unavailable'
+          ? 'ASR e duracao indisponiveis'
+          : 'validacao passou por outro metodo'
+        debug.log('ASR', 'info', `Aceitando audio (${reason})`)
         bestResult = { buffer: generated.buffer, mimeType: generated.mimeType }
+        bestValidation = validation
         break
       }
 
@@ -430,9 +434,10 @@ export async function POST(req: NextRequest) {
       response.asrValidation = {
         valid: bestValidation.valid,
         attempts: validationAttempt,
+        method: bestValidation.method,
         transcription: bestValidation.transcription,
         confidence: Math.round(bestValidation.confidence * 100),
-        wordCoverage: Math.round(bestValidation.wordCoverage * 100),
+        wordCoverage: bestValidation.wordCoverage >= 0 ? Math.round(bestValidation.wordCoverage * 100) : 'N/A',
         issues: bestValidation.issues,
       }
       // Se após todas tentativas ainda tá inválido, adiciona aviso
