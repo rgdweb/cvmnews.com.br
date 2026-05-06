@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
       guidanceScale = 2.0,
       denoise = true,
       preprocess = true,
-      postprocess = true,
+      postprocess = false,
       language = 'Auto',       // Auto = detectar
       // Voice Design params (usados no modo design)
       gender = 'Auto',

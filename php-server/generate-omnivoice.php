@@ -118,7 +118,7 @@ $numStep = $input['numStep'] ?? 32;
 $guidanceScale = $input['guidanceScale'] ?? 2.0;
 $denoise = isset($input['denoise']) ? ($input['denoise'] === true || $input['denoise'] === 'true' || $input['denoise'] === 1) : true;
 $preprocess = isset($input['preprocess']) ? ($input['preprocess'] === true || $input['preprocess'] === 'true' || $input['preprocess'] === 1) : true;
-$postprocess = isset($input['postprocess']) ? ($input['postprocess'] === true || $input['postprocess'] === 'true' || $input['postprocess'] === 1) : true;
+$postprocess = isset($input['postprocess']) ? ($input['postprocess'] === true || $input['postprocess'] === 'true' || $input['postprocess'] === 1) : false;
 
 // Voice Design params (usados no _design_fn)
 $gender = $input['gender'] ?? 'Auto';
