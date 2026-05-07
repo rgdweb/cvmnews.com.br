@@ -93,9 +93,9 @@ function processPhonemeTags(text: string, _engine: TTSEngine): string {
  * <say-as interpret-as="currency">$100</say-as> → moeda
  */
 function processSayAsTags(text: string): string {
-  // characters → soletrar cada letra
+  // characters → soletrar cada letra com pausa (vírgula entre cada)
   text = text.replace(/<say-as\s+[^>]*interpret-as="characters"[^>]*>([^<]*)<\/say-as>/gi, (_match, content) => {
-    return content.split('').join(' ')
+    return content.split('').join(', ')
   })
 
   // date → data por extenso (formato YYYY-MM-DD)
