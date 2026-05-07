@@ -173,6 +173,12 @@ interface Track {
 interface CategoryInfo {
   name: string
   count: number
+  emoji?: string
+}
+
+interface ManagedCategory {
+  name: string
+  emoji: string
 }
 
 const GENDER_OPTIONS = [
@@ -264,6 +270,17 @@ export default function AdminDashboard() {
   const [selectedTrackCategory, setSelectedTrackCategory] = useState<string | null>(null)
   const [selectedVoiceCategory, setSelectedVoiceCategory] = useState<string | null>(null)
 
+  // Managed categories state (from SystemSetting)
+  const [managedTrackCategories, setManagedTrackCategories] = useState<ManagedCategory[]>([])
+  const [managedVoiceCategories, setManagedVoiceCategories] = useState<ManagedCategory[]>([])
+
+  // Category management dialog state
+  const [trackCategoryDialogOpen, setTrackCategoryDialogOpen] = useState(false)
+  const [voiceCategoryDialogOpen, setVoiceCategoryDialogOpen] = useState(false)
+  const [newCatName, setNewCatName] = useState('')
+  const [newCatEmoji, setNewCatEmoji] = useState('')
+  const [savingCategories, setSavingCategories] = useState(false)
+
   // Batch upload state
   const [batchUploadOpen, setBatchUploadOpen] = useState(false)
   const [batchUploadCategory, setBatchUploadCategory] = useState('')
@@ -290,13 +307,14 @@ export default function AdminDashboard() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [voicesRes, tracksRes, configRes, settingsRes, trackCatRes, voiceCatRes] = await Promise.all([
+      const [voicesRes, tracksRes, configRes, settingsRes, trackCatRes, voiceCatRes, managedCatRes] = await Promise.all([
         fetch('/api/admin/voices'),
         fetch('/api/admin/tracks'),
         fetch('/api/server-config'),
         fetch('/api/admin/settings'),
         fetch('/api/track-categories'),
         fetch('/api/voice-categories'),
+        fetch('/api/categories'),
       ])
       if (voicesRes.ok) setVoices(await voicesRes.json())
       if (tracksRes.ok) setTracks(await tracksRes.json())
@@ -308,6 +326,11 @@ export default function AdminDashboard() {
       }
       if (trackCatRes.ok) setTrackCategories(await trackCatRes.json())
       if (voiceCatRes.ok) setVoiceCategories(await voiceCatRes.json())
+      if (managedCatRes.ok) {
+        const managedData = await managedCatRes.json()
+        setManagedTrackCategories(managedData.tracks || [])
+        setManagedVoiceCategories(managedData.voices || [])
+      }
     } catch {
       toast.error('Erro ao carregar dados')
     } finally {
@@ -761,6 +784,98 @@ export default function AdminDashboard() {
     }
   }
 
+  // --- CATEGORY MANAGEMENT ---
+  const handleSaveManagedCategories = async (type: 'tracks' | 'voices', categories: ManagedCategory[]) => {
+    setSavingCategories(true)
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [type]: categories }),
+      })
+      if (res.ok) {
+        if (type === 'tracks') setManagedTrackCategories(categories)
+        else setManagedVoiceCategories(categories)
+        toast.success('Categorias salvas!')
+        loadData() // refresh category counts
+      } else {
+        const data = await res.json()
+        toast.error(data.error || 'Erro ao salvar categorias')
+      }
+    } catch {
+      toast.error('Erro de conexão ao salvar categorias')
+    } finally {
+      setSavingCategories(false)
+    }
+  }
+
+  const addManagedCategory = (type: 'tracks' | 'voices') => {
+    if (!newCatName.trim()) {
+      toast.error('Nome da categoria é obrigatório')
+      return
+    }
+    const categories = type === 'tracks' ? managedTrackCategories : managedVoiceCategories
+    const existing = categories.find(c => c.name.toUpperCase() === newCatName.trim().toUpperCase())
+    if (existing) {
+      toast.error(`Categoria "${existing.name}" já existe`)
+      return
+    }
+    const newCat: ManagedCategory = { name: newCatName.trim(), emoji: newCatEmoji || '📁' }
+    const updated = [...categories, newCat]
+    handleSaveManagedCategories(type, updated)
+    setNewCatName('')
+    setNewCatEmoji('')
+  }
+
+  const removeManagedCategory = (type: 'tracks' | 'voices', index: number) => {
+    const categories = type === 'tracks' ? managedTrackCategories : managedVoiceCategories
+    const catName = categories[index]?.name
+    const catCount = (type === 'tracks' ? trackCategories : voiceCategories).find(c => c.name === catName)?.count || 0
+
+    if (catCount > 0) {
+      if (!confirm(`A categoria "${catName}" tem ${catCount} item(ns). Excluir mesmo assim?\n\nOs itens NÃO serão excluídos, apenas perderão a categoria.`)) {
+        return
+      }
+      // Move items to "no category" by updating their category to empty string
+      const model = type === 'tracks' ? 'track' : 'voice'
+      fetch(`/api/admin/${model === 'track' ? 'tracks' : 'voices'}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoryName: catName, clearCategory: true }),
+      }).catch(() => {})
+    }
+
+    const updated = categories.filter((_, i) => i !== index)
+    handleSaveManagedCategories(type, updated)
+  }
+
+  // Build a combined list of managed + ad-hoc categories for dropdowns (with counts)
+  const allTrackCategoriesForDropdown = (() => {
+    const managed = managedTrackCategories.map(c => ({
+      name: c.name,
+      emoji: c.emoji || '📁',
+      count: trackCategories.find(tc => tc.name === c.name)?.count || 0,
+    }))
+    const managedNames = new Set(managedTrackCategories.map(c => c.name.toUpperCase()))
+    const adhoc = trackCategories
+      .filter(tc => !managedNames.has(tc.name.toUpperCase()))
+      .map(tc => ({ name: tc.name, emoji: tc.emoji || '📁', count: tc.count }))
+    return [...managed, ...adhoc]
+  })()
+
+  const allVoiceCategoriesForDropdown = (() => {
+    const managed = managedVoiceCategories.map(c => ({
+      name: c.name,
+      emoji: c.emoji || '📁',
+      count: voiceCategories.find(vc => vc.name === c.name)?.count || 0,
+    }))
+    const managedNames = new Set(managedVoiceCategories.map(c => c.name.toUpperCase()))
+    const adhoc = voiceCategories
+      .filter(vc => !managedNames.has(vc.name.toUpperCase()))
+      .map(vc => ({ name: vc.name, emoji: vc.emoji || '📁', count: vc.count }))
+    return [...managed, ...adhoc]
+  })()
+
   if (!authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
@@ -820,7 +935,17 @@ export default function AdminDashboard() {
           <TabsContent value="voices" className="space-y-4 mt-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-white">Vozes Cadastradas</h2>
-              <Dialog open={voiceDialogOpen} onOpenChange={setVoiceDialogOpen}>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setNewCatName(''); setNewCatEmoji(''); setVoiceCategoryDialogOpen(true) }}
+                  className="border-slate-600 text-slate-300 hover:text-white hover:bg-slate-700 gap-2"
+                >
+                  <FolderPlus className="w-4 h-4" />
+                  Gerenciar Categorias
+                </Button>
+                <Dialog open={voiceDialogOpen} onOpenChange={setVoiceDialogOpen}>
                 <DialogTrigger asChild>
                   <Button
                     onClick={() => {
@@ -917,24 +1042,26 @@ export default function AdminDashboard() {
                     <div className="space-y-2">
                       <Label className="text-slate-300">Categoria</Label>
                       <div className="flex gap-2">
-                        {voiceCategories.length > 0 ? (
-                          <Select value={voiceForm.category || '__new__'} onValueChange={(v) => setVoiceForm(p => ({ ...p, category: v === '__new__' ? '' : v }))}>
-                            <SelectTrigger className="bg-slate-900/50 border-slate-600 text-white w-48">
-                              <SelectValue placeholder="Selecionar..." />
-                            </SelectTrigger>
-                            <SelectContent className="bg-slate-800 border-slate-700">
-                              {voiceCategories.map(c => (
-                                <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>
-                              ))}
-                              <SelectItem value="__new__">+ Nova categoria...</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : null}
+                        <Select value={voiceForm.category || '__none__'} onValueChange={(v) => setVoiceForm(p => ({ ...p, category: v === '__none__' || v === '__new__' ? '' : v }))}>
+                          <SelectTrigger className="bg-slate-900/50 border-slate-600 text-white flex-1">
+                            <SelectValue placeholder="Selecionar..." />
+                          </SelectTrigger>
+                          <SelectContent className="bg-slate-800 border-slate-700">
+                            {allVoiceCategoriesForDropdown.map(c => (
+                              <SelectItem key={c.name} value={c.name}>
+                                <span className="mr-1.5">{c.emoji}</span>
+                                {c.name}
+                                {c.count > 0 && <span className="ml-1.5 text-xs text-slate-500">({c.count})</span>}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="__new__">+ Nova categoria...</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Input
                           value={voiceForm.category || ''}
                           onChange={(e) => setVoiceForm(p => ({ ...p, category: e.target.value }))}
-                          placeholder={voiceCategories.length > 0 ? 'Ou digite nova...' : 'Ex: Narradores, Vendas...'}
-                          className="bg-slate-900/50 border-slate-600 text-white"
+                          placeholder="Ou digite nova..."
+                          className="bg-slate-900/50 border-slate-600 text-white w-48"
                         />
                       </div>
                     </div>
@@ -947,6 +1074,7 @@ export default function AdminDashboard() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+              </div>
             </div>
 
             {loading ? (
@@ -1089,7 +1217,7 @@ export default function AdminDashboard() {
                         onClick={() => setSelectedVoiceCategory(cat.name)}
                         className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-700/50 hover:border-violet-500/50 hover:scale-105 transition-all duration-200 cursor-pointer group"
                       >
-                        <span className="text-3xl group-hover:scale-110 transition-transform">📁</span>
+                        <span className="text-3xl group-hover:scale-110 transition-transform">{cat.emoji || '📁'}</span>
                         <span className="text-sm font-medium text-white text-center truncate w-full">{cat.name}</span>
                         <span className="text-xs text-slate-400">{cat.count} voz(es)</span>
                       </button>
@@ -1241,13 +1369,23 @@ export default function AdminDashboard() {
           <TabsContent value="tracks" className="space-y-4 mt-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-white">Trilhas Musicais</h2>
-              <Dialog open={trackDialogOpen} onOpenChange={(open) => {
-                setTrackDialogOpen(open)
-                if (!open) {
-                  setEditingTrackId(null)
-                  setPendingTrackFile(null)
-                }
-              }}>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setNewCatName(''); setNewCatEmoji(''); setTrackCategoryDialogOpen(true) }}
+                  className="border-slate-600 text-slate-300 hover:text-white hover:bg-slate-700 gap-2"
+                >
+                  <FolderPlus className="w-4 h-4" />
+                  Gerenciar Categorias
+                </Button>
+                <Dialog open={trackDialogOpen} onOpenChange={(open) => {
+                  setTrackDialogOpen(open)
+                  if (!open) {
+                    setEditingTrackId(null)
+                    setPendingTrackFile(null)
+                  }
+                }}>
                 <DialogTrigger asChild>
                   <Button
                     onClick={() => {
@@ -1304,24 +1442,26 @@ export default function AdminDashboard() {
                     <div className="space-y-2">
                       <Label className="text-slate-300">Categoria</Label>
                       <div className="flex gap-2">
-                        {trackCategories.length > 0 ? (
-                          <Select value={trackForm.category || '__new__'} onValueChange={(v) => setTrackForm(p => ({ ...p, category: v === '__new__' ? '' : v }))}>
-                            <SelectTrigger className="bg-slate-900/50 border-slate-600 text-white w-48">
-                              <SelectValue placeholder="Selecionar..." />
-                            </SelectTrigger>
-                            <SelectContent className="bg-slate-800 border-slate-700">
-                              {trackCategories.map(c => (
-                                <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>
-                              ))}
-                              <SelectItem value="__new__">+ Nova categoria...</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : null}
+                        <Select value={trackForm.category || '__none__'} onValueChange={(v) => setTrackForm(p => ({ ...p, category: v === '__none__' || v === '__new__' ? '' : v }))}>
+                          <SelectTrigger className="bg-slate-900/50 border-slate-600 text-white flex-1">
+                            <SelectValue placeholder="Selecionar..." />
+                          </SelectTrigger>
+                          <SelectContent className="bg-slate-800 border-slate-700">
+                            {allTrackCategoriesForDropdown.map(c => (
+                              <SelectItem key={c.name} value={c.name}>
+                                <span className="mr-1.5">{c.emoji}</span>
+                                {c.name}
+                                {c.count > 0 && <span className="ml-1.5 text-xs text-slate-500">({c.count})</span>}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value="__new__">+ Nova categoria...</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Input
                           value={trackForm.category || ''}
                           onChange={(e) => setTrackForm(p => ({ ...p, category: e.target.value }))}
-                          placeholder={trackCategories.length > 0 ? 'Ou digite nova...' : 'Ex: BOSSA, JAZZ, ROCK...'}
-                          className="bg-slate-900/50 border-slate-600 text-white"
+                          placeholder="Ou digite nova..."
+                          className="bg-slate-900/50 border-slate-600 text-white w-48"
                         />
                       </div>
                     </div>
@@ -1390,6 +1530,7 @@ export default function AdminDashboard() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+              </div>
             </div>
 
             {/* Batch Upload Dialog */}
@@ -1409,18 +1550,21 @@ export default function AdminDashboard() {
                   <div className="space-y-2">
                     <Label className="text-slate-300">Categoria *</Label>
                     <div className="flex gap-2">
-                      {trackCategories.length > 0 ? (
-                        <Select value={batchUploadCategory || '__new__'} onValueChange={(v) => setBatchUploadCategory(v === '__new__' ? '' : v)}>
-                          <SelectTrigger className="bg-slate-900/50 border-slate-600 text-white w-48">
-                            <SelectValue placeholder="Selecionar..." />
-                          </SelectTrigger>
-                          <SelectContent className="bg-slate-800 border-slate-700">
-                            {trackCategories.map(c => (<SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>))}
-                            <SelectItem value="__new__">+ Nova...</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : null}
-                      <Input value={batchUploadCategory} onChange={(e) => setBatchUploadCategory(e.target.value)} placeholder="Ex: BOSSA, JAZZ..." className="bg-slate-900/50 border-slate-600 text-white" />
+                      <Select value={batchUploadCategory || '__none__'} onValueChange={(v) => setBatchUploadCategory(v === '__none__' || v === '__new__' ? '' : v)}>
+                        <SelectTrigger className="bg-slate-900/50 border-slate-600 text-white flex-1">
+                          <SelectValue placeholder="Selecionar..." />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-slate-700">
+                          {allTrackCategoriesForDropdown.map(c => (
+                            <SelectItem key={c.name} value={c.name}>
+                              <span className="mr-1.5">{c.emoji}</span>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="__new__">+ Nova...</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input value={batchUploadCategory} onChange={(e) => setBatchUploadCategory(e.target.value)} placeholder="Ou digite nova..." className="bg-slate-900/50 border-slate-600 text-white w-48" />
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -1570,7 +1714,7 @@ export default function AdminDashboard() {
                         onClick={() => setSelectedTrackCategory(cat.name)}
                         className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-700/50 hover:border-violet-500/50 hover:scale-105 transition-all duration-200 cursor-pointer group"
                       >
-                        <span className="text-3xl group-hover:scale-110 transition-transform">📁</span>
+                        <span className="text-3xl group-hover:scale-110 transition-transform">{cat.emoji || '📁'}</span>
                         <span className="text-sm font-medium text-white text-center truncate w-full">{cat.name}</span>
                         <span className="text-xs text-slate-400">{cat.count} trilha(s)</span>
                       </button>
@@ -1624,6 +1768,128 @@ export default function AdminDashboard() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Track Category Management Dialog */}
+      <Dialog open={trackCategoryDialogOpen} onOpenChange={setTrackCategoryDialogOpen}>
+        <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Gerenciar Categorias de Trilhas</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Crie, edite ou remova categorias de trilhas. Categorias com itens serão mantidas ao excluir.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {managedTrackCategories.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-4">Nenhuma categoria configurada</p>
+              ) : (
+                managedTrackCategories.map((cat, i) => {
+                  const catCount = trackCategories.find(tc => tc.name === cat.name)?.count || 0
+                  return (
+                    <div key={cat.name} className="flex items-center gap-2 bg-slate-900/50 rounded-lg px-3 py-2">
+                      <span className="text-xl">{cat.emoji || '📁'}</span>
+                      <span className="text-sm text-white flex-1">{cat.name}</span>
+                      <span className="text-xs text-slate-400">{catCount} item(ns)</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeManagedCategory('tracks', i)}
+                        className="h-7 w-7 text-slate-400 hover:text-red-400 shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={newCatName}
+                onChange={e => setNewCatName(e.target.value)}
+                placeholder="Nome da categoria..."
+                className="bg-slate-900/50 border-slate-600 text-white"
+                onKeyDown={e => { if (e.key === 'Enter') addManagedCategory('tracks') }}
+              />
+              <Input
+                value={newCatEmoji}
+                onChange={e => setNewCatEmoji(e.target.value)}
+                placeholder="Emoji"
+                className="bg-slate-900/50 border-slate-600 text-white w-20"
+                onKeyDown={e => { if (e.key === 'Enter') addManagedCategory('tracks') }}
+              />
+              <Button
+                onClick={() => addManagedCategory('tracks')}
+                disabled={savingCategories || !newCatName.trim()}
+                className="bg-violet-600 hover:bg-violet-700 text-white shrink-0"
+              >
+                {savingCategories ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Voice Category Management Dialog */}
+      <Dialog open={voiceCategoryDialogOpen} onOpenChange={setVoiceCategoryDialogOpen}>
+        <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Gerenciar Categorias de Vozes</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Crie, edite ou remova categorias de vozes. Categorias com itens serão mantidas ao excluir.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {managedVoiceCategories.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-4">Nenhuma categoria configurada</p>
+              ) : (
+                managedVoiceCategories.map((cat, i) => {
+                  const catCount = voiceCategories.find(vc => vc.name === cat.name)?.count || 0
+                  return (
+                    <div key={cat.name} className="flex items-center gap-2 bg-slate-900/50 rounded-lg px-3 py-2">
+                      <span className="text-xl">{cat.emoji || '📁'}</span>
+                      <span className="text-sm text-white flex-1">{cat.name}</span>
+                      <span className="text-xs text-slate-400">{catCount} item(ns)</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeManagedCategory('voices', i)}
+                        className="h-7 w-7 text-slate-400 hover:text-red-400 shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={newCatName}
+                onChange={e => setNewCatName(e.target.value)}
+                placeholder="Nome da categoria..."
+                className="bg-slate-900/50 border-slate-600 text-white"
+                onKeyDown={e => { if (e.key === 'Enter') addManagedCategory('voices') }}
+              />
+              <Input
+                value={newCatEmoji}
+                onChange={e => setNewCatEmoji(e.target.value)}
+                placeholder="Emoji"
+                className="bg-slate-900/50 border-slate-600 text-white w-20"
+                onKeyDown={e => { if (e.key === 'Enter') addManagedCategory('voices') }}
+              />
+              <Button
+                onClick={() => addManagedCategory('voices')}
+                disabled={savingCategories || !newCatName.trim()}
+                className="bg-violet-600 hover:bg-violet-700 text-white shrink-0"
+              >
+                {savingCategories ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
