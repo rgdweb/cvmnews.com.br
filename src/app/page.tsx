@@ -19,7 +19,6 @@ import {
 import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
 import { optimizePronunciation } from '@/lib/pronunciation-optimizer'
-import { preprocessTTS, calculateAutoSpeed } from '@/lib/tts-text-preprocessor'
 
 interface VoiceVariation {
   id: string
@@ -469,18 +468,11 @@ export default function VozProClient() {
     setIsMixed(false)
     setGeneratingTime(0)
 
-    // ===== PIPELINE DE PRONÚNCIA PT-BR (3 camadas, invisível ao usuário) =====
-    // O texto na textarea NÃO muda — só o que vai pro TTS é otimizado
+    // ===== OTIMIZAÇÃO DE PRONÚNCIA (pipeline expandido, 0ms) =====
+    // Regex + dicionário + padrões PT-BR completos
     let textToSend = text.trim()
-    let effectiveSpeed = speed // velocidade do slider do usuário
     if (pronunciationOptimization) {
-      // Camada 1: Otimização de pronúncia (dicionário + regex + X contextual)
       textToSend = optimizePronunciation(textToSend)
-      // Camada 2: Pré-processamento TTS (quebra frases, micro-pausas, newlines)
-      textToSend = preprocessTTS(textToSend)
-      // Camada 3: Ajuste automático de velocidade (reduz se texto é complexo)
-      effectiveSpeed = calculateAutoSpeed(textToSend, speed)
-      console.log('[Pronúncia] Speed ajustado:', speed, '→', effectiveSpeed)
     }
 
     // Timer para mostrar tempo decorrido ao usuario
@@ -539,7 +531,7 @@ export default function VozProClient() {
           referenceAudioName: voiceMode === 'clone' ? (uploadedVoiceFile?.name || selectedVariation?.refAudioName || 'ref_audio.wav') : '',
           refText: '',
           numStep: 32, // VozPro: 32 = qualidade (padrao), 16 = rapido mas pode errar palavras
-          speed: effectiveSpeed, // velocidade ajustada automaticamente pela pipeline de pronúncia
+          speed: 1.0,
           language: language, // usa o idioma selecionado pelo usuario (Portuguese, Auto, etc)
           // Voice Design params (usados pelo _design_fn endpoint)
           gender: isAutoMode ? 'Auto' : (isDesignMode ? designParams.gender : 'Auto'),
