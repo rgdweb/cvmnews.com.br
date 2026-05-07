@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
+import { optimizePronunciation } from '@/lib/pronunciation-optimizer'
 
 interface VoiceVariation {
   id: string
@@ -91,96 +92,8 @@ const LANGUAGES = [
   { value: 'Hindi', label: 'Hindi' },
 ]
 
-/**
- * Otimizador de pronúncia instantâneo (regex, 0ms de latência).
- * 
- * Usa colchetes [pronúncia] nativos do VozPro para corrigir
- * palavras que o TTS pronuncia errado. Funciona por baixo dos panos,
- * o usuário digita texto normal e recebe áudio perfeito.
- * 
- * Padrões corrigidos:
- * 1. Artigos no início de frase após ponto (". O sistema" → ". [o] sistema")
- * 2. Artigos após "!" e "?" (também iniciam frase nova)
- * 3. Horários abreviados ("14h" → "[quatorze] horas")
- * 4. Valores monetários básicos ("R$ 50" → "[cinquenta reais]")
- */
-function optimizePronunciation(text: string): string {
-  let result = text
-
-  // 1. Artigos após pontuação que termina frase (. ! ?)
-  // O VozPro hesita/trava quando encontra artigo maiúsculo após ponto:
-  // "...resultados. O sistema" → lê "ponto OOOOO sistema"
-  // SOLUÇÃO: trocar ponto+artigo por vírgula+artigo minúsculo (une as frases)
-  // "...resultados. O sistema" → "...resultados, o sistema"
-  // Isso elimina a quebra de sentença que causa a hesitação
-  const articleAfterPunct = /([.!?])\s+([OoAa])\s(?=[a-záàãâéèêíïóôõúüç])/g
-  result = result.replace(articleAfterPunct, ',$2 ')
-
-  // 2. Plural dos artigos após pontuação (mesma lógica)
-  const pluralArticleAfterPunct = /([.!?])\s+([Oo]s|[Aa]s|[Uu]m(?:[oa]s)?)\s(?=[a-záàãâéèêíïóôõúüç])/g
-  result = result.replace(pluralArticleAfterPunct, ',$2 ')
-
-  // 3. Horários abreviados: "14h" → "[quatorze] horas", "8h" → "[oito] horas"
-  const hourPattern = /(\d{1,2})\s*h(?!\w)/gi
-  result = result.replace(hourPattern, (match, num) => {
-    const n = parseInt(num)
-    if (isNaN(n) || n < 0 || n > 23) return match
-    return `[${numberToWords(n)}] horas`
-  })
-
-  // 4. Valores monetários simples: "R$ 50" → "[cinquenta reais]"
-  const currencyPattern = /R\$\s*(\d+(?:[.,]\d{1,2})?)/g
-  result = result.replace(currencyPattern, (match, val) => {
-    return `[${currencyToWords(val)}]`
-  })
-
-  // 5. Porcentagens: "50%" → "[cinquenta por cento]"
-  const percentPattern = /(\d+)%/g
-  result = result.replace(percentPattern, (match, num) => {
-    const n = parseInt(num)
-    if (isNaN(n)) return match
-    return `[${numberToWords(n)} por cento]`
-  })
-
-  return result
-}
-
-/** Converte número para palavras em PT-BR (0-99) */
-function numberToWords(n: number): string {
-  const units = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove']
-  const teens = ['dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove']
-  const tens = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa']
-
-  if (n < 0 || n > 99) return String(n)
-  if (n < 10) return units[n]
-  if (n < 20) return teens[n - 10]
-  const t = Math.floor(n / 10)
-  const u = n % 10
-  return u === 0 ? tens[t] : `${tens[t]} e ${units[u]}`
-}
-
-/** Converte valor monetário "1500" ou "1.599,90" para palavras */
-function currencyToWords(val: string): string {
-  // Normaliza: remove pontos de milhar, troca vírgula por ponto
-  const clean = val.replace(/\./g, '').replace(',', '.')
-  const num = parseFloat(clean)
-  if (isNaN(num)) return val
-
-  if (num === 1) return 'um real'
-  if (num < 2) {
-    const cents = Math.round(num * 100)
-    if (cents === 0) return 'zero reais'
-    return `${cents} centavos`
-  }
-
-  const reais = Math.floor(num)
-  const centavos = Math.round((num - reais) * 100)
-  let result = `${numberToWords(reais)} reais`
-  if (centavos > 0) {
-    result += ` e ${centavos} centavos`
-  }
-  return result
-}
+// Pronunciation optimization moved to src/lib/pronunciation-optimizer.ts
+// (pipeline completa com regex expandido, dicionário PT-BR, e LLM fallback)
 
 /**
  * Converte descrição em texto do Voice Design para os parâmetros estruturados do VozPro.
@@ -555,8 +468,8 @@ export default function VozProClient() {
     setIsMixed(false)
     setGeneratingTime(0)
 
-    // ===== OTIMIZAÇÃO DE PRONÚNCIA (regex instantâneo, 0ms) =====
-    // Usa colchetes [pronúncia] do VozPro por baixo dos panos
+    // ===== OTIMIZAÇÃO DE PRONÚNCIA (pipeline expandido, 0ms) =====
+    // Regex + dicionário + padrões PT-BR completos
     let textToSend = text.trim()
     if (pronunciationOptimization) {
       textToSend = optimizePronunciation(textToSend)
