@@ -57,6 +57,73 @@ def load_model():
     return model
 
 
+# ============================================
+# SPEED FIX AUTOMÁTICO
+# ============================================
+
+def _calculate_auto_speed(text: str, base_speed: float = 1.0) -> float:
+    """
+    Calcula a velocidade ideal do TTS baseado no texto.
+    
+    O modelo VozPro tende a falar MUITO RÁPIDO quando:
+    - Texto tem muitas palavras difíceis (consoantes mudas, X, estrangeirismos)
+    - Texto é longo (acelera progressivamente)
+    - Texto tem travas-línguas ou termos técnicos
+    
+    Regras de ajuste:
+    - Texto curto e simples (< 50 palavras): speed = 1.0
+    - Texto médio (50-150 palavras): speed *= 0.90
+    - Texto longo (> 150 palavras): speed *= 0.85
+    - Texto com muitos termos difíceis: -0.05 extra
+    - Mínimo: 0.75 (não fica lento demais)
+    """
+    import re
+    
+    words = text.split()
+    word_count = len(words)
+    
+    # Contar indicadores de complexidade
+    complex_patterns = [
+        r'\b[ptgmn]\w{4,}',          # consoantes mudas (psico, pneu, gno, etc.)
+        r'x',                         # letra X (múltiplos sons)
+        r'\b[A-Z]{2,}\b',            # siglas (CNPJ, PDF, etc.)
+        r'\b\d+[.,]\d+',             # números decimais
+        r'R\$',                       # valores monetários
+        r'\d+%',                      # porcentagens
+        r'\(\d{2}\)',                 # DDD de telefone
+        r'[áàãâéèêíïóôõúü]',         # acentos
+    ]
+    
+    complexity_score = 0
+    for pattern in complex_patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        complexity_score += len(matches)
+    
+    # Calcular velocidade
+    speed = base_speed
+    
+    # Ajuste por tamanho
+    if word_count > 150:
+        speed *= 0.85
+    elif word_count > 80:
+        speed *= 0.90
+    elif word_count > 50:
+        speed *= 0.95
+    
+    # Ajuste por complexidade
+    complexity_ratio = complexity_score / max(word_count, 1)
+    if complexity_ratio > 0.3:
+        speed *= 0.90
+    elif complexity_ratio > 0.15:
+        speed *= 0.95
+    
+    # Limites
+    speed = max(0.75, min(1.0, speed))
+    speed = round(speed, 2)
+    
+    return speed
+
+
 def generate_speech(
     text: str,
     mode: str = "clone",        # clone | design | auto
@@ -66,6 +133,7 @@ def generate_speech(
     num_step: int = 16,         # 16 = rapido, 32 = qualidade
     speed: float = 1.0,
     language: str = "",         # omitido = auto detect
+    auto_speed: bool = True,    # ajuste automático de velocidade
 ):
     """Gera áudio usando VozPro."""
     m = load_model()
@@ -73,7 +141,11 @@ def generate_speech(
     if not text or not text.strip():
         raise gr.Error("Texto é obrigatório")
 
-    print(f"[VozPro] Gerando: mode={mode}, text={text[:80]}...")
+    # Speed fix automático: reduz velocidade para textos complexos
+    if auto_speed and speed == 1.0:
+        speed = _calculate_auto_speed(text.strip(), speed)
+
+    print(f"[VozPro] Gerando: mode={mode}, speed={speed}, text={text[:80]}...")
     start = time.time()
 
     # Montar kwargs base
@@ -120,7 +192,7 @@ def generate_speech(
     out_path = tempfile.mktemp(suffix=".wav")
     sf.write(out_path, audio_array, SAMPLE_RATE)
 
-    return out_path, f"Duração: {duration:.1f}s | RTF: {rtf:.3f} | Tempo: {elapsed:.1f}s"
+    return out_path, f"Duração: {duration:.1f}s | RTF: {rtf:.3f} | Tempo: {elapsed:.1f}s | Speed: {speed}"
 
 
 # ============================================
@@ -178,6 +250,11 @@ def create_interface():
                         label="Velocidade (1.0=normal)",
                     )
 
+                auto_speed_cb = gr.Checkbox(
+                    value=True,
+                    label="Auto Speed (reduz velocidade para textos complexos)",
+                )
+
                 generate_btn = gr.Button("🎙️ Gerar Áudio", variant="primary")
 
             with gr.Column(scale=1):
@@ -197,7 +274,7 @@ def create_interface():
         mode.change(update_visibility, [mode], [instruct_input, ref_audio, ref_text])
 
         # Gerar
-        def on_generate(text, mode, instruct, ref_audio, ref_text, num_step, speed):
+        def on_generate(text, mode, instruct, ref_audio, ref_text, num_step, speed, auto_speed):
             try:
                 out_path, info = generate_speech(
                     text=text,
@@ -207,6 +284,7 @@ def create_interface():
                     ref_text=ref_text,
                     num_step=int(num_step),
                     speed=float(speed),
+                    auto_speed=bool(auto_speed),
                 )
                 return info, out_path
             except Exception as e:
@@ -214,7 +292,7 @@ def create_interface():
 
         generate_btn.click(
             on_generate,
-            [text_input, mode, instruct_input, ref_audio, ref_text, num_step, speed],
+            [text_input, mode, instruct_input, ref_audio, ref_text, num_step, speed, auto_speed_cb],
             [info_output, audio_output],
         )
 
