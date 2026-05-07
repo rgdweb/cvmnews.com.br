@@ -62,6 +62,7 @@ interface Track {
 interface CategoryInfo {
   name: string
   count: number
+  emoji?: string
 }
 
 interface DuckingConfig {
@@ -1174,7 +1175,7 @@ export default function VozProClient() {
                           onClick={() => setSelectedVoiceCategory(cat.name)}
                           className="flex flex-col items-center gap-2 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-violet-500/10 hover:border-violet-500/50 hover:scale-105 transition-all duration-200 cursor-pointer group"
                         >
-                          <span className="text-3xl group-hover:scale-110 transition-transform">📁</span>
+                          <span className="text-3xl group-hover:scale-110 transition-transform">{cat.emoji || '📁'}</span>
                           <span className="text-sm font-medium text-white text-center truncate w-full">{cat.name}</span>
                           <span className="text-xs text-slate-500">{cat.count} voz(es)</span>
                         </button>
@@ -1530,7 +1531,7 @@ export default function VozProClient() {
                             onClick={() => setSelectedTrackCategory(cat.name)}
                             className="flex flex-col items-center gap-2 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-purple-500/10 hover:border-purple-500/50 hover:scale-105 transition-all duration-200 cursor-pointer group"
                           >
-                            <span className="text-3xl group-hover:scale-110 transition-transform">📁</span>
+                            <span className="text-3xl group-hover:scale-110 transition-transform">{cat.emoji || '📁'}</span>
                             <span className="text-sm font-medium text-white text-center truncate w-full">{cat.name}</span>
                             <span className="text-xs text-slate-500">{cat.count} trilha(s)</span>
                           </button>
