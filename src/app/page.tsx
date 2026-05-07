@@ -17,8 +17,10 @@ import {
   Upload, CheckCircle2, Zap, FolderOpen, ChevronLeft, Folder
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Label } from '@/components/ui/label'
 import AudioPlayer from '@/components/audio-player'
-import { optimizePronunciation } from '@/lib/pronunciation-optimizer'
+import { optimizePronunciation, processControlTags } from '@/lib/pronunciation-optimizer'
+import { preprocessTTS, calculateAutoSpeed } from '@/lib/tts-text-preprocessor'
 
 interface VoiceVariation {
   id: string
@@ -348,6 +350,7 @@ export default function VozProClient() {
   const [guidanceScale, setGuidanceScale] = useState(1.5)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [pronunciationOptimization, setPronunciationOptimization] = useState(true) // Agente IA de pronúncia (ligado por padrão)
+  const [llmPreprocess, setLlmPreprocess] = useState(false) // LLM pré-processador (opcional)
 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false)
@@ -483,11 +486,40 @@ export default function VozProClient() {
     setIsMixed(false)
     setGeneratingTime(0)
 
-    // ===== OTIMIZAÇÃO DE PRONÚNCIA (pipeline expandido, 0ms) =====
-    // Regex + dicionário + padrões PT-BR completos
+    // ===== OTIMIZAÇÃO DE PRONÚNCIA (pipeline completo) =====
     let textToSend = text.trim()
+
+    // 1. Control tags (sempre ativo)
+    textToSend = processControlTags(textToSend)
+
+    // 2. Text preprocessor (pontuação, spacing)
+    if (pronunciationOptimization) {
+      textToSend = preprocessTTS(textToSend)
+    }
+
+    // 3. Regex + dictionary pipeline
     if (pronunciationOptimization) {
       textToSend = optimizePronunciation(textToSend)
+    }
+
+    // 4. LLM pre-processor (opcional, só quando toggle ativo)
+    if (llmPreprocess && textToSend.length > 20) {
+      try {
+        const res = await fetch('/api/optimize-pronunciation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: textToSend }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.optimized && data.changed) {
+            textToSend = data.optimized
+          }
+        }
+      } catch {
+        // Fallback silencioso — nunca bloqueia a geração
+        console.log('[LLM Pre-process] Falha, usando texto original')
+      }
     }
 
     // Timer para mostrar tempo decorrido ao usuario
@@ -1393,6 +1425,7 @@ export default function VozProClient() {
                     <span className="text-xs text-slate-500">{text.length} caracteres</span>
                   </div>
                   <Textarea
+                    id="tts-text"
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     placeholder="Digite o texto que deseja que a voz fale... Ex: Na compra de qualquer produto, ganhe 50% de desconto! Aproveite essa promoção exclusiva!"
@@ -1412,6 +1445,62 @@ export default function VozProClient() {
                     onCheckedChange={setPronunciationOptimization}
                   />
                 </div>
+
+                {/* LLM Pre-processor Toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="llm-preprocess"
+                      checked={llmPreprocess}
+                      onCheckedChange={setLlmPreprocess}
+                    />
+                    <Label htmlFor="llm-preprocess" className="text-xs text-slate-400 cursor-pointer">
+                      IA Pré-processamento (lento, mais preciso)
+                    </Label>
+                  </div>
+                </div>
+
+                {/* Emotion presets - insert control tags into text */}
+                {pronunciationOptimization && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs text-slate-500">Prosódia:</span>
+                    {[
+                      { label: '📖 Normal', insert: '' },
+                      { label: '🤫 Sussurro', insert: ' ', action: 'whisper' as const },
+                      { label: '⚡ Rápido', insert: ' ', action: 'fast' as const },
+                      { label: '🐢 Devagar', insert: ' ', action: 'slow' as const },
+                      { label: '⏸️ Pausa longa', insert: '... ' },
+                      { label: '⏸️ Pausa curta', insert: '.. ' },
+                    ].map(preset => (
+                      <button
+                        key={preset.label}
+                        onClick={() => {
+                          const textarea = document.getElementById('tts-text') as HTMLTextAreaElement
+                          if (!textarea) return
+                          const start = textarea.selectionStart
+                          const end = textarea.selectionEnd
+                          const currentText = textarea.value
+                          if ('action' in preset && preset.action) {
+                            const selected = currentText.substring(start, end)
+                            if (selected) {
+                              const newText = currentText.substring(0, start) + `{{${preset.action}}}${selected}{{/${preset.action}}}` + currentText.substring(end)
+                              setText(newText)
+                            } else {
+                              toast.info('Selecione o texto no campo acima primeiro')
+                            }
+                          } else if (preset.insert) {
+                            const newText = currentText.substring(0, start) + preset.insert + currentText.substring(end)
+                            setText(newText)
+                          }
+                        }}
+                        className="px-2 py-0.5 rounded-full text-xs border border-white/10 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
+                        title={'action' in preset && preset.action ? `Selecione texto e clique para ${preset.action}` : 'Insere pausa no cursor'}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Language */}
                 <div className="flex items-center gap-3">
