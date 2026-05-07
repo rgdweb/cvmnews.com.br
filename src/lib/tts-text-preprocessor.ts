@@ -24,6 +24,7 @@ interface PreprocessConfig {
   repeatLastWord: boolean  // repete última palavra com pontuação (evita corte)
   sentenceBreak: boolean   // quebra frases muito longas
   maxSentenceLength: number
+  autoSpeed: boolean       // ajusta velocidade automaticamente baseado no texto
 }
 
 const DEFAULT_CONFIG: PreprocessConfig = {
@@ -33,6 +34,7 @@ const DEFAULT_CONFIG: PreprocessConfig = {
   repeatLastWord: false,   // desativado — soa estranho repetir palavras
   sentenceBreak: true,
   maxSentenceLength: 20,
+  autoSpeed: true,         // ATIVADO — reduz velocidade quando texto é complexo
 }
 
 // ============================================================
@@ -170,4 +172,128 @@ function breakAtNaturalPoints(words: string[], maxWords: number): string {
     .map(s => s.join(' ').trim())
     .filter(s => s.length > 0)
     .join('\n')
+}
+
+// ============================================================
+// SPEED FIX — Ajuste automático de velocidade
+// ============================================================
+
+/**
+ * Calcula a velocidade ideal do TTS baseado no texto.
+ *
+ * O modelo VozPro tende a falar MUITO RÁPIDO quando:
+ * - Texto tem muitas palavras difíceis (consoantes mudas, X, estrangeirismos)
+ * - Texto é longo (acelera progressivamente)
+ * - Texto tem travas-línguas ou termos técnicos
+ *
+ * Regras de ajuste:
+ * - Texto curto e simples (< 50 palavras): speed = 1.0
+ * - Texto médio (50-150 palavras): speed = 0.90
+ * - Texto longo (> 150 palavras): speed = 0.85
+ * - Texto com muitos termos difíceis: -0.05 extra
+ * - Mínimo: 0.75 (não fica lento demais)
+ *
+ * @param text Texto que será sintetizado
+ * @param baseSpeed Velocidade base (default: 1.0)
+ * @returns Velocidade ajustada
+ */
+export function calculateAutoSpeed(text: string, baseSpeed: number = 1.0): number {
+  const words = text.split(/\s+/).filter(w => w.length > 0)
+  const wordCount = words.length
+
+  // Contar indicadores de complexidade
+  const complexPatterns = [
+    /\b[ptgmn]\w{4,}/gi,       // palavras começando com consoante muda (psico, pneu, gno, etc.)
+    /\bx/gi,                     // letra X (múltiplos sons)
+    /\b[A-Z]{2,}\b/g,           // siglas (CNPJ, PDF, etc.)
+    /\b\d+[\.,]\d+/g,           // números decimais
+    /\bR\$/g,                    // valores monetários
+    /\d+%/g,                     // porcentagens
+    /\(\d{2}\)/g,               // DDD de telefone
+    /[áàãâéèêíïóôõúü]/gi,       // acentos (indicam complexidade fonética)
+    /\b(?:ecocardiograma|transesofágico|estenose|adenocarcinoma|eletroencefalograma|hemodiálise|azitromicina|omeprazol|dipirona|ressonância|metástase|aneurisma|insuficiência|biópsia)/gi, // termos médicos
+  ]
+
+  let complexityScore = 0
+  for (const pattern of complexPatterns) {
+    const matches = text.match(pattern)
+    if (matches) {
+      complexityScore += matches.length
+    }
+  }
+
+  // Calcular velocidade base
+  let speed = baseSpeed
+
+  // Ajuste por tamanho do texto
+  if (wordCount > 150) {
+    speed *= 0.85
+  } else if (wordCount > 80) {
+    speed *= 0.90
+  } else if (wordCount > 50) {
+    speed *= 0.95
+  }
+
+  // Ajuste por complexidade
+  const complexityRatio = complexityScore / Math.max(wordCount, 1)
+  if (complexityRatio > 0.3) {
+    // Mais de 30% das palavras são complexas
+    speed *= 0.90
+  } else if (complexityRatio > 0.15) {
+    // 15-30% complexas
+    speed *= 0.95
+  }
+
+  // Limites
+  speed = Math.max(0.75, Math.min(1.0, speed))
+
+  // Arredondar para 2 casas decimais
+  speed = Math.round(speed * 100) / 100
+
+  return speed
+}
+
+/**
+ * Retorna a velocidade ajustada e informações de debug.
+ */
+export function getAutoSpeedInfo(text: string, baseSpeed: number = 1.0): {
+  speed: number
+  wordCount: number
+  complexityScore: number
+  adjustmentReason: string
+} {
+  const words = text.split(/\s+/).filter(w => w.length > 0)
+  const wordCount = words.length
+
+  const complexPatterns = [
+    /\b[ptgmn]\w{4,}/gi,
+    /\bx/gi,
+    /\b[A-Z]{2,}\b/g,
+    /\b\d+[\.,]\d+/g,
+    /\bR\$/g,
+    /\d+%/g,
+    /\(\d{2}\)/g,
+    /[áàãâéèêíïóôõúü]/gi,
+    /\b(?:ecocardiograma|transesofágico|estenose|adenocarcinoma|eletroencefalograma|hemodiálise|azitromicina|omeprazol|dipirona|ressonância|metástase|aneurisma|insuficiência|biópsia)/gi,
+  ]
+
+  let complexityScore = 0
+  for (const pattern of complexPatterns) {
+    const matches = text.match(pattern)
+    if (matches) complexityScore += matches.length
+  }
+
+  const speed = calculateAutoSpeed(text, baseSpeed)
+  const complexityRatio = complexityScore / Math.max(wordCount, 1)
+
+  let reason = ''
+  if (wordCount > 150) reason += 'Texto longo, '
+  else if (wordCount > 80) reason += 'Texto médio, '
+  else reason += 'Texto curto, '
+
+  if (complexityRatio > 0.3) reason += 'alta complexidade'
+  else if (complexityRatio > 0.15) reason += 'complexidade média'
+  else reason += 'complexidade baixa'
+
+  return { speed, wordCount, complexityScore, adjustmentReason: reason }
 }

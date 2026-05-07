@@ -360,27 +360,288 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
 
   // === PALAVRAS PROBLEMÁTICAS ESPECÍFICAS DO TTS ===
   // O VozPro/F5-TTS frequentemente pronuncia estas errado
-  'automóvel': '[automóvel]',
-  'Automóvel': '[Automóvel]',
-  'automóveis': '[automóveis]',
-  'Automóveis': '[Automóveis]',
+  // CONSOANTES MUDAS — o modelo DROPA o P/C inicial
   'pneu': '[peneu]',
   'Pneu': '[Peneu]',
   'pneus': '[peneus]',
   'Pneus': '[Peneus]',
+  'pneumonia': '[peneumonia]',
+  'Pneumonia': '[Peneumonia]',
+  'pneumonita': '[peneumonite]',
+  'Pneumonita': '[Peneumonite]',
+  'pneumático': '[peneumático]',
+  'Pneumático': '[Peneumático]',
+  'pneumotórax': '[peneumotórax]',
   'psicólogo': '[psicólogo]',
   'Psicólogo': '[Psicólogo]',
   'psiquiatra': '[psiquiatra]',
-  'mnemônico': '[nemônico]',
-  'ptialismo': '[tialismo]',
+  'Psiquiatra': '[Psiquiatra]',
+  'psicose': '[psicose]',
+  'psicopata': '[psicopata]',
+  'ptialismo': '[petialismo]',
+  'Ptialismo': '[Petialismo]',
+  'ptose': '[petose]',
   'gnomo': '[nomo]',
   'Gnomo': '[Nomo]',
+  'gnose': '[nose]',
+  'Gnose': '[Nose]',
+  'gnóstico': '[nóstico]',
+  'mnemônico': '[nemônico]',
+  'Mnemônico': '[Nemônico]',
+  'mnemônica': '[nemônica]',
+  'cpt': '[cê pê tê]',
+  'CPT': '[cê pê tê]',
+
+  // H MUDO — o modelo lê como se tivesse som
   'hidráulico': '[idráulico]',
   'Hidráulico': '[Idráulico]',
   'humor': '[umor]',
   'Humor': '[Umor]',
   'homicídio': '[omicídio]',
   'Homicídio': '[Omicídio]',
+  'homem': '[omem]',
+  'Homem': '[Omem]',
+  'hora': '[ora]',
+  'Hora': '[Ora]',
+  'hoje': '[oje]',
+  'Hoje': '[Oje]',
+  'hotel': '[otel]',
+  'Hotel': '[Otel]',
+  'hierarquia': '[ierarquia]',
+  'Hierarquia': '[Ierarquia]',
+  'hernia': '[érnia]',
+  'Hérnia': '[Érnia]',
+  'habilidade': '[abilidade]',
+  'história': '[istória]',
+  'História': '[Istória]',
+  'herança': '[erança]',
+  'Herança': '[Erança]',
+
+  // OUTRAS PALAVRAS PROBLEMÁTICAS
+  'automóvel': '[automóvel]',
+  'Automóvel': '[Automóvel]',
+  'automóveis': '[automóveis]',
+  'Automóveis': '[Automóveis]',
+  'ecocardiograma': '[ecocardiograma]',
+  'transesofágico': '[transesofágico]',
+  'estenose': '[estenose]',
+  'adenocarcinoma': '[adenocarcinoma]',
+  'eletroencefalograma': '[eletroencefalograma]',
+  'hemodiálise': '[emodiálise]',
+  'azitromicina': '[azitromicina]',
+  'omeprazol': '[omeprazol]',
+  'dipirona': '[dipirona]',
+  'ressonância': '[ressonância]',
+  'metástase': '[metástase]',
+  'aneurisma': '[aneurisma]',
+  'insuficiência': '[insuficiência]',
+  'biópsia': '[biópsia]',
+
+  // === NOMES PRÓPRIOS DIFÍCEIS ===
+  'Wolski': '[Volski]',
+  'Kowalski': '[Covalski]',
+  'Higashi': '[Rigaxi]',
+  'Schütz': '[Xuts]',
+  'Constança': '[Constança]',
+  'Ilhéus': '[Ilhéus]',
+  'Niterói': '[Niterói]',
+  'Teotônio': '[Teotônio]',
+  'Xangai': '[Xangai]',
+  'Yngrid': '[Ingrid]',
+  "L'Oréal": '[Loreal]',
+}
+
+// ============================================================
+// PRÉ-PROCESSADOR DE X — 6 sons contextuais
+// ============================================================
+
+/**
+ * Dicionário de palavras com X que o TTS pronuncia errado.
+ * Mapeia a palavra completa para a versão com pronúncia correta.
+ *
+ * O X em português tem 6 sons possíveis:
+ * - KS: táxi, sexo, complexo, perplexo, têxtil, axila, sintaxe
+ * - CH: xarope, xaxim, xadrez, xampu, enxada, enxame, peixada, baixar
+ * - Z: exército, exemplo, exercício, existir, exílio, exigir, exame
+ * - SS: México, vexame, mexer, mexicano
+ * - S: extensão, explicar, exportar, expressão, extraordinário
+ * - Z (pós-vogal): exílio, existir, exótico
+ */
+const X_WORD_DICTIONARY: Record<string, string> = {
+  // X = CH (som de "ch")
+  'xarope': '[charope]',
+  'Xarope': '[Charope]',
+  'xaxim': '[chachim]',
+  'Xaxim': '[Chachim]',
+  'xadrez': '[chadrez]',
+  'Xadrez': '[Chadrez]',
+  'xampu': '[champu]',
+  'Xampu': '[Champu]',
+  'xavante': '[chavante]',
+  'Xavante': '[Chavante]',
+  'enxada': '[enchada]',
+  'enxame': '[enchame]',
+  'enxoval': '[enchoval]',
+  'enxaqueca': '[enchaqueca]',
+  'enxuto': '[enchuto]',
+  'peixada': '[peichada]',
+  'Peixada': '[Peichada]',
+  'peixe': '[peiche]',
+  'Peixe': '[Peiche]',
+  'baixar': '[baichar]',
+  'Baixar': '[Baichar]',
+  'baixo': '[baicho]',
+  'Baixo': '[Baicho]',
+  'baixa': '[baicha]',
+  'Baixa': '[Baicha]',
+  'caxinguelê': '[cachinguelê]',
+  'relaxar': '[relachar]',
+  'Relaxar': '[Relachar]',
+  'relaxamento': '[relachamento]',
+  'Relaxamento': '[Relachamento]',
+  'axila': '[achila]',
+  'Axila': '[Achila]',
+
+  // X = Z (som de "z" — ex- antes de vogal)
+  'exército': '[ezército]',
+  'Exército': '[Ezército]',
+  'exemplo': '[ezemplo]',
+  'Exemplo': '[Ezemplo]',
+  'exercício': '[ezercício]',
+  'Exercício': '[Ezercício]',
+  'exigir': '[ezigir]',
+  'Exigir': '[Ezigir]',
+  'exílio': '[ezílio]',
+  'Exílio': '[Ezílio]',
+  'existir': '[ezistir]',
+  'Existir': '[Ezistir]',
+  'exame': '[ezame]',
+  'Exame': '[Ezame]',
+  'exato': '[ezato]',
+  'Exato': '[Ezato]',
+  'exceção': '[ezeção]',
+  'Exceção': '[Ezeção]',
+  'excluir': '[ezcluir]',
+  'Excluir': '[Ezcluir]',
+  'executar': '[ezecutar]',
+  'Executar': '[Ezecutar]',
+  'exibir': '[ezibir]',
+  'Exibir': '[Ezibir]',
+  'exótico': '[ezótico]',
+  'Exótico': '[Ezótico]',
+  'expor': '[ezpor]',
+  'Expor': '[Ezpor]',
+  'extensão': '[estensão]',
+  'Extensão': '[Estensão]',
+  'explicar': '[esplicar]',
+  'Explicar': '[Esplicar]',
+  'exportar': '[exportar]',
+  'Exportar': '[Exportar]',
+  'expressão': '[espressão]',
+  'Expressão': '[Espressão]',
+  'extraordinário': '[estraordinário]',
+  'Extraordinário': '[Estraordinário]',
+  'extrato': '[estrato]',
+  'Extrato': '[Estrato]',
+  'experiência': '[esperiência]',
+  'Experiência': '[Esperiência]',
+  'expresso': '[espresso]',
+  'Expresso': '[Espresso]',
+  'explosão': '[esplosão]',
+  'Explosão': '[Esplosão]',
+  'explorar': '[esplorar]',
+  'Explorar': '[Esplorar]',
+  'exposição': '[esposição]',
+  'Exposição': '[Esposição]',
+  'explícito': '[esplicito]',
+  'Explícito': '[Esplicito]',
+  'expectativa': '[espectativa]',
+  'Expectativa': '[Espectativa]',
+  'exíguo': '[ezíguo]',
+  'Exíguo': '[Ezíguo]',
+
+  // X = SS (som de "ss")
+  'México': '[Méssico]',
+  'mexicano': '[messicano]',
+  'Mexicano': '[Messicano]',
+  'mexicana': '[messicana]',
+  'Mexicana': '[Messicana]',
+  'vexame': '[vessame]',
+  'Vexame': '[Vessame]',
+  'mexer': '[messer]',
+  'Mexer': '[Messer]',
+  'mexida': '[messida]',
+  'Mexida': '[Messida]',
+
+  // X = KS (som de "ks")
+  'táxi': '[tácsi]',
+  'Táxi': '[Tácsi]',
+  'sexo': '[sessso]',
+  'Sexo': '[Sessso]',
+  'complexo': '[complekso]',
+  'Complexo': '[Complekso]',
+  'perplexo': '[perplekso]',
+  'Perplexo': '[Perplekso]',
+  'têxtil': '[têkstil]',
+  'Têxtil': '[Têkstil]',
+  'sintaxe': '[sintakse]',
+  'Sintaxe': '[Sintakse]',
+  'ortodoxo': '[ortodokso]',
+  'Ortodoxo': '[Ortodokso]',
+  'paradoxo': '[paradokso]',
+  'Paradoxo': '[Paradokso]',
+  'nexus': '[neksus]',
+  'fixo': '[fikso]',
+  'Fixo': '[Fikso]',
+  'fixar': '[fiksar]',
+  'Fixar': '[Fiksar]',
+  'maximizar': '[maksimizar]',
+  'Maximizar': '[Maksimizar]',
+  'máximo': '[máksimo]',
+  'Máximo': '[Máksimo]',
+  'mínimo': '[mínimo]',
+  'taxa': '[taksa]',
+  'Taxa': '[Taksa]',
+  'oxigênio': '[oksijênio]',
+  'Oxigênio': '[Oksijênio]',
+  'tóxico': '[tóksico]',
+  'Tóxico': '[Tóksico]',
+  'toxina': '[toksina]',
+  'Toxina': '[Toksina]',
+  'intoxicação': '[intoksicação]',
+  'Intoxicação': '[Intoksicação]',
+
+  // Xangai — nome próprio, som de CH
+  'Xangai': '[Xangai]',
+}
+
+/**
+ * Pré-processa todas as ocorrências de X no texto,
+ * substituindo palavras com X pela pronúncia correta.
+ */
+function preprocessX(text: string): string {
+  let result = text
+
+  // 1. Aplicar dicionário de palavras com X (maior precisão)
+  for (const [word, pronunciation] of Object.entries(X_WORD_DICTIONARY)) {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    result = result.replace(new RegExp(`\\b${escaped}\\b`, 'g'), pronunciation)
+  }
+
+  // 2. X restantes: regra geral contextual
+  // X antes de consoante = S (ex: "extensão" → já coberto pelo dicionário, mas fallback)
+  // X no final de sílaba antes de consoante
+  result = result.replace(/\bx([bcdfghjklmnpqrstvwxyz])/gi, (match, consonant) => {
+    const isUpper = match[0] === match[0].toUpperCase()
+    return isUpper ? `S${consonant}` : `s${consonant}`
+  })
+
+  // 3. X entre vogais que não foi coberto = KS (fallback)
+  result = result.replace(/([aeiouáàãâéèêíïóôõúü])x([aeiouáàãâéèêíïóôõúü])/gi, (match, v1, v2) => {
+    return `${v1}ks${v2}`
+  })
+
+  return result
 }
 
 // ============================================================
@@ -392,6 +653,8 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
  *
  * Correções na ordem:
  * 1. Artigos após pontuação (elimina hesitação)
+ * 1b. Artigos iniciais O/A antes de nomes próprios e títulos
+ * 1c. Pré-processador de X (6 sons contextuais)
  * 2. Números por extenso (evita leitura literal)
  * 3. Valores monetários
  * 4. Porcentagens
@@ -414,6 +677,32 @@ export function optimizePronunciation(text: string): string {
   // ". O sistema" → ", o sistema" (troca ponto por vírgula = une frases)
   result = result.replace(/([.!?])\s+([OoAa])\s(?=[a-záàãâéèêíïóôõúüç])/g, ',$2 ')
   result = result.replace(/([.!?])\s+([Oo]s|[Aa]s|[Uu]m(?:[oa]s)?)\s(?=[a-záàãâéèêíïóôõúüç])/g, ',$2 ')
+
+  // ---- 1b. ARTIGOS INICIAIS O/A ANTES DE NOMES PRÓPRIOS E TÍTULOS ----
+  // O modelo ENGOLE o "O" antes de nomes próprios maiúsculos
+  // "O Dr." → "[o] Doutor", "O Wolski" → "[o] [Volski]"
+  // Padrão: O/A maiúsculo no início da frase ou após pontuação + palavra maiúscula
+  result = result.replace(/\b([Oo])\s+(Dr\.|Dra\.|Sr\.|Sra\.|Prof\.|Profa\.|Gov\.|Emb\.|Cel\.|Maj\.|Gen\.|Min\.)/g, '[$1] $2')
+  // Artigo antes de nome próprio (maiúscula após artigo isolado)
+  result = result.replace(/(?:^|\n|[,;!?]\s*)([Oo])\s+([A-Z][a-záàãâéèêíïóôõúüç])/g, (match, artigo, name) => {
+    return match.replace(`${artigo} ${name}`, `[${artigo}] ${name}`)
+  })
+  // Artigo "A" antes de nome próprio feminino
+  result = result.replace(/(?:^|\n|[,;!?]\s*)([Aa])\s+([A-Z][a-záàãâéèêíïóôõúüç])/g, (match, artigo, name) => {
+    return match.replace(`${artigo} ${name}`, `[${artigo}] ${name}`)
+  })
+
+  // ---- 1c. PRÉ-PROCESSADOR DE X (6 sons contextuais em PT-BR) ----
+  // O modelo NÃO sabe qual som de X usar pelo contexto
+  // Regras contextuais de pronúncia do X:
+  //   - X antes de vogal tônica = KS (táxi, sexo, têxtil)
+  //   - X após E = KS (complexo, sexo, têxtil, perplexo)
+  //   - X antes de consonante = S (extensão, explicar, exportar)
+  //   - X em palavras específicas = CH (xarope, xaxim, xadrez, enxada)
+  //   - X em palavras específicas = Z (exército, exemplo, exercício, existir)
+  //   - X em palavras específicas = SS (México, maxXico, vexame)
+  // Implementado como função auxiliar abaixo
+  result = preprocessX(result)
 
   // ---- 2. NÚMEROS GRANDES POR EXTENSO ----
   // Anos: "2024" → "[dois mil vinte e quatro]" (quando precedido por "ano" ou similar)
