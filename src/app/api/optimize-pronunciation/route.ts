@@ -2,7 +2,7 @@
  * Pronunciation Optimization Agent (API Route)
  *
  * Usa LLM (z-ai-web-dev-sdk) para analisar texto em PT-BR e corrigir
- * pronúncias problemáticas antes de enviar ao TTS (OmniVoice / F5-TTS).
+ * pronúncias problemáticas antes de enviar ao TTS (VozPro / F5-TTS).
  *
  * O agente detecta e corrige automaticamente:
  * 1. Artigos no início de frase após ponto (". O sistema" → ". [o] sistema")
@@ -11,7 +11,7 @@
  * 4. Abreviações e siglas (Sr., Av., etc.)
  * 5. Termos em inglês com pronúncia em PT-BR
  *
- * A correção usa colchetes [pronúncia] que o OmniVoice respeita fielmente.
+ * A correção usa colchetes [pronúncia] que o VozPro respeita fielmente.
  */
 
 import { NextRequest, NextResponse } from 'next/server'

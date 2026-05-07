@@ -1,6 +1,6 @@
 <?php
 /**
- * OmniVoice TTS - Endpoint para retornar a URL do tunnel ativo
+ * VozPro TTS - Endpoint para retornar a URL do tunnel ativo
  * Le do tunnel-config.ini (separado do config.php principal para nao conflitar)
  * Se o INI nao existir, tenta o HF_SPACE_URL do config.php como fallback
  */

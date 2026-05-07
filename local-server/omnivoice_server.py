@@ -1,12 +1,12 @@
 """
-OmniVoice Server - TTS via OmniVoice (k2-fsa)
+VozPro Server - TTS via VozPro (k2-fsa)
 Rodar na GPU local com cloudflared tunnel para Vercel.
 
 INSTALAÇÃO:
 1. pip install omnivoice
 2. python omnivoice_server.py
 
-O servidor sobe na porta 7861 e usa o Gradio nativo do OmniVoice.
+O servidor sobe na porta 7861 e usa o Gradio nativo do VozPro.
 Vercel se conecta via tunnel (cloudflared) ou URL direta.
 
 Features:
@@ -38,12 +38,12 @@ SAMPLE_RATE = 24000
 
 
 def load_model():
-    """Carrega o modelo OmniVoice na GPU."""
+    """Carrega o modelo VozPro na GPU."""
     global model
     if model is not None:
         return model
 
-    print("[OmniVoice] Carregando modelo k2-fsa/OmniVoice na GPU...")
+    print("[VozPro] Carregando modelo k2-fsa/OmniVoice na GPU...")
     start = time.time()
 
     model = OmniVoice.from_pretrained(
@@ -53,7 +53,7 @@ def load_model():
     )
 
     elapsed = time.time() - start
-    print(f"[OmniVoice] Modelo carregado em {elapsed:.1f}s")
+    print(f"[VozPro] Modelo carregado em {elapsed:.1f}s")
     return model
 
 
@@ -67,13 +67,13 @@ def generate_speech(
     speed: float = 1.0,
     language: str = "",         # omitido = auto detect
 ):
-    """Gera áudio usando OmniVoice."""
+    """Gera áudio usando VozPro."""
     m = load_model()
 
     if not text or not text.strip():
         raise gr.Error("Texto é obrigatório")
 
-    print(f"[OmniVoice] Gerando: mode={mode}, text={text[:80]}...")
+    print(f"[VozPro] Gerando: mode={mode}, text={text[:80]}...")
     start = time.time()
 
     # Montar kwargs base
@@ -89,22 +89,22 @@ def generate_speech(
         # ref_text é OPCIONAL - se vazio, Whisper transcreve automaticamente
         if ref_text and ref_text.strip():
             kwargs["ref_text"] = ref_text.strip()
-        print(f"[OmniVoice] Voice Clone: ref={ref_audio_path}")
+        print(f"[VozPro] Voice Clone: ref={ref_audio_path}")
 
     elif mode == "design" and instruct:
         # Voice Design - só descrição textual
         kwargs["instruct"] = instruct.strip()
-        print(f"[OmniVoice] Voice Design: instruct={instruct}")
+        print(f"[VozPro] Voice Design: instruct={instruct}")
 
     elif mode == "auto":
         # Auto voice - modelo escolhe sozinho
-        print("[OmniVoice] Auto Voice (sem referência)")
+        print("[VozPro] Auto Voice (sem referência)")
     else:
         # Fallback para clone sem áudio -> auto
         if mode == "clone" and not ref_audio_path:
-            print("[OmniVoice] Clone sem áudio, caindo para auto")
+            print("[VozPro] Clone sem áudio, caindo para auto")
         elif mode == "design" and not instruct:
-            print("[OmniVoice] Design sem instruct, caindo para auto")
+            print("[VozPro] Design sem instruct, caindo para auto")
         # kwargs ficam só com text/num_step/speed
 
     # Gerar
@@ -114,7 +114,7 @@ def generate_speech(
     elapsed = time.time() - start
     duration = len(audio_array) / SAMPLE_RATE
     rtf = elapsed / duration if duration > 0 else 0
-    print(f"[OmniVoice] Gerado em {elapsed:.2f}s (duração={duration:.1f}s, RTF={rtf:.3f})")
+    print(f"[VozPro] Gerado em {elapsed:.2f}s (duração={duration:.1f}s, RTF={rtf:.3f})")
 
     # Salvar como WAV temporário e retornar path
     out_path = tempfile.mktemp(suffix=".wav")
@@ -128,15 +128,15 @@ def generate_speech(
 # ============================================
 
 def create_interface():
-    """Cria a interface Gradio para o OmniVoice server."""
+    """Cria a interface Gradio para o VozPro server."""
 
     with gr.Blocks(
-        title="OmniVoice TTS Server",
+        title="VozPro TTS Server",
         theme=gr.themes.Soft(),
     ) as demo:
 
-        gr.Markdown("# OmniVoice TTS Server")
-        gr.Markdown("Servidor TTS OmniVoice (k2-fsa) — RTF 0.025, Voice Design, 600+ idiomas")
+        gr.Markdown("# VozPro TTS Server")
+        gr.Markdown("Servidor TTS VozPro (k2-fsa) — RTF 0.025, Voice Design, 600+ idiomas")
 
         with gr.Row():
             with gr.Column(scale=2):
@@ -234,13 +234,13 @@ def create_interface():
 # ============================================
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="OmniVoice TTS Server")
+    parser = argparse.ArgumentParser(description="VozPro TTS Server")
     parser.add_argument("--ip", default="0.0.0.0", help="IP para bindar")
     parser.add_argument("--port", type=int, default=7861, help="Porta do servidor")
     parser.add_argument("--share", action="store_true", help="Criar link público Gradio")
     args = parser.parse_args()
 
-    print(f"[OmniVoice] Iniciando servidor em {args.ip}:{args.port}")
+    print(f"[VozPro] Iniciando servidor em {args.ip}:{args.port}")
 
     # Carregar modelo antes de subir o servidor
     load_model()

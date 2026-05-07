@@ -1189,7 +1189,7 @@ export default function AdminDashboard() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-slate-500">
-                    Apenas valores suportados pelo OmniVoice. A emoção real vem do tom do áudio enviado.
+                    Apenas valores suportados pelo engine TTS. A emoção real vem do tom do áudio enviado.
                   </p>
                 </div>
               </div>

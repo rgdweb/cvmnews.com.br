@@ -1,7 +1,7 @@
 @echo off
-title OmniVoice GPU Server
+title VozPro GPU Server
 echo ============================================
-echo   OmniVoice TTS - Servidor GPU Local
+echo   VozPro TTS - Servidor GPU Local
 echo ============================================
 echo.
 
@@ -13,8 +13,8 @@ echo [1/4] Ativando Conda...
 call C:\Users\Administrador\Miniconda3\Scripts\activate.bat
 set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-echo [2/4] Iniciando OmniVoice Demo (porta 7860)...
-start "OmniVoice GPU" cmd /k "call C:\Users\Administrador\Miniconda3\Scripts\activate.bat && set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True && omnivoice-demo --ip 0.0.0.0 --port 7860"
+echo [2/4] Iniciando VozPro Demo (porta 7860)...
+start "VozPro GPU" cmd /k "call C:\Users\Administrador\Miniconda3\Scripts\activate.bat && set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True && omnivoice-demo --ip 0.0.0.0 --port 7860"
 echo      Aguardando 15 segundos...
 timeout /t 15 /nobreak >nul
 

@@ -3,7 +3,7 @@ $auth = "vozpro_tunnel_2024"
 $serverUpdate = "https://sorteiomax.com.br/omnivoice/update_tunnel.php"
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  OmniVoice - Tunnel Cloudflare" -ForegroundColor Cyan
+Write-Host "  VozPro - Tunnel Cloudflare" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -42,12 +42,12 @@ if (-not $cloudflared) {
 Write-Host "[OK] cloudflared encontrado: $cloudflared" -ForegroundColor Green
 
 Write-Host ""
-Write-Host "[1/2] Verificando OmniVoice na porta $port..." -ForegroundColor Yellow
+Write-Host "[1/2] Verificando VozPro na porta $port..." -ForegroundColor Yellow
 try {
     $null = Invoke-WebRequest -Uri "http://localhost:$port/" -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
-    Write-Host "[OK] OmniVoice respondendo!" -ForegroundColor Green
+    Write-Host "[OK] VozPro respondendo!" -ForegroundColor Green
 } catch {
-    Write-Host "[ERRO] OmniVoice NAO esta rodando!" -ForegroundColor Red
+    Write-Host "[ERRO] VozPro NAO esta rodando!" -ForegroundColor Red
     Read-Host "Pressione Enter para sair"
     exit 1
 }

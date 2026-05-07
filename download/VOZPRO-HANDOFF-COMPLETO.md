@@ -1,10 +1,10 @@
 # ===========================================
-# HANDOFF COMPLETO - VOZPRO / OMNIVOICE
+# HANDOFF COMPLETO - VOZPRO
 # Data: 06/05/2026
 # ===========================================
 
 ## PROJETO
-- **Nome**: VozPro (OmniVoice TTS)
+- **Nome**: VozPro (VozPro TTS)
 - **Site**: https://omnivoice-umber.vercel.app/
 - **GitHub**: https://github.com/rgdweb/Omnivoice.git
 - **Repositório local**: /home/z/my-project/
@@ -33,14 +33,14 @@
 
 ## GIT - HISTÓRICO DE COMMITS (ORDEM CRONOLÓGICA)
 ```
-ceeb10b  feat: OmniVoice PHP direto - bypassa Vercel completamente
+ceeb10b  feat: VozPro PHP direto - bypassa Vercel completamente
 3166864  (commit de sessão anterior)
 d1df588  (commit de sessão anterior)
 2a87170  (commit de sessão anterior)
 9eaf63e  (commit de sessão anterior)
 6ba5549  ← ESTADO QUE FUNCIONAVA SEM ESTALOS
 1b550f9  ← ONDE COMEÇARAM OS PROBLEMAS (feat: adicionar toggles Denoise/Preprocess/Postprocess)
-a973622  fix: reverter params hardcoded OmniVoice (tentativa de correção)
+a973622  fix: reverter params hardcoded VozPro (tentativa de correção)
 9869573  revert: restaurar estado funcional antes dos estalos (arquivos idênticos ao 6ba5549)
 7a7ba32  atualização do ZIP do instalador
 497b8cf  deploy: force rebuild to clear cache (último commit)
@@ -55,7 +55,7 @@ a973622  fix: reverter params hardcoded OmniVoice (tentativa de correção)
 ```
 /public_html/omnivoice/
 ├── config.php              ← CONFIG COM API_KEY (importante!)
-├── generate-omnivoice.php  ← GERAÇÃO OMNIVOICE via PHP direto
+├── generate-omnivoice.php  ← GERAÇÃO VOZPRO via PHP direto
 ├── get_tunnel.php          ← RETORNA URL DO TUNNEL ATIVO
 ├── update_tunnel.php       ← ATUALIZA URL DO TUNNEL (chamado pelo start_tunnel.ps1)
 ├── tunnel-config.ini       ← ARMAZENA URL DO TUNNEL (separado do config.php)
@@ -83,12 +83,12 @@ define('ENABLE_LOGS', true);
 
 ## ARQUITETURA DO SISTEMA
 
-### Fluxo OmniVoice PHP Direto (principal):
+### Fluxo VozPro PHP Direto (principal):
 ```
 Browser → PHP (sorteiomax.com.br/omnivoice/generate-omnivoice.php)
        → get_tunnel.php (pega URL do tunnel)
        → Tunnel Cloudflare (trycloudflare.com)
-       → OmniVoice Demo no PC (localhost:7860)
+       → VozPro Demo no PC (localhost:7860)
        → Retorna áudio em base64
 ```
 
@@ -101,10 +101,10 @@ Browser → Vercel API (/api/tunnel-generate)
        → Retorna áudio
 ```
 
-### Fluxo OmniVoice via Vercel (fallback, NÃO recomendado - timeout 10s):
+### Fluxo VozPro via Vercel (fallback, NÃO recomendado - timeout 10s):
 ```
 Browser → Vercel API (/api/omnivoice-generate)
-       → get_tunnel.php → Tunnel → OmniVoice
+       → get_tunnel.php → Tunnel → VozPro
 ```
 
 ### Autenticação:
@@ -118,7 +118,7 @@ Precisam estar configuradas:
 - `AUDIO_SERVER_URL` = `https://sorteiomax.com.br/omnivoice`
 - `AUDIO_SERVER_API_KEY` = `vozpro_2024_a8f7d9e2b4c1m6n3p5q0r9s2t8u1`
 
-## PARAMÊTROS DO OMNIVOICE (valores estáveis)
+## PARAMÊTROS DO VOZPRO (valores estáveis)
 ```
 Clone mode (_clone_fn): text, lang, ref_aud, ref_text, instruct, ns, gs, dn, sp, du, pp, po
 Design/Auto mode (_design_fn): text, lang, ns, gs, dn, sp, du, pp, po, gender, age, pitch, style, accent, dialect
@@ -138,7 +138,7 @@ Valores padrão (hardcoded no PHP):
 - Código foi REVERTIDO para estado idêntico ao `6ba5549` (diff zero)
 - PHP no servidor foi atualizado via FTP (verificado, diff zero)
 - **MESMO ASSIM os estalos continuam**
-- Afeta AMBOS os modelos: F5-TTS e OmniVoice
+- Afeta AMBOS os modelos: F5-TTS e VozPro
 - Testado em janela anônima: mesma coisa
 
 ### Possíveis causas:
@@ -161,7 +161,7 @@ Valores padrão (hardcoded no PHP):
 1. Aguardar deploy do commit `497b8cf` e testar
 2. Se persistir: comparar TODOS os PHPs do servidor vs git
 3. Se persistir: testar em navegador diferente (Firefox se usa Chrome)
-4. Se persistir: o problema pode ser no próprio OmniVoice/F5-TTS no PC
+4. Se persistir: o problema pode ser no próprio VozPro/F5-TTS no PC
 
 ## SCRIPTS DO PC (INSTALADOR)
 - **ZIP**: `/download/OmniVoice-Server.zip`

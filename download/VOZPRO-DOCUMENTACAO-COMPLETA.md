@@ -23,7 +23,7 @@ O VozPro e um sistema TTS (Text-to-Speech) com dois modelos de IA rodando localm
                           │                    │                        │
                           v                    v                        v
                 ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-                │  F5-TTS (PHP)    │  │ OmniVoice (PHP)  │  │  Vercel API      │
+                │  F5-TTS (PHP)    │  │ VozPro (PHP)  │  │  Vercel API      │
                 │  sorteiomax.com  │  │  sorteiomax.com  │  │  (fallback)      │
                 │  generate.php    │  │  generate-       │  │  omnivoice-      │
                 │                  │  │  omnivoice.php    │  │  generate/       │
@@ -44,7 +44,7 @@ O VozPro e um sistema TTS (Text-to-Speech) com dois modelos de IA rodando localm
                          ┌──────────────────────┐                    │
                          │  GPU LOCAL (PC)       │◄───────────────────┘
                          │  - F5-TTS Server      │
-                         │  - OmniVoice Server   │
+                         │  - VozPro Server   │
                          │  - Gradio API         │
                          └──────────────────────┘
 ```
@@ -54,15 +54,15 @@ O VozPro e um sistema TTS (Text-to-Speech) com dois modelos de IA rodando localm
 | Modelo | Velocidade | Qualidade | Recursos |
 |--------|-----------|-----------|----------|
 | **F5-TTS** | Lento (RTF ~0.5) | Alta | Clonagem fiel, chunking frase por frase |
-| **OmniVoice** | Rapido (RTF 0.025) | Boa | Clonagem, Voice Design, Auto Voice, 600+ idiomas |
+| **VozPro** | Rapido (RTF 0.025) | Boa | Clonagem, Voice Design, Auto Voice, 600+ idiomas |
 
 ### Modos de Voz
 
 | Modo | Descricao | Modelos |
 |------|-----------|---------|
-| **Clone** | Clona voz a partir de audio de referencia | F5-TTS, OmniVoice |
-| **Voice Design** | Cria voz a partir de descricao (genero, idade, tom, sotaque) | OmniVoice apenas |
-| **Auto Voice** | Voz aleatoria com todos os params "Auto" | OmniVoice apenas |
+| **Clone** | Clona voz a partir de audio de referencia | F5-TTS, VozPro |
+| **Voice Design** | Cria voz a partir de descricao (genero, idade, tom, sotaque) | VozPro apenas |
+| **Auto Voice** | Voz aleatoria com todos os params "Auto" | VozPro apenas |
 
 ---
 
@@ -97,18 +97,18 @@ O VozPro e um sistema TTS (Text-to-Speech) com dois modelos de IA rodando localm
 - Script `start_tunnel.ps1` (PowerShell) inicia cloudflared automaticamente
 - URL do tunnel registrada no PHP via `update_tunnel.php`
 - `get_tunnel.php` retorna URL dinamica do tunnel
-- F5-TTS e OmniVoice rodam localmente, acessiveis via tunnel
+- F5-TTS e VozPro rodam localmente, acessiveis via tunnel
 
-### Fase 6: Integracao OmniVoice
-- OmniVoice (k2-fsa) adicionado como segundo modelo TTS
+### Fase 6: Integracao VozPro
+- VozPro (k2-fsa) adicionado como segundo modelo TTS
 - Script `omnivoice_server.py` (Gradio) para rodar localmente
 - API route `/api/omnivoice-generate` no Vercel para integracao inicial
-- Health check automatico: botao OmniVoice desabilitado se servidor offline
+- Health check automatico: botao VozPro desabilitado se servidor offline
 
-### Fase 7: Correcoes OmniVoice (bugs criticos)
+### Fase 7: Correcoes VozPro (bugs criticos)
 Varios bugs foram encontrados e corrigidos durante testes reais:
 
-#### Bug 1: OmniVoice Offline (endpoint names com `/`)
+#### Bug 1: VozPro Offline (endpoint names com `/`)
 - **Problema**: Gradio retorna nomes de endpoints com `/` prefixo (`/_design_fn`, `/_clone_fn`), mas o codigo checava sem `/`
 - **Correcao** (`3ecbff6`): Verifica com e sem `/` no health check
 
@@ -118,17 +118,17 @@ Varios bugs foram encontrados e corrigidos durante testes reais:
 
 #### Bug 3: Voice Design/Auto usando voz selecionada
 - **Problema**: Ao selecionar Voice Design ou Auto Voice, o sistema enviava os metadados da voz selecionada em vez dos params do Voice Design ou "Auto"
-- **Correcao** (`bff23a0`): Parser de texto para dropdowns OmniVoice + Auto mode forca todos params como "Auto"
+- **Correcao** (`bff23a0`): Parser de texto para dropdowns VozPro + Auto mode forca todos params como "Auto"
 
 #### Bug 4: "Voz bebada" e palavras erradas
 - **Problema**: `numStep: 16` (modo rapido) gerava audio com palavras distorcidas. `language: 'Auto'` ignorava a selecao do usuario
 - **Correcao** (`9076556`): `numStep` mudado para 32 (qualidade). Language agora usa a selecao do usuario (Portuguese, English, etc)
 
-### Fase 8: OmniVoice PHP Direto (bypass total do Vercel)
-- **Problema**: OmniVoice ainda passava pela API route do Vercel (`/api/omnivoice-generate`), consumindo serverless function hours
+### Fase 8: VozPro PHP Direto (bypass total do Vercel)
+- **Problema**: VozPro ainda passava pela API route do Vercel (`/api/omnivoice-generate`), consumindo serverless function hours
 - **Solucao**: Criar `generate-omnivoice.php` no sorteiomax com a mesma logica da API route
 - **Commit** (`ceeb10b`): `generate-omnivoice.php` + `get_tunnel.php` + `tunnel-config.ini` + `update_tunnel.php`
-- **Resultado**: OmniVoice agora vai Browser → PHP sorteiomax → Tunnel → GPU. Zero Vercel.
+- **Resultado**: VozPro agora vai Browser → PHP sorteiomax → Tunnel → GPU. Zero Vercel.
 
 ### Fase 9: Admin e Upload de Voz
 - Painel admin com toggle para habilitar/desabilitar upload de voz no cliente
@@ -155,8 +155,8 @@ src/
 │       ├── generate-token/   # Token HMAC para PHP direto (F5-TTS)
 │       ├── generate-config/  # Config: URL do PHP server
 │       ├── tunnel-generate/  # Geracao F5-TTS via tunnel direto (GPU local)
-│       ├── omnivoice-generate/ # Geracao OmniVoice via Vercel (FALLBACK)
-│       ├── omnivoice-token/  # Token HMAC para PHP direto (OmniVoice)
+│       ├── omnivoice-generate/ # Geracao VozPro via Vercel (FALLBACK)
+│       ├── omnivoice-token/  # Token HMAC para PHP direto (VozPro)
 │       ├── upload-voice/     # Upload de audio de referencia
 │       ├── upload-track/     # Upload de trilha sonora
 │       ├── upload-chunk/     # Upload chunked para arquivos grandes
@@ -182,7 +182,7 @@ php-server/
 ├── update_tunnel.php         # Recebe URL do tunnel do cloudflared (salva no config.php)
 ├── tunnel-config.ini         # Config INI separado para tunnel URL (fallback)
 ├── generate.php              # Geracao F5-TTS via PHP (tunnel → GPU local)
-├── generate-omnivoice.php    # Geracao OmniVoice via PHP (tunnel → GPU local) ← NOVO
+├── generate-omnivoice.php    # Geracao VozPro via PHP (tunnel → GPU local) ← NOVO
 ├── generate-direct.php       # Geracao direta (sem tunnel, HF Space publico)
 ├── generate_local.php        # Geracao local (rede interna)
 ├── upload.php                # Upload de arquivos de audio
@@ -202,8 +202,8 @@ php-server/
 
 ```
 local-server/
-├── omnivoice_server.py       # Servidor OmniVoice (Gradio) ← NOVO
-├── iniciar_omnivoice.bat     # Iniciar OmniVoice no Windows ← NOVO
+├── omnivoice_server.py       # Servidor VozPro (Gradio) ← NOVO
+├── iniciar_omnivoice.bat     # Iniciar VozPro no Windows ← NOVO
 ├── iniciar.bat               # Iniciar F5-TTS + tunnel (batch)
 ├── iniciar_local.bat         # Iniciar modo local (sem tunnel)
 ├── start_tunnel.ps1          # Iniciar cloudflared + registrar URL no PHP
@@ -241,7 +241,7 @@ Para evitar que qualquer pessoa use o PHP diretamente, o sistema usa tokens HMAC
 | `AUDIO_SERVER_URL` | `https://sorteiomax.com.br/omnivoice` | **Sim** (para PHP direto) |
 | `AUDIO_SERVER_API_KEY` | `vozpro_2024_a8f7d9e2b4c1m6n3p5q0r9s2t8u1` | **Sim** (para PHP direto) |
 
-> **IMPORTANTE**: Sem `AUDIO_SERVER_URL` e `AUDIO_SERVER_API_KEY`, o OmniVoice cai pro fallback do Vercel API route (com risco de timeout).
+> **IMPORTANTE**: Sem `AUDIO_SERVER_URL` e `AUDIO_SERVER_API_KEY`, o VozPro cai pro fallback do Vercel API route (com risco de timeout).
 
 ---
 
@@ -281,17 +281,17 @@ define('HF_SPACE_URL', 'https://hereby-shopper-aid-producer.trycloudflare.com');
   6. Musica fade-out final
 - Configuravel pelo usuario no frontend
 
-### 7.3 Voice Design (OmniVoice exclusivo)
+### 7.3 Voice Design (VozPro exclusivo)
 - Usuario descreve a voz em texto: "homem jovem com sotaque brasileiro, tom grave"
-- Parser converte texto para dropdowns OmniVoice: gender, age, pitch, style, accent
-- OmniVoice `_design_fn` recebe params estruturados (nao texto livre)
+- Parser converte texto para dropdowns VozPro: gender, age, pitch, style, accent
+- VozPro `_design_fn` recebe params estruturados (nao texto livre)
 - Suporta: Female/Male, Child/Teen/Young/Middle-aged/Elderly, pitch variants, Whisper, sotaques
 
-### 7.4 Pronuncia CMU (OmniVoice)
+### 7.4 Pronuncia CMU (VozPro)
 - Texto pode conter pronuncia fonetica CMU: `[B EY1 S]` = "base"
-- OmniVoice interpreta nativamente, sem tratamento especial no frontend
+- VozPro interpreta nativamente, sem tratamento especial no frontend
 
-### 7.5 Simbolos nao-verbais (OmniVoice)
+### 7.5 Simbolos nao-verbais (VozPro)
 - `[laughter]`, `[clears throat]`, etc. funcionam nativamente
 - Passam direto no texto sem tratamento especial
 
@@ -318,10 +318,10 @@ define('HF_SPACE_URL', 'https://hereby-shopper-aid-producer.trycloudflare.com');
 8. Frontend reproduz (com ou sem trilha)
 ```
 
-### OmniVoice (via PHP direto - ideal)
+### VozPro (via PHP direto - ideal)
 
 ```
-1. Usuario seleciona OmniVoice, escolhe modo (Clone/Design/Auto)
+1. Usuario seleciona VozPro, escolhe modo (Clone/Design/Auto)
 2. Frontend pede token: GET /api/omnivoice-token (Vercel)
 3. Vercel retorna { generateUrl, token }
 4. Frontend envia POST direto para generate-omnivoice.php (sorteiomax)
@@ -333,10 +333,10 @@ define('HF_SPACE_URL', 'https://hereby-shopper-aid-producer.trycloudflare.com');
 10. Frontend reproduz (com ou sem trilha)
 ```
 
-### OmniVoice (via Vercel - fallback, sem AUDIO_SERVER_URL)
+### VozPro (via Vercel - fallback, sem AUDIO_SERVER_URL)
 
 ```
-1. Usuario seleciona OmniVoice
+1. Usuario seleciona VozPro
 2. Frontend nao consegue obter token PHP (AUDIO_SERVER_URL vazio)
 3. Frontend envia POST /api/omnivoice-generate (Vercel)
 4. Vercel faz tudo: tunnel, upload, submit, stream
@@ -350,8 +350,8 @@ define('HF_SPACE_URL', 'https://hereby-shopper-aid-producer.trycloudflare.com');
 
 | Problema | Status | Solucao |
 |----------|--------|---------|
-| Timeout Vercel (10s free tier) | ✅ Resolvido | OmniVoice via PHP direto |
-| OmniVoice offline (endpoint names) | ✅ Resolvido | Check com e sem `/` prefixo |
+| Timeout Vercel (10s free tier) | ✅ Resolvido | VozPro via PHP direto |
+| VozPro offline (endpoint names) | ✅ Resolvido | Check com e sem `/` prefixo |
 | "Sem URL no output" (audio index) | ✅ Resolvido | Ler index 0 (audio), nao 1 (status) |
 | Voice Design usando voz selecionada | ✅ Resolvido | Parser de texto + Auto mode |
 | "Voz bebada" (numStep baixo) | ✅ Resolvido | numStep 32 (qualidade) |
@@ -372,7 +372,7 @@ define('HF_SPACE_URL', 'https://hereby-shopper-aid-producer.trycloudflare.com');
    - Ir em Vercel Dashboard → Project → Settings → Environment Variables
    - `AUDIO_SERVER_URL` = `https://sorteiomax.com.br/omnivoice`
    - `AUDIO_SERVER_API_KEY` = `vozpro_2024_a8f7d9e2b4c1m6n3p5q0r9s2t8u1`
-   - Sem isso, OmniVoice ainda passa pelo Vercel (fallback)
+   - Sem isso, VozPro ainda passa pelo Vercel (fallback)
 
 ### Futuro (discutido, nao implementado):
 2. **Cache de resultado** (same text + voice = instant)
@@ -394,12 +394,12 @@ define('HF_SPACE_URL', 'https://hereby-shopper-aid-producer.trycloudflare.com');
 
 | Commit | Descricao |
 |--------|-----------|
-| `ceeb10b` | OmniVoice PHP direto - bypassa Vercel completamente |
-| `9076556` | OmniVoice quality - 32 steps + idioma do usuario |
+| `ceeb10b` | VozPro PHP direto - bypassa Vercel completamente |
+| `9076556` | VozPro quality - 32 steps + idioma do usuario |
 | `bff23a0` | Voice Design e Auto Voice corrigidos |
-| `d96f5a8` | OmniVoice result parsing - audio no index 0 |
-| `3ecbff6` | OmniVoice health check - endpoint names com `/` |
-| `7f3cebe` | API OmniVoice reescrita com params Gradio corretos |
+| `d96f5a8` | VozPro result parsing - audio no index 0 |
+| `3ecbff6` | VozPro health check - endpoint names com `/` |
+| `7f3cebe` | API VozPro reescrita com params Gradio corretos |
 | `94a2e5e` | Bloqueia Voice Design/Auto no F5-TTS |
 | `0fdc437` | Voice Design, Auto Voice, Upload voz + Pronuncia CMU |
 | `9d03679` | Audio ducking system |
@@ -414,24 +414,24 @@ define('HF_SPACE_URL', 'https://hereby-shopper-aid-producer.trycloudflare.com');
 
 ### Primeiro acesso:
 1. Acessar a interface no Vercel
-2. Se o botao OmniVoice estiver desabilitado = GPU offline. Ligar o `iniciar.bat` ou `iniciar_omnivoice.bat` na maquina local
+2. Se o botao VozPro estiver desabilitado = GPU offline. Ligar o `iniciar.bat` ou `iniciar_omnivoice.bat` na maquina local
 3. O cloudflared vai registrar a URL do tunnel automaticamente
-4. Recarregar a pagina — OmniVoice deve aparecer disponivel
+4. Recarregar a pagina — VozPro deve aparecer disponivel
 
 ### Para gerar voz:
-1. Selecionar modelo (F5-TTS ou OmniVoice)
+1. Selecionar modelo (F5-TTS ou VozPro)
 2. Selecionar modo de voz (Clone, Voice Design ou Auto)
 3. Digitar o texto
 4. Clicar "Gerar"
 5. O audio aparece no player — opcionalmente mixar com trilha
 
 ### Para usar Voice Design:
-1. Selecionar OmniVoice como modelo
+1. Selecionar VozPro como modelo
 2. Selecionar modo "Voice Design"
 3. Descrever a voz: "homem jovem com sotaque brasileiro e tom grave"
 4. Digitar texto e gerar
 
 ### Para usar Auto Voice:
-1. Selecionar OmniVoice como modelo
+1. Selecionar VozPro como modelo
 2. Selecionar modo "Auto Voice"
-3. Digitar texto e gerar (OmniVoice cria voz aleatoria)
+3. Digitar texto e gerar (VozPro cria voz aleatoria)

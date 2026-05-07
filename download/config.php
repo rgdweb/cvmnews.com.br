@@ -23,7 +23,7 @@ define('UPLOAD_DIR', __DIR__ . '/audios/');
 // Tipos permitidos de upload
 define('ALLOWED_CATEGORIES', ['ref', 'track', 'generated']);
 
-// URL do HuggingFace Space OmniVoice (usado pelo generate.php)
+// URL do HuggingFace Space VozPro (usado pelo generate.php)
 define('HF_SPACE_URL', 'https://hereby-shopper-aid-producer.trycloudflare.com');
 
 // Habilitar logs

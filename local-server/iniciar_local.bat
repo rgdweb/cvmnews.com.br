@@ -1,7 +1,7 @@
 @echo off
-title OmniVoice - Servidor LOCAL Completo
+title VozPro - Servidor LOCAL Completo
 echo ============================================
-echo   OmniVoice TTS - Tudo LOCAL (Zero Tunnel!)
+echo   VozPro TTS - Tudo LOCAL (Zero Tunnel!)
 echo ============================================
 echo.
 echo   GPU + PHP na mesma maquina = audio perfeito
@@ -43,12 +43,12 @@ echo      Apache iniciado na porta 8080
 :: =====================
 :: PASSO 2: ATIVAR CONDA + INICIAR OMNIVOICE
 :: =====================
-echo [2/5] Ativando Conda + Iniciando OmniVoice GPU...
+echo [2/5] Ativando Conda + Iniciando VozPro GPU...
 call C:\Users\Administrador\Miniconda3\Scripts\activate.bat
 set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-start "OmniVoice GPU" cmd /k "call C:\Users\Administrador\Miniconda3\Scripts\activate.bat && set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True && omnivoice-demo --ip 0.0.0.0 --port 7860"
-echo      Aguardando OmniVoice subir (15s)...
+start "VozPro GPU" cmd /k "call C:\Users\Administrador\Miniconda3\Scripts\activate.bat && set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True && omnivoice-demo --ip 0.0.0.0 --port 7860"
+echo      Aguardando VozPro subir (15s)...
 timeout /t 15 /nobreak >nul
 
 :: =====================
@@ -67,15 +67,15 @@ if "%APACHE_STATUS%"=="200" (
     echo      [AVISO] Apache pode nao estar respondendo - verifique manualmente
 )
 
-:: Verifica OmniVoice
+:: Verifica VozPro
 curl -s -o nul -w "%%{http_code}" http://localhost:7860/ > "%TEMP%\ov_check.txt" 2>nul
 set /p OV_STATUS=<"%TEMP%\ov_check.txt"
 del "%TEMP%\ov_check.txt" >nul 2>nul
 
 if "%OV_STATUS%"=="200" (
-    echo      [OK] OmniVoice GPU rodando na porta 7860
+    echo      [OK] VozPro GPU rodando na porta 7860
 ) else (
-    echo      [AVISO] OmniVoice pode nao estar respondendo - aguardando mais...
+    echo      [AVISO] VozPro pode nao estar respondendo - aguardando mais...
     timeout /t 10 /nobreak >nul
 )
 

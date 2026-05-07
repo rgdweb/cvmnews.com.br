@@ -94,7 +94,7 @@ const LANGUAGES = [
 /**
  * Otimizador de pronúncia instantâneo (regex, 0ms de latência).
  * 
- * Usa colchetes [pronúncia] nativos do OmniVoice para corrigir
+ * Usa colchetes [pronúncia] nativos do VozPro para corrigir
  * palavras que o TTS pronuncia errado. Funciona por baixo dos panos,
  * o usuário digita texto normal e recebe áudio perfeito.
  * 
@@ -108,7 +108,7 @@ function optimizePronunciation(text: string): string {
   let result = text
 
   // 1. Artigos após pontuação que termina frase (. ! ?)
-  // O OmniVoice hesita/trava quando encontra artigo maiúsculo após ponto:
+  // O VozPro hesita/trava quando encontra artigo maiúsculo após ponto:
   // "...resultados. O sistema" → lê "ponto OOOOO sistema"
   // SOLUÇÃO: trocar ponto+artigo por vírgula+artigo minúsculo (une as frases)
   // "...resultados. O sistema" → "...resultados, o sistema"
@@ -183,8 +183,8 @@ function currencyToWords(val: string): string {
 }
 
 /**
- * Converte descrição em texto do Voice Design para os parâmetros estruturados do OmniVoice.
- * OmniVoice _design_fn usa dropdowns (gender, age, pitch, style, accent), não texto livre.
+ * Converte descrição em texto do Voice Design para os parâmetros estruturados do VozPro.
+ * VozPro _design_fn usa dropdowns (gender, age, pitch, style, accent), não texto livre.
  */
 function parseVoiceDesignToParams(text: string): { gender: string; age: string; pitch: string; style: string; accent: string } {
   const t = text.toLowerCase().trim()
@@ -207,7 +207,7 @@ function parseVoiceDesignToParams(text: string): { gender: string; age: string; 
   else if (t.includes('high pitch') || t.includes('agudo')) pitch = 'High Pitch / 高音调'
   else if (t.includes('very high pitch') || t.includes('muito agudo')) pitch = 'Very High Pitch / 极高音调'
 
-  // Style só aceita "Auto" e "Whisper" no OmniVoice
+  // Style só aceita "Auto" e "Whisper" no VozPro
   let style = 'Auto'
   if (t.includes('whisper') || t.includes('sussurr') || t.includes('sussurro') || t.includes('segredo')) style = 'Whisper / 耳语'
 
@@ -438,12 +438,12 @@ export default function VozProClient() {
   const [debugOpen, setDebugOpen] = useState(false)
   const [usePhpGenerate, setUsePhpGenerate] = useState(false)
   const [useTunnelGenerate, setUseTunnelGenerate] = useState(true) // GPU local via tunnel (padrao)
-  const [ttsModel, setTtsModel] = useState<'f5tts' | 'omnivoice'>('f5tts') // F5-TTS (padrao) ou OmniVoice (rapido)
-  const [omnivoicePhpUrl, setOmnivoicePhpUrl] = useState<string | null>(null) // PHP direto disponivel pro OmniVoice?
+  const [ttsModel, setTtsModel] = useState<'f5tts' | 'omnivoice'>('f5tts') // F5-TTS (padrao) ou VozPro (rapido)
+  const [omnivoicePhpUrl, setOmnivoicePhpUrl] = useState<string | null>(null) // PHP direto disponivel pro VozPro?
 
   // Voice mode: clone (ref_audio) | design (instruct only) | auto (random)
   const [voiceMode, setVoiceMode] = useState<'clone' | 'design' | 'auto'>('clone')
-  const [omnivoiceAvailable, setOmnivoiceAvailable] = useState(false) // OmniVoice server disponível?
+  const [omnivoiceAvailable, setOmnivoiceAvailable] = useState(false) // VozPro server disponível?
   const [voiceDesignInstruct, setVoiceDesignInstruct] = useState('')
   const [enableFrontendUpload, setEnableFrontendUpload] = useState(false) // liberado via admin
   const [uploadedVoiceFile, setUploadedVoiceFile] = useState<File | null>(null)
@@ -487,7 +487,7 @@ export default function VozProClient() {
           const configData = await configRes.json()
           setUsePhpGenerate(!!configData.phpServerUrl)
           setUseTunnelGenerate(true)
-          // Verificar se OmniVoice PHP direto esta disponivel
+          // Verificar se VozPro PHP direto esta disponivel
           if (configData.phpServerUrl) {
             try {
               const ovTokenRes = await fetch('/api/omnivoice-token')
@@ -495,21 +495,21 @@ export default function VozProClient() {
                 const ovTokenData = await ovTokenRes.json()
                 if (ovTokenData.generateUrl) setOmnivoicePhpUrl(ovTokenData.generateUrl)
               }
-            } catch { /* OmniVoice PHP nao disponivel */ }
+            } catch { /* VozPro PHP nao disponivel */ }
           }
         }
         if (settingsRes.ok) {
           const settingsData = await settingsRes.json()
           setEnableFrontendUpload(!!settingsData.enableVoiceUpload)
         }
-        // Verificar se OmniVoice server esta disponivel
+        // Verificar se VozPro server esta disponivel
         try {
           const ovRes = await fetch('/api/omnivoice-generate')
           if (ovRes.ok) {
             const ovData = await ovRes.json()
             if (ovData.reachable) setOmnivoiceAvailable(true)
           }
-        } catch { /* OmniVoice nao disponivel, tudo bem */ }
+        } catch { /* VozPro nao disponivel, tudo bem */ }
       } catch {
         toast.error('Erro ao carregar dados')
       } finally {
@@ -541,11 +541,11 @@ export default function VozProClient() {
       return
     }
     if (voiceMode === 'design' && !voiceDesignInstruct.trim()) {
-      // OK - sem descrição, OmniVoice vai usar todos os params como Auto
+      // OK - sem descrição, VozPro vai usar todos os params como Auto
     }
-    // Voice Design e Auto Voice so funcionam com OmniVoice
+    // Voice Design e Auto Voice so funcionam com VozPro
     if ((voiceMode === 'design' || voiceMode === 'auto') && ttsModel !== 'omnivoice') {
-      toast.error('Voice Design e Auto Voice só funcionam com OmniVoice. Troque o modelo TTS.')
+      toast.error('Voice Design e Auto Voice só funcionam com VozPro. Troque o modelo TTS.')
       return
     }
 
@@ -556,7 +556,7 @@ export default function VozProClient() {
     setGeneratingTime(0)
 
     // ===== OTIMIZAÇÃO DE PRONÚNCIA (regex instantâneo, 0ms) =====
-    // Usa colchetes [pronúncia] do OmniVoice por baixo dos panos
+    // Usa colchetes [pronúncia] do VozPro por baixo dos panos
     let textToSend = text.trim()
     if (pronunciationOptimization) {
       textToSend = optimizePronunciation(textToSend)
@@ -605,7 +605,7 @@ export default function VozProClient() {
 
       // ===== OMNIVOICE: Modelo rapido (RTF 0.025) =====
       if (ttsModel === 'omnivoice') {
-        // Design: parseia texto para dropdowns do OmniVoice. Auto: tudo Auto. Clone: não usa.
+        // Design: parseia texto para dropdowns do VozPro. Auto: tudo Auto. Clone: não usa.
         const isAutoMode = voiceMode === 'auto'
         const isDesignMode = voiceMode === 'design'
         const designParams = isDesignMode ? parseVoiceDesignToParams(voiceDesignInstruct) : { gender: 'Auto', age: 'Auto', pitch: 'Auto', style: 'Auto', accent: 'Auto' }
@@ -617,7 +617,7 @@ export default function VozProClient() {
           referenceAudioUrl: voiceMode === 'clone' ? (uploadedVoiceUrl || selectedVariation?.refAudioServerUrl || '') : '',
           referenceAudioName: voiceMode === 'clone' ? (uploadedVoiceFile?.name || selectedVariation?.refAudioName || 'ref_audio.wav') : '',
           refText: '',
-          numStep: 32, // OmniVoice: 32 = qualidade (padrao), 16 = rapido mas pode errar palavras
+          numStep: 32, // VozPro: 32 = qualidade (padrao), 16 = rapido mas pode errar palavras
           speed: 1.0,
           language: language, // usa o idioma selecionado pelo usuario (Portuguese, Auto, etc)
           // Voice Design params (usados pelo _design_fn endpoint)
@@ -630,17 +630,17 @@ export default function VozProClient() {
 
         if (omnivoicePhpUrl) {
           // ===== OMNIVOICE PHP DIRETO: browser -> PHP sorteiomax -> tunnel -> GPU (ZERO Vercel) =====
-          console.log('[VozPro] Gerando via OmniVoice PHP direto (bypassa Vercel)...')
+          console.log('[VozPro] Gerando via VozPro PHP direto (bypassa Vercel)...')
           const tokenRes = await fetch('/api/omnivoice-token')
           if (!tokenRes.ok) {
-            toast.error('Erro ao obter token OmniVoice')
+            toast.error('Erro ao obter token VozPro')
             return
           }
           const { generateUrl: phpDirectUrl, token } = await tokenRes.json()
           lastRequestBody = ovBody
 
           if (!phpDirectUrl || !token) {
-            toast.error('OmniVoice PHP nao configurado, usando Vercel...')
+            toast.error('VozPro PHP nao configurado, usando Vercel...')
             // Fallback pra Vercel
             lastRequestUrl = '/api/omnivoice-generate'
             res = await fetch('/api/omnivoice-generate', {
@@ -663,7 +663,7 @@ export default function VozProClient() {
           }
         } else {
           // ===== OMNIVOICE VIA VERCEL (fallback) =====
-          console.log('[VozPro] Gerando via OmniVoice via Vercel (sem PHP direto)...')
+          console.log('[VozPro] Gerando via VozPro via Vercel (sem PHP direto)...')
           lastRequestBody = ovBody
           lastRequestUrl = '/api/omnivoice-generate'
           res = await fetch('/api/omnivoice-generate', {
@@ -818,10 +818,10 @@ export default function VozProClient() {
         return
       }
 
-      // ===== ASR RETRY AUTOMÁTICO (OmniVoice) =====
+      // ===== ASR RETRY AUTOMÁTICO (VozPro) =====
       // Valida pronúncia e refaz automaticamente se errou
       let finalAudioUrl = data.audioUrl
-      const maxAsrRetries = ttsModel === 'omnivoice' ? 2 : 0 // Só OmniVoice faz retry (é rápido)
+      const maxAsrRetries = ttsModel === 'omnivoice' ? 2 : 0 // Só VozPro faz retry (é rápido)
       const originalTextForCompare = textToSend.replace(/\[.*?\]/g, '') // Remove colchetes de pronúncia pra comparar
 
       if (maxAsrRetries > 0 && originalTextForCompare.split(/\s+/).length >= 5) {
@@ -1129,7 +1129,7 @@ export default function VozProClient() {
                   >
                     <div className="text-2xl mb-1">⚡</div>
                     <div className={`text-xs font-medium ${ttsModel === 'omnivoice' ? 'text-amber-200' : 'text-slate-400'}`}>
-                      OmniVoice
+                      VozPro Turbo
                     </div>
                     <div className="text-[10px] text-slate-600 mt-1">
                       {omnivoiceAvailable ? 'RTF 0.025, 600+ idiomas' : 'Servidor offline'}
@@ -1138,8 +1138,8 @@ export default function VozProClient() {
                 </div>
                 {ttsModel === 'omnivoice' && (
                   <p className="text-[10px] text-amber-400/80">
-                    OmniVoice suporta: Voice Design, pronúncia CMU [B EY1 S], símbolos [laughter], e 600+ idiomas.
-                    Voice Design e Auto Voice funcionam melhor no OmniVoice.
+                    VozPro suporta: Voice Design, pronúncia CMU [B EY1 S], símbolos [laughter], e 600+ idiomas.
+                    Voice Design e Auto Voice funcionam melhor no VozPro.
                   </p>
                 )}
               </CardContent>
@@ -1283,7 +1283,7 @@ export default function VozProClient() {
                 {voiceMode === 'auto' && (
                   <div className="pt-2 border-t border-white/10">
                     <p className="text-xs text-blue-300/70 text-center">
-                      O OmniVoice vai criar uma voz aleatória. Cada geração será diferente!
+                      O VozPro vai criar uma voz aleatória. Cada geração será diferente!
                     </p>
                   </div>
                 )}
@@ -1890,7 +1890,7 @@ export default function VozProClient() {
       <footer className="border-t border-white/10 bg-slate-900/80 backdrop-blur-sm mt-auto">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between text-xs text-slate-500">
           <p>VozPro — Vozes Profissionais com IA</p>
-          <p>Powered by OmniVoice</p>
+          <p>Powered by VozPro</p>
         </div>
       </footer>
     </div>

@@ -495,7 +495,7 @@ if (!$tempRefFile && !empty($refAudioPath)) {
 
 $gradioData = [
     $texto,
-    'Auto',  // Auto detecta melhor (a interface do OmniVoice usa Auto)
+    'Auto',  // Auto detecta melhor (a interface do VozPro usa Auto)
     [
         'path' => $refAudioPath ?? '',
         'url' => '',  // preenchido apos upload
@@ -504,8 +504,8 @@ $gradioData = [
         'mime_type' => (pathinfo($refAudioName, PATHINFO_EXTENSION) === 'mp3') ? 'audio/mpeg' : 'audio/wav',
         'meta' => ['_type' => 'gradio.FileData']
     ],
-    '',        // refText: vazio (a interface do OmniVoice envia vazio!)
-    null,      // instruct: null (a interface do OmniVoice envia null!)
+    '',        // refText: vazio (a interface do VozPro envia vazio!)
+    null,      // instruct: null (a interface do VozPro envia null!)
     (int)$numStep,
     (float)$guidanceScale,
     true,      // denoise

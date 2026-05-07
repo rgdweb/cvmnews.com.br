@@ -1,6 +1,6 @@
 <?php
 /*
- * OmniVoice TTS - Endpoint para pegar a URL do tunnel ativo
+ * VozPro TTS - Endpoint para pegar a URL do tunnel ativo
  * O frontend testa a conectividade direto (servidores compartilhados
  * como HostGator bloqueiam conexoes HTTPS de saida)
  */

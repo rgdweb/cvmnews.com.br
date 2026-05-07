@@ -27,8 +27,8 @@ Um aplicativo web comercial onde o usuário seleciona uma voz cadastrada, digita
 - CORS habilitado, timeout de 600s, upload max 50MB
 - Recebe uploads de áudio, serve arquivos estáticos, e ORQUESTRA a geração TTS
 
-### Camada 3 - GPU Local (OmniVoice)
-- Modelo OmniVoice (k2-fsa/omnivoice) rodando em GPU NVIDIA (RTX 3060 12GB)
+### Camada 3 - GPU Local (VozPro)
+- Modelo VozPro (k2-fsa/omnivoice) rodando em GPU NVIDIA (RTX 3060 12GB)
 - Servidor Gradio na porta 7860 com endpoint _clone_fn
 - Exposto na internet via localtunnel (npx localtunnel --port 7860)
 - URL do tunnel atualizada automaticamente no PHP server
@@ -41,14 +41,14 @@ Um aplicativo web comercial onde o usuário seleciona uma voz cadastrada, digita
    a. Valida token HMAC de autenticação
    b. Baixa o áudio de referência do servidor PHP
    c. Executa trim_audio.py para cortar o áudio para max 10 segundos (evita CUDA Out of Memory na GPU 12GB)
-   d. Faz upload do áudio cortado para o servidor OmniVoice (GPU) via POST /gradio_api/upload
+   d. Faz upload do áudio cortado para o servidor VozPro (GPU) via POST /gradio_api/upload
    e. Envia job de geração via POST /gradio_api/call/_clone_fn com JSON contendo 12 parâmetros
    f. Abre conexão SSE (Server-Sent Events) via GET /gradio_api/call/_clone_fn/{event_id} e aguarda resultado
    g. Recebe evento "complete" com URL do áudio gerado
    h. Baixa o áudio gerado, converte para base64, retorna como data URI
 4. Frontend reproduz o áudio e opcionalmente mistura com trilha musical via Web Audio API
 
-## API Gradio do OmniVoice (endpoint _clone_fn)
+## API Gradio do VozPro (endpoint _clone_fn)
 
 POST /gradio_api/call/_clone_fn
 Body: {"data": [
