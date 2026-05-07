@@ -168,7 +168,7 @@ TROUBLESHOOTING
   - Deve mostrar a interface do Gradio
 
 "Erro na geracao":
-  - O OmniVoice esta rodando na porta 7860?
+  - O VozPro esta rodando na porta 7860?
   - Teste local: abra http://localhost:7860 no navegador
 
 "Audio ainda bebado":

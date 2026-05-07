@@ -1,5 +1,5 @@
 /**
- * OmniVoice TTS - Modulo de conexao direta com Gradio via cloudflared tunnel
+ * VozPro TTS - Modulo de conexao direta com Gradio via cloudflared tunnel
  * 
  * Fluxo:
  * 1. Descobre a URL do tunnel via HostGator (get_tunnel.php)
@@ -169,7 +169,7 @@ async function uploadToGradio(tunnelUrl, file) {
 }
 
 /**
- * Geracao de voz via OmniVoice - CONEXAO DIRETA
+ * Geracao de voz via VozPro - CONEXAO DIRETA
  * 
  * @param {Object} params
  * @param {File} params.referenceAudio - Audio de referencia (voz a clonar)

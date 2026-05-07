@@ -1,6 +1,6 @@
-# OmniVoice TTS - Documentacao Tecnica Completa para Clonagem
+# VozPro TTS - Documentacao Tecnica Completa para Clonagem
 
-> **Objetivo**: Este documento descreve 100% do sistema OmniVoice TTS, incluindo todas as funcoes, fluxos de dados, parametros, APIs, banco de dados, e arquitetura. Foi escrito para que uma IA consiga entender e clonar o sistema completo.
+> **Objetivo**: Este documento descreve 100% do sistema VozPro TTS, incluindo todas as funcoes, fluxos de dados, parametros, APIs, banco de dados, e arquitetura. Foi escrito para que uma IA consiga entender e clonar o sistema completo.
 
 ---
 
@@ -18,7 +18,7 @@
 10. [Sistema de Autenticacao](#10-sistema-de-autenticacao)
 11. [Sistema de Mixagem de Audio (Client-Side)](#11-sistema-de-mixagem-de-audio-client-side)
 12. [Sistema de Tunnel Automatico](#12-sistema-de-tunnel-automatico)
-13. [Modelo OmniVoice - Parametros e API Gradio](#13-modelo-omnivoice---parametros-e-api-gradio)
+13. [Modelo VozPro - Parametros e API Gradio](#13-modelo-vozpro---parametros-e-api-gradio)
 14. [Variaveis de Ambiente](#14-variaveis-de-ambiente)
 15. [Como Recriar o Sistema do Zero](#15-como-recriar-o-sistema-do-zero)
 
@@ -27,7 +27,7 @@
 ## 1. VISAO GERAL DO SISTEMA
 
 ### O que e
-Um aplicativo web de **clonagem de voz** (TTS - Text-to-Speech) que usa o modelo **OmniVoice** da K2-FSA. O usuario seleciona uma voz cadastrada, digita um texto, e o sistema gera um audio com a voz clonada. Opcionalmente, o usuario pode misturar a voz gerada com uma trilha musical de fundo.
+Um aplicativo web de **clonagem de voz** (TTS - Text-to-Speech) que usa o modelo **VozPro** da K2-FSA. O usuario seleciona uma voz cadastrada, digita um texto, e o sistema gera um audio com a voz clonada. Opcionalmente, o usuario pode misturar a voz gerada com uma trilha musical de fundo.
 
 ### O que faz
 - Clonar vozes a partir de audios de referencia (3-10 segundos)
@@ -41,7 +41,7 @@ Um aplicativo web de **clonagem de voz** (TTS - Text-to-Speech) que usa o modelo
 - **Frontend**: Next.js 16 + React 19 + TypeScript + Tailwind CSS 4 + shadcn/ui
 - **Backend**: Next.js API Routes (Vercel) + PHP (HostGator)
 - **Banco de Dados**: PostgreSQL (Neon) + Prisma ORM
-- **IA/TTS**: OmniVoice (k2-fsa/omnivoice) rodando em GPU local (RTX 3060 12GB)
+- **IA/TTS**: VozPro (k2-fsa/omnivoice) rodando em GPU local (RTX 3060 12GB)
 - **Tunnel**: Localtunnel (npx localtunnel) para expor a GPU local na internet
 - **Armazenamento**: PHP server (sorteiomax.com.br)
 
@@ -96,11 +96,11 @@ VERCEL (Next.js) - Cloud Serverless
    a. Valida token HMAC de autenticacao
    b. Baixa o audio de referencia do PHP server (ou usa URL direta)
    c. Executa trim_audio.py para cortar o audio para max 10 segundos
-   d. Faz upload do audio cortado para o servidor OmniVoice local (GPU)
+   d. Faz upload do audio cortado para o servidor VozPro local (GPU)
    e. Envia o job de geracao para o endpoint _clone_fn do Gradio
    f. Abre conexao SSE (Server-Sent Events) e aguarda o resultado
    g. Quando recebe o evento "complete", extrai a URL do audio gerado
-   h. Baixa o audio gerado do servidor OmniVoice
+   h. Baixa o audio gerado do servidor VozPro
    i. Converte para base64 e retorna como data URI
 5. Browser recebe o audio base64 e reproduz
 6. Opcionalmente, browser faz mixagem com trilha (Web Audio API)
@@ -207,9 +207,9 @@ A funcao `trimAudioToMaxSeconds($filePath, 10)` faz:
 3. Se retornar "OK", usa o arquivo cortado
 4. Se falhar, usa o original (mas pode causar CUDA OOM na GPU)
 
-**Por que cortar?** A GPU RTX 3060 tem 12GB de VRAM. O modelo OmniVoice tenta alocar memoria proporcional ao tamanho do audio de referencia. Com audios longos (ex: 71.8s), tenta alocar 17.9GB e da CUDA Out of Memory. Cortando para 10s, funciona perfeitamente.
+**Por que cortar?** A GPU RTX 3060 tem 12GB de VRAM. O modelo VozPro tenta alocar memoria proporcional ao tamanho do audio de referencia. Com audios longos (ex: 71.8s), tenta alocar 17.9GB e da CUDA Out of Memory. Cortando para 10s, funciona perfeitamente.
 
-#### PASSO 5: Upload do audio para o servidor OmniVoice (GPU local)
+#### PASSO 5: Upload do audio para o servidor VozPro (GPU local)
 A funcao `uploadToHF($filePath, $fileName, $hfUrl)` faz:
 1. Faz POST para `{hfUrl}/gradio_api/upload` com o arquivo
 2. O Gradio salva o arquivo e retorna um JSON: `["/tmp/gradio/xxx/filename.wav"]`
@@ -241,7 +241,7 @@ $gradioData = [
 ];
 ```
 
-#### PASSO 7: Envio do job para o OmniVoice
+#### PASSO 7: Envio do job para o VozPro
 A funcao `submitToGradio($gradioData, $hfUrl)` faz:
 1. POST para `{hfUrl}/gradio_api/call/_clone_fn`
 2. Body: `{"data": [array acima]}`
@@ -450,7 +450,7 @@ define('ALLOWED_TYPES', ['audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/x-wav', 
 
 3. **trimAudioToMaxSeconds($filePath, $maxSeconds)**: Chama o script Python `trim_audio.py` para cortar o audio para max N segundos. Comando: `python3 trim_audio.py {input} {output} {maxSeconds}`. Se retornar "OK", usa o arquivo cortado.
 
-4. **uploadToHF($filePath, $fileName, $hfUrl)**: Faz upload do audio para o servidor OmniVoice via Gradio API. POST para `{hfUrl}/gradio_api/upload` com multipart/form-data. Retorna o path do arquivo no servidor Gradio.
+4. **uploadToHF($filePath, $fileName, $hfUrl)**: Faz upload do audio para o servidor VozPro via Gradio API. POST para `{hfUrl}/gradio_api/upload` com multipart/form-data. Retorna o path do arquivo no servidor Gradio.
 
 5. **submitToGradio($gradioData, $hfUrl)**: Envia o job de geracao. POST para `{hfUrl}/gradio_api/call/_clone_fn` com JSON body `{"data": [...]}`. Retorna `event_id`.
 
@@ -555,7 +555,7 @@ python3 trim_audio input.mp3 output.mp3 10
 
 ## 8. SCRIPTS LOCAIS (BAT + PowerShell)
 
-### 8.1 iniciar.bat - Iniciar Servidor OmniVoice
+### 8.1 iniciar.bat - Iniciar Servidor VozPro
 
 **Finalidade**: Script principal que inicia tudo no PC local com GPU.
 
@@ -563,7 +563,7 @@ python3 trim_audio input.mp3 output.mp3 10
 1. **Limpa processos antigos**: `taskkill /F /IM python.exe` (mata qualquer Python rodando)
 2. **Ativa o ambiente Conda**: `call C:\Users\Administrador\Miniconda3\Scripts\activate.bat`
 3. **Configura CUDA**: `set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
-4. **Inicia o OmniVoice**: `omnivoice-demo --ip 0.0.0.0 --port 7860` em uma nova janela CMD
+4. **Inicia o VozPro**: `omnivoice-demo --ip 0.0.0.0 --port 7860` em uma nova janela CMD
 5. **Aguarda 15 segundos** para o servidor subir
 6. **Inicia o tunnel**: Abre PowerShell com `start_tunnel.ps1` em outra janela
 
@@ -579,7 +579,7 @@ python3 trim_audio input.mp3 output.mp3 10
 **Finalidade**: Criar tunnel localtunnel para expor a GPU local na internet e atualizar a URL automaticamente no PHP server.
 
 **O que faz (em ordem):**
-1. **Verifica OmniVoice**: Faz HTTP GET para `http://localhost:7860/` para confirmar que esta rodando
+1. **Verifica VozPro**: Faz HTTP GET para `http://localhost:7860/` para confirmar que esta rodando
 2. **Cria tunnel**: Executa `npx localtunnel --port 7860` via `Start-Job` + `cmd /c` (porque npx e um .cmd, nao um .exe)
 3. **Captura URL**: Monitora o output do localtunnel procurando por "your url is: https://xxx.loca.lt" (regex)
 4. **Atualiza PHP server**: Quando captura a URL, faz GET para `https://sorteiomax.com.br/omnivoice/update_tunnel.php?auth=vozpro_tunnel_2024&url={url}`
@@ -745,7 +745,7 @@ Misturar a voz gerada com uma trilha musical de fundo, permitindo ao usuario con
 ## 12. SISTEMA DE TUNNEL AUTOMATICO
 
 ### Finalidade
-Expor o servidor OmniVoice rodando na GPU local (porta 7860) para a internet, para que o PHP server possa acessa-lo.
+Expor o servidor VozPro rodando na GPU local (porta 7860) para a internet, para que o PHP server possa acessa-lo.
 
 ### Por que precisa de tunnel?
 O PHP server esta na HostGator (nuvem). A GPU esta no PC local. O PHP precisa acessar `http://localhost:7860` do PC, mas so pode acessar URLs publicas. O tunnel cria uma URL publica que aponta para `localhost:7860`.
@@ -775,9 +775,9 @@ Toda vez que o PC reiniciar ou o tunnel cair, basta rodar `iniciar.bat` novament
 
 ---
 
-## 13. MODELO OMNIVOICE - PARAMETROS E API GRADIO
+## 13. MODELO VOZPRO - PARAMETROS E API GRADIO
 
-### Modelo OmniVoice
+### Modelo VozPro
 - **Origem**: k2-fsa/omnivoice (HuggingFace)
 - **Tipo**: Difusao para sintese de voz
 - **Capacidade**: Clonagem de voz com poucos segundos de referencia
@@ -787,7 +787,7 @@ Toda vez que o PC reiniciar ou o tunnel cair, basta rodar `iniciar.bat` novament
 
 ### API Gradio v2
 
-O OmniVoice roda como um app Gradio na porta 7860. A API Gradio v2 funciona assim:
+O VozPro roda como um app Gradio na porta 7860.
 
 **1. Upload de arquivo:**
 ```

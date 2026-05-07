@@ -987,7 +987,7 @@ export default function VozProClient() {
       <footer className="border-t border-white/10 bg-slate-900/80 backdrop-blur-sm mt-auto">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between text-xs text-slate-500">
           <p>VozPro — Vozes Profissionais com IA</p>
-          <p>Powered by OmniVoice</p>
+          <p>Powered by VozPro</p>
         </div>
       </footer>
     </div>

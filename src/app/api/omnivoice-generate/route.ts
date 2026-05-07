@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// POST /api/omnivoice-generate — Proxy para OmniVoice (k2-fsa) via tunnel
-// Usa API Gradio nativa do OmniVoice com parametros corretos
+// POST /api/omnivoice-generate — Proxy para VozPro (k2-fsa) via tunnel
+// Usa API Gradio nativa do VozPro com parametros corretos
 // NÃO altera nenhum fluxo existente do F5-TTS (tunnel-generate)
 
 export const dynamic = 'force-dynamic' // Nunca cachar esta rota no Vercel
@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
       // MODO CLONE: _clone_fn endpoint
       // Params: text, lang, ref_aud, ref_text, instruct, ns, gs, dn, sp, du, pp, po
       // =============================================================
-      debug.log('OmniVoice Clone', 'info', `text: "${text.substring(0, 60)}..."`)
+      debug.log('VozPro Clone', 'info', `text: "${text.substring(0, 60)}..."`)
 
       // 1. Baixar e fazer upload do audio de referencia
       let refAudioPath: string | null = null
@@ -314,7 +314,7 @@ export async function POST(request: NextRequest) {
 
       if (!eventId) {
         return NextResponse.json({
-          error: 'Falha ao submeter job ao OmniVoice',
+          error: 'Falha ao submeter job ao VozPro',
           debug: debug.result(),
         }, { status: 502 })
       }
@@ -325,7 +325,7 @@ export async function POST(request: NextRequest) {
 
       if (!result.audioUrl) {
         return NextResponse.json({
-          error: `OmniVoice falhou: ${result.error}`,
+          error: `VozPro falhou: ${result.error}`,
           debug: debug.result(),
         }, { status: 500 })
       }
@@ -346,7 +346,7 @@ export async function POST(request: NextRequest) {
       // Params: text, lang, ns, gs, dn, sp, du, pp, po, gender, age, pitch, style, accent, dialect
       // =============================================================
       const modeLabel = mode === 'design' ? 'Design' : 'Auto'
-      debug.log(`OmniVoice ${modeLabel}`, 'info', `text: "${text.substring(0, 60)}..."`)
+      debug.log(`VozPro ${modeLabel}`, 'info', `text: "${text.substring(0, 60)}..."`)
 
       const gradioData = [
         text,                        // text
@@ -385,7 +385,7 @@ export async function POST(request: NextRequest) {
 
       if (!eventId) {
         return NextResponse.json({
-          error: `Falha ao submeter job OmniVoice ${modeLabel}`,
+          error: `Falha ao submeter job VozPro ${modeLabel}`,
           debug: debug.result(),
         }, { status: 502 })
       }
@@ -395,7 +395,7 @@ export async function POST(request: NextRequest) {
 
       if (!result.audioUrl) {
         return NextResponse.json({
-          error: `OmniVoice ${modeLabel} falhou: ${result.error}`,
+          error: `VozPro ${modeLabel} falhou: ${result.error}`,
           debug: debug.result(),
         }, { status: 500 })
       }
@@ -412,7 +412,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('[OmniVoice] Exception:', error)
+    console.error('[VozPro] Exception:', error)
     return NextResponse.json({
       error: error instanceof Error ? error.message : 'Erro interno',
       debug: { steps: [], totalDuration: 0 },
@@ -439,7 +439,7 @@ export async function GET() {
         const healthRes = await fetch(effectiveUrl + '/gradio_api/info/', {
           cache: 'no-store', signal: AbortSignal.timeout(8000),
         })
-        // Verifica se tem _design_fn (endpoint exclusivo do OmniVoice)
+        // Verifica se tem _design_fn (endpoint exclusivo do VozPro)
         if (healthRes.ok) {
           const info = await healthRes.json()
           const endpoints = info?.named_endpoints || {}
@@ -447,7 +447,7 @@ export async function GET() {
           // Verifica com e sem slash para ser compativel com diferentes versoes
           const hasDesign = !!endpoints['/_design_fn'] || !!endpoints['_design_fn']
           const hasClone = !!endpoints['/_clone_fn'] || !!endpoints['_clone_fn']
-          // Se tem _design_fn, e OmniVoice. Se so tem _clone_fn, pode ser F5-TTS
+          // Se tem _design_fn, e VozPro. Se so tem _clone_fn, pode ser F5-TTS
           reachable = hasDesign || hasClone
         }
       }
@@ -457,7 +457,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    status: reachable ? 'omnivoice_available' : 'omnivoice_unavailable',
+    status: reachable ? 'tts_engine_available' : 'tts_engine_unavailable',
     url: effectiveUrl || undefined,
     reachable,
     model: 'k2-fsa/OmniVoice',

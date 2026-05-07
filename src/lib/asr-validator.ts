@@ -1,7 +1,7 @@
 /**
  * ASR Validator — Validação inteligente de áudio gerado por TTS
  * 
- * Camada 2 do sistema de qualidade OmniVoice:
+ * Camada 2 do sistema de qualidade VozPro:
  * 1. Prevenção: refText vazio, denoise on, preprocess on (ja implementado)
  * 2. Correção: ASR + filtro inteligente + retry (ESTE MODULO)
  * 3. Fallback: se ASR falhar, usa check de duração como backup

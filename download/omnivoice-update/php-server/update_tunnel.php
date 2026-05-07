@@ -1,6 +1,6 @@
 <?php
 /*
- * OmniVoice TTS - Recebe a nova URL do tunnel e atualiza o config.php
+ * VozPro TTS - Recebe a nova URL do tunnel e atualiza o config.php
  * Chamado automaticamente pelo start_tunnel.ps1 quando o cloudflared inicia
  * Aceita GET (query string) ou POST (JSON body) para max compatibilidade
  */
@@ -54,7 +54,7 @@ if (strpos($tunnelUrl, 'trycloudflare.com') === false) {
 $configFile = __DIR__ . '/config.php';
 $now = date('Y-m-d H:i:s');
 
-$configContent = "; Configuracao OmniVoice TTS\n";
+$configContent = "; Configuracao VozPro TTS\n";
 $configContent .= "; Atualizado automaticamente pelo start_tunnel.ps1\n";
 $configContent .= "tunnel_url = \"" . $tunnelUrl . "\"\n";
 $configContent .= "updated_at = \"" . $now . "\"\n";

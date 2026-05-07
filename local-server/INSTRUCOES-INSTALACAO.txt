@@ -57,7 +57,7 @@ Se nao, use: C:\Users\Administrador\Miniconda3\python.exe
 
 ## PASSO 6: Colocar os scripts na pasta local
 
-Copie estes arquivos para a pasta desejada (ex: C:\OmniVoice\local-server\):
+Copie estes arquivos para a pasta desejada (ex: C:\VozPro\local-server\):
 - iniciar_local.bat
 - tunnel_php.ps1
 
@@ -66,7 +66,7 @@ Copie estes arquivos para a pasta desejada (ex: C:\OmniVoice\local-server\):
 1. Doble-clique em: iniciar_local.bat
 2. Ele vai:
    - Iniciar o Apache (PHP) na porta 8080
-   - Iniciar o OmniVoice na porta 7860
+   - Iniciar o VozPro na porta 7860
    - Abrir o tunnel (para o browser acessar)
 3. Abra no navegador: http://localhost:8080/php-local/teste_local.html
 4. Ou abra o arquivo teste_local.html direto (duplo clique)

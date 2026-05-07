@@ -41,22 +41,22 @@ async function updateServerConfig(tunnelUrl) {
 
 async function main() {
     console.log('========================================');
-    console.log('  OmniVoice - Localtunnel Automatico');
+    console.log('  VozPro - Localtunnel Automatico');
     console.log('========================================');
     console.log('');
 
     // Verificar se a porta esta aberta (omnivoice-demo rodando)
-    console.log(`[1/2] Verificando OmniVoice na porta ${PORT}...`);
+    console.log(`[1/2] Verificando VozPro na porta ${PORT}...`);
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     try {
         await new Promise((resolve, reject) => {
             const req = http.get(`http://localhost:${PORT}/`, (res) => {
-                console.log(`[OK] OmniVoice respondendo na porta ${PORT}`);
+                console.log(`[OK] VozPro respondendo na porta ${PORT}`);
                 resolve();
             });
             req.on('error', () => {
-                console.log(`[ERRO] OmniVoice NAO esta rodando na porta ${PORT}!`);
+                console.log(`[ERRO] VozPro NAO esta rodando na porta ${PORT}!`);
                 console.log('[INFO] Execute omnivoice-demo primeiro.');
                 process.exit(1);
             });
@@ -66,7 +66,7 @@ async function main() {
             });
         });
     } catch(e) {
-        console.log(`[ERRO] OmniVoice NAO esta rodando na porta ${PORT}!`);
+        console.log(`[ERRO] VozPro NAO esta rodando na porta ${PORT}!`);
         process.exit(1);
     }
 

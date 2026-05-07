@@ -1,5 +1,5 @@
 <?php
-// generate-direct.php - Geracao de voz TTS via OmniVoice (chamada DIRETA do browser)
+// generate-direct.php - Geracao de voz TTS via VozPro (chamada DIRETA do browser)
 // Bypassa completamente o Vercel para evitar timeout de 60s
 // Usa HMAC token para autenticacao (mesmo padrao do upload-direct.php)
 // v3: SSE Streaming persistente (conexao aberta ate resultado)

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OmniVoice TTS - Teste LOCAL</title>
+    <title>VozPro TTS - Teste LOCAL</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -146,7 +146,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>OmniVoice TTS - Teste LOCAL</h1>
+        <h1>VozPro TTS - Teste LOCAL</h1>
         <p class="subtitle">Tudo roda na sua maquina. Zero tunnel para audio. Zero corrupcao.</p>
 
         <div id="statusCheck" class="status loading">Verificando servidores...</div>
@@ -213,7 +213,7 @@
             <div class="card">
                 <h3>Resultado</h3>
                 <audio id="audioPlayer" controls></audio>
-                <a id="downloadLink" class="btn btn-secondary" download="omnivoice_saida.wav">Baixar Audio</a>
+                <a id="downloadLink" class="btn btn-secondary" download="vozpro_saida.wav">Baixar Audio</a>
                 <div id="debugInfo" class="debug"></div>
             </div>
         </div>
@@ -272,7 +272,7 @@
                 results.push('PHP NAO ENCONTRADO (instale XAMPP e rode iniciar_local.bat)');
             }
 
-            // Check OmniVoice
+            // Check VozPro
             try {
                 const r = await fetch('http://localhost:7860/', { method: 'GET' });
                 results.push((r.ok || r.status === 200) ? 'GPU OK' : 'GPU ERRO ' + r.status);
@@ -407,7 +407,7 @@
                 const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
                 debugInfo.textContent += `[${new Date().toLocaleTimeString()}] ERRO apos ${elapsed}s: ${error.message}\n`;
                 debugInfo.textContent += '\nVerifique:\n';
-                debugInfo.textContent += '1. OmniVoice esta rodando? (localhost:7860)\n';
+                debugInfo.textContent += '1. VozPro esta rodando? (localhost:7860)\n';
                 debugInfo.textContent += '2. Apache/XAMPP esta rodando? (localhost:8080)\n';
                 debugInfo.textContent += '3. Audio de referencia tem ate 10s?\n';
                 debugInfo.textContent += '4. Veja o console do CMD para erros CUDA\n';

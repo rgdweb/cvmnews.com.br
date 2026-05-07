@@ -1,6 +1,6 @@
 <?php
 /**
- * OmniVoice TTS - Recebe a nova URL do tunnel e salva em tunnel-config.ini
+ * VozPro TTS - Recebe a nova URL do tunnel e salva em tunnel-config.ini
  * Chamado pelo start_tunnel.ps1 quando o cloudflared inicia
  * NAO sobreescreve o config.php principal (usa tunnel-config.ini separado)
  */
@@ -58,7 +58,7 @@ if (!$isValid) {
 $iniFile = __DIR__ . '/tunnel-config.ini';
 $now = date('Y-m-d H:i:s');
 
-$iniContent = "; Configuracao do Tunnel OmniVoice\n";
+$iniContent = "; Configuracao do Tunnel VozPro\n";
 $iniContent .= "; Atualizado automaticamente pelo cloudflared\n";
 $iniContent .= "tunnel_url = \"$tunnelUrl\"\n";
 $iniContent .= "updated_at = \"$now\"\n";

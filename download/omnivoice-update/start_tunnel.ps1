@@ -1,5 +1,5 @@
 # ========================================
-# OmniVoice TTS - start_tunnel.ps1
+# VozPro TTS - start_tunnel.ps1
 # Abre tunnel cloudflared e atualiza URL no HostGator
 # ========================================
 
@@ -8,7 +8,7 @@ $serverUpdate = "https://sorteiomax.com.br/omnivoice/update_tunnel.php"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  OmniVoice - Tunnel Cloudflare" -ForegroundColor Cyan
+Write-Host "  VozPro - Tunnel Cloudflare" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -50,17 +50,17 @@ if ($cloudflared) {
     exit 1
 }
 
-# --- 2. Verificar OmniVoice ---
+# --- 2. Verificar VozPro ---
 Write-Host ""
-Write-Host "[1/2] Verificando OmniVoice na porta $port..." -ForegroundColor Yellow
+Write-Host "[1/2] Verificando VozPro na porta $port..." -ForegroundColor Yellow
 
 try {
     # UseBasicParsing evita o aviso de seguranca
     $test = Invoke-WebRequest -Uri "http://localhost:$port/" -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
-    Write-Host "[OK] OmniVoice respondendo!" -ForegroundColor Green
+    Write-Host "[OK] VozPro respondendo!" -ForegroundColor Green
 } catch {
-    Write-Host "[ERRO] OmniVoice NAO esta rodando na porta $port!" -ForegroundColor Red
-    Write-Host "Inicie o OmniVoice primeiro: omnivoice-demo --ip 0.0.0.0 --port $port" -ForegroundColor Yellow
+    Write-Host "[ERRO] VozPro NAO esta rodando na porta $port!" -ForegroundColor Red
+    Write-Host "Inicie o VozPro primeiro: omnivoice-demo --ip 0.0.0.0 --port $port" -ForegroundColor Yellow
     Read-Host "Pressione Enter para sair"
     exit 1
 }
@@ -122,7 +122,7 @@ try {
     
     # Usa System.Net.WebClient (rapido, sem overhead do Invoke-WebRequest)
     $webClient = New-Object System.Net.WebClient
-    $webClient.Headers.Add("User-Agent", "OmniVoice-Tunnel/1.0")
+    $webClient.Headers.Add("User-Agent", "VozPro-Tunnel/1.0")
     $response = $webClient.DownloadString($updateUrl)
     
     $result = $response | ConvertFrom-Json

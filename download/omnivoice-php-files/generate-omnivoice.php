@@ -1,5 +1,5 @@
 <?php
-// generate-omnivoice.php - Geracao de voz TTS via OmniVoice (PHP direto do browser)
+// generate-omnivoice.php - Geracao de voz TTS via VozPro (PHP direto do browser)
 // Suporta 3 modos: clone (_clone_fn), design (_design_fn), auto (_design_fn com Auto)
 // Usa o mesmo padrao HMAC do generate.php
 // Bypassa o Vercel completamente - zero gasto de serverless
@@ -161,7 +161,7 @@ if (!$tunnelUrl) {
 }
 
 if (empty($tunnelUrl)) {
-    returnError('Servidor OmniVoice offline - tunnel nao disponivel', 503);
+    returnError('Servidor VozPro offline - tunnel nao disponivel', 503);
 }
 
 debugLog('Tunnel', 'ok', mb_substr($tunnelUrl, 0, 60) . '...');
@@ -459,7 +459,7 @@ for ($attempt = 0; $attempt < $maxRetries && !$audioUrl; $attempt++) {
         debugLog('Retry', 'warn', "Tentativa " . ($attempt + 1) . "/$maxRetries - aguardando ${waitSec}s...");
         sleep($waitSec);
     } else {
-        debugLog('Geracao', 'info', "Iniciando OmniVoice via PHP DIRECT ($endpoint)...");
+        debugLog('Geracao', 'info', "Iniciando VozPro via PHP DIRECT ($endpoint)...");
     }
 
     // Upload audio de referencia (clone mode only)
@@ -487,7 +487,7 @@ for ($attempt = 0; $attempt < $maxRetries && !$audioUrl; $attempt++) {
     }
 
     if (!$eventId) {
-        $lastError = 'Falha ao submeter job ao OmniVoice';
+        $lastError = 'Falha ao submeter job ao VozPro';
         continue;
     }
 
@@ -523,13 +523,13 @@ for ($attempt = 0; $attempt < $maxRetries && !$audioUrl; $attempt++) {
 if ($tempRefFile && file_exists($tempRefFile)) unlink($tempRefFile);
 
 if (!$audioUrl) {
-    $userMsg = 'OmniVoice falhou: ' . $lastError;
+    $userMsg = 'VozPro falhou: ' . $lastError;
     if ($lastError === 'null') {
-        $userMsg = 'OmniVoice instavel. Tente novamente em instantes.';
+        $userMsg = 'VozPro instavel. Tente novamente em instantes.';
     } elseif ($lastError === '404') {
-        $userMsg = 'OmniVoice reiniciou. Tente novamente.';
+        $userMsg = 'VozPro reiniciou. Tente novamente.';
     } elseif ($lastError === 'timeout') {
-        $userMsg = 'OmniVoice demorou demais. Tente um texto mais curto.';
+        $userMsg = 'VozPro demorou demais. Tente um texto mais curto.';
     }
     returnError($userMsg, 504);
 }
@@ -567,7 +567,7 @@ $dataUri = 'data:' . $mimeType . ';base64,' . $audioBase64;
 
 if ($tempAudioFile && file_exists($tempAudioFile)) unlink($tempAudioFile);
 
-debugLog('FINAL', 'ok', 'OmniVoice via PHP DIRECT - zero Vercel');
+debugLog('FINAL', 'ok', 'VozPro via PHP DIRECT - zero Vercel');
 
 echo json_encode([
     'audioUrl' => $dataUri,

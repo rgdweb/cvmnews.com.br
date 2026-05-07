@@ -1,5 +1,5 @@
 <?php
-// generate.php - Geracao de voz TTS via OmniVoice (chamada DIRETA do browser)
+// generate.php - Geracao de voz TTS via VozPro (chamada DIRETA do browser)
 // Bypassa completamente o Vercel para evitar timeout de 60s
 // Usa HMAC token para autenticacao (mesmo padrao do upload-direct.php)
 // v4: Audio trimming (max 10s) para evitar CUDA OOM na RTX 3060 12GB
@@ -449,7 +449,7 @@ if (!$tempRefFile && !empty($refAudioPath)) {
 
 $gradioData = [
     $texto,
-    'Auto',  // Auto detecta (interface do OmniVoice usa Auto)
+    'Auto',  // Auto detecta (interface do VozPro usa Auto)
     [
         'path' => $refAudioPath ?? '',
         'url' => '',  // preenchido apos upload
@@ -458,8 +458,8 @@ $gradioData = [
         'mime_type' => (pathinfo($refAudioName, PATHINFO_EXTENSION) === 'mp3') ? 'audio/mpeg' : 'audio/wav',
         'meta' => ['_type' => 'gradio.FileData']
     ],
-    '',        // refText: vazio (interface do OmniVoice envia vazio!)
-    null,      // instruct: null (interface do OmniVoice envia null!)
+    '',        // refText: vazio (interface do VozPro envia vazio!)
+    null,      // instruct: null (interface do VozPro envia null!)
     (int)$numStep,
     (float)$guidanceScale,
     true,      // denoise

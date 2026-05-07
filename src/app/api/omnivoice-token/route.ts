@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-// GET /api/omnivoice-token - Token para OmniVoice PHP direto (bypassa Vercel)
+// GET /api/omnivoice-token - Token para VozPro PHP direto (bypassa Vercel)
 // Mesmo HMAC do generate-token, mas aponta para generate-omnivoice.php
 export async function GET() {
   try {
@@ -40,9 +40,9 @@ export async function GET() {
       token: `${timestamp}.${hmac}`,
     })
   } catch (error) {
-    console.error('OmniVoice token error:', error)
+    console.error('VozPro token error:', error)
     return NextResponse.json(
-      { error: 'Erro ao gerar token OmniVoice' },
+      { error: 'Erro ao gerar token VozPro' },
       { status: 500 }
     )
   }

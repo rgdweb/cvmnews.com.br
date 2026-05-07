@@ -1,5 +1,5 @@
 <?php
-// generate.php - Geracao de voz TTS via OmniVoice (HuggingFace Space)
+// generate.php - Geracao de voz TTS via VozPro (HuggingFace Space)
 // Bypassa o Vercel para evitar o timeout de 60s do plano Hobby
 // v3: SSE Streaming persistente (conexao aberta ate resultado)
 //      Igual ao site oficial do Gradio, via HTTP
