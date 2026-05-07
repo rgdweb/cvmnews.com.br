@@ -449,6 +449,228 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'Xangai': '[Xangai]',
   'Yngrid': '[Ingrid]',
   "L'Oréal": '[Loreal]',
+
+  // === MARCAS / NEGÓCIOS (expansão Fase 1) ===
+  'Walmart': '[Walmart]',
+  'Carrefour': '[Carrefur]',
+  'Nestlé': '[Nestlé]',
+  'Unilever': '[Unilever]',
+  'Google': '[Google]',
+  'Apple': '[Épel]',
+  'Microsoft': '[Maicrósofte]',
+  'Amazon': '[Amazônia]',
+  'Mercado Livre': '[Mercado Livre]',
+  'Magazine Luiza': '[Magazine Luíza]',
+  'Casas Bahia': '[Casas Bahia]',
+  'Americanas': '[Americanas]',
+  'Saraiva': '[Saraiva]',
+  'C&A': '[Cê e Á]',
+  'HP': '[Agá Pê]',
+  'Dell': '[Del]',
+  'IBM': '[I Agá Bê Emme]',
+  'Intel': '[Intel]',
+  'AMD': '[A Éme Dê]',
+  'Foxconn': '[Focsone]',
+  'Uber': '[Uber]',
+  'Airbnb': '[Ér en bi en bi]',
+  'iFood': '[i fude]',
+  'Nubank': '[Nubanke]',
+  'PicPay': '[PicPei]',
+  'Mercado Pago': '[Mercado Pago]',
+  'Renner': '[Réner]',
+  'Herbalife': '[Erbaife]',
+  'Avon': '[Avone]',
+  'Natura': '[Natura]',
+  'ODONTOPREV': '[Odôntoprêve]',
+  'UNIMED': '[Unimede]',
+  'SulAmérica': '[SulAmérica]',
+  'Porto Seguro': '[Porto Seguro]',
+  'Bradesco': '[Bradésco]',
+  'Itaú': '[Itaú]',
+  'Santander': '[Santander]',
+  'Banco do Brasil': '[Banco do Brasil]',
+  'Caixa': '[Caixa]',
+  'Renault': '[Renô]',
+  'Fiat': '[Fiate]',
+  'Chevrolet': '[Chevrólet]',
+  'Volkswagen': '[Folquesvágue]',
+  'Toyota': '[Toyota]',
+  'Honda': '[Honda]',
+  'Hyundai': '[Rundai]',
+  'Peugeot': '[Pejô]',
+  'Citroën': '[Citroen]',
+  'Jeep': '[Jipe]',
+  'Land Rover': '[Lande Rover]',
+
+  // === TECNOLOGIA (expansão Fase 1) ===
+  'TikTok': '[TíTóque]',
+  'YouTube': '[YouTube]',
+  'Instagram': '[Instagram]',
+  'Facebook': '[Facebook]',
+  'WhatsApp': '[WhatsApp]',
+  'Twitter': '[Twitter]',
+  'Netflix': '[Netflix]',
+  'Spotify': '[Spotify]',
+  'Telegram': '[Telegram]',
+  'Discord': '[Discorde]',
+  'Slack': '[Slack]',
+  'Zoom': '[Zoom]',
+  'Skype': '[Scaipe]',
+  'Pinterest': '[Pinterest]',
+  'LinkedIn': '[LinkedIn]',
+  'Twitch': '[Tuitx]',
+  'Samsung': '[Samsung]',
+  'Xiaomi': '[Xiaomi]',
+  'LG': '[Éle Gê]',
+  'Philips': '[Philips]',
+  'Canon': '[Canon]',
+  'Nikon': '[Nikon]',
+  'Epson': '[Epson]',
+  'Brother': '[Bráder]',
+  'JBL': '[Jota Bê Éle]',
+  'Logitech': '[Lodjiteque]',
+  'Razer': '[Réizer]',
+  'Corsair': '[Corsér]',
+  'Bluetooth': '[Blutuuce]',
+  'Ethernet': '[Érnet]',
+  'QR Code': '[quér code]',
+  'Excel': '[Excel]',
+  'PowerPoint': '[PowerPoint]',
+  'Word': '[Word]',
+  'Windows': '[Uíndeus]',
+  'Linux': '[Linux]',
+  'Android': '[Android]',
+  'iOS': '[i ó esse]',
+  'SQL': '[és que u éle]',
+  'Python': '[Paiton]',
+  'JavaScript': '[JavaScript]',
+  'TypeScript': '[TypeScript]',
+  'React': '[Riacte]',
+  'Node': '[Nóude]',
+  'Vue': '[Vue]',
+
+  // === SAÚDE / MEDICAMENTOS (expansão Fase 1) ===
+  'ibuprofeno': '[ibuprofeno]',
+  'cefaleia': '[cefaléia]',
+  'mioma': '[mioma]',
+  'endometriose': '[endometriose]',
+  'lipodistrofia': '[lipodistrofia]',
+  'hipertensão': '[ipertensão]',
+  'diabetes': '[diabétes]',
+  'colesterol': '[colesteróle]',
+  'trombose': '[trombose]',
+  'infarto': '[infarto]',
+  'AVC': '[á ve cê]',
+  'HIV': '[agá i vê]',
+  'COVID': '[côvide]',
+  'Covid': '[côvide]',
+  'omicrânio': '[omicrânio]',
+  'quimioterapia': '[quimioterapia]',
+  'radioterapia': '[radioterapia]',
+  'tomografia': '[tomografia]',
+  'ultrassonografia': '[ultrassonografia]',
+  'endoscopia': '[endoscopia]',
+  'colonoscopia': '[colonoscopia]',
+  'mamografia': '[mamografia]',
+  'insuficiência renal': '[insuficiência renal]',
+  'loxapina': '[lozapina]',
+  'prometazina': '[prometazina]',
+  'pantoprazol': '[pantoprazol]',
+
+  // === ALIMENTAÇÃO (expansão Fase 1) ===
+  'açaí': '[assaí]',
+  'açúcar': '[açúcar]',
+  'churrasco': '[churrasco]',
+  'empadão': '[empadão]',
+  'coxinha': '[coxinha]',
+  'brigadeiro': '[brigadeiro]',
+  'beijinho': '[beijinho]',
+  'pão de queijo': '[pão de queijo]',
+  'tapioca': '[tapioca]',
+  'acarajé': '[acarajé]',
+  'moqueca': '[moqueca]',
+  'feijoada': '[feijoada]',
+  'caruru': '[caruru]',
+  'quindim': '[quindim]',
+  'pudim': '[pudim]',
+  'paçoca': '[passoca]',
+  'pé de moleque': '[pé de moleque]',
+  'rapadura': '[rapadura]',
+  'guaraná': '[guaraná]',
+  'caipirinha': '[caipirinha]',
+  'cachaça': '[cachaça]',
+  'caldinho': '[caldinho]',
+  'farofa': '[farofa]',
+  'pirão': '[pirão]',
+  'macarronada': '[macarronada]',
+  'escondidinho': '[escondidinho]',
+  'galinhada': '[galinhada]',
+  'jabá': '[jabá]',
+  'tucumã': '[tucumã]',
+  'jambu': '[jambu]',
+
+  // === GERAL / OUTROS (expansão Fase 1) ===
+  'QR code': '[cúder code]',
+  'CEO': '[cê e i ó]',
+  'CFO': '[cê éfe ó]',
+  'CTO': '[cê tê ó]',
+  'RH': '[erre águe]',
+  'PK': '[pê cá]',
+  'NGO': '[ênge ô]',
+  'GPT': '[gê pê tê]',
+  'LLM': '[éle éleême]',
+  'SSR': '[és és ér]',
+  'VPN': '[vê pê éne]',
+  'LAN': '[éle águe éne]',
+  'RAM': '[erre águe éme]',
+  'ROM': '[erre ó éme]',
+  'BI': '[bê i]',
+  'DB': '[dê bê]',
+  'SaaS': '[sáce]',
+  'IoT': '[i ó tê]',
+  'B2B': '[bê dois bê]',
+  'B2C': '[bê dois cê]',
+  'freelancer': '[frilenser]',
+  'stackoverflow': '[stack ouverflou]',
+  'github': '[giteube]',
+  'GitHub': '[Giteube]',
+  'reddit': '[rédite]',
+  'screenshot': '[screnshote]',
+  'shareware': '[xérueér]',
+  'open-source': '[ópen sourse]',
+  'docker': '[dóquer]',
+  'kubernetes': '[kubernétes]',
+  'wordpress': '[uórdpress]',
+  'woocommerce': '[uócomérce]',
+  'shopify': '[xópifei]',
+  'chatbot': '[chatebote]',
+  'IA': '[i á]',
+  'PC': '[pê cê]',
+  'TV': '[tê vê]',
+  'CNPJ': '[cê ene pê jota]',
+  'CPF': '[cê pê éfe]',
+  'PIS': '[pê i esse]',
+  'PASEP': '[pá sêpe]',
+  'FGTS': '[éfe gê tê esse]',
+  'INSS': '[i éne esse esse]',
+  'IRPF': '[i erre pê éfe]',
+  'IRPJ': '[i erre pê jota]',
+  'ICMS': '[i cê éme esse]',
+  'ISSQN': '[i esse esse quê éne]',
+  'SIMPLES': '[símples]',
+  'NF-e': '[éne éfe e]',
+  'CT-e': '[cê tê e]',
+  'MDF-e': '[éme dê éfe e]',
+  'SPED': '[és pê éde]',
+  'eSocial': '[e sôcial]',
+  'REINT': '[reínte]',
+  'DCTF': '[dê cê tê éfe]',
+  'ECF': '[é cê éfe]',
+  'CNH': '[cê erne águe]',
+  'DPVAT': '[dê pê vê á tê]',
+  'IPVA': '[i pê vê á]',
+  'ITBI': '[i tê bê i]',
+  'IPTU': '[i pê tê u]',
 }
 
 // ============================================================
@@ -645,6 +867,65 @@ function preprocessX(text: string): string {
 }
 
 // ============================================================
+// TAGS DE CONTROLE DE PROSÓDIA (SSML-like)
+// ============================================================
+
+/**
+ * Tags de controle que o usuário pode inserir no texto.
+ * São processadas ANTES do dicionário e do regex.
+ *
+ * Sintaxe: {{tag:valor}}
+ *
+ * Tags suportadas:
+ * - {{pause:500}} → Pausa de 500ms (insere vírgula longa)
+ * - {{pause:short}} → Pausa curta (300ms)
+ * - {{pause:medium}} → Pausa média (600ms)
+ * - {{pause:long}} → Pausa longa (1000ms)
+ * - {{emphasis}} ... {{/emphasis}} → Ênfase na palavra/frase (repetição suave)
+ * - {{slow}} ... {{/slow}} → Falar mais devagar (insere pausas entre palavras)
+ * - {{fast}} ... {{/fast}} → Falar mais rápido (remove pausas)
+ * - {{whisper}} ... {{/whisper}} → Sussurro (insere "." antes de cada palavra)
+ */
+export function processControlTags(text: string): string {
+  let result = text
+
+  // Pause tags
+  result = result.replace(/\{\{pause:(\d+)\}\}/g, (_match, ms) => {
+    const n = parseInt(ms)
+    if (n >= 800) return '... ' // pause longa
+    if (n >= 400) return '.. ' // pause média
+    return '. ' // pause curta
+  })
+
+  result = result.replace(/\{\{pause:long\}\}/g, '... ')
+  result = result.replace(/\{\{pause:medium\}\}/g, '.. ')
+  result = result.replace(/\{\{pause:short\}\}/g, '. ')
+
+  // Emphasis — wrap in double brackets for stronger pronunciation
+  result = result.replace(/\{\{emphasis\}\}(.*?)\{\{\/emphasis\}\}/g, '[$1]')
+
+  // Whisper — add dots before words for softer delivery
+  result = result.replace(/\{\{whisper\}\}(.*?)\{\{\/whisper\}\}/gs, (_match, content) => {
+    return content.split(' ').map(w => `.${w}`).join(' ')
+  })
+
+  // Slow — add commas between words
+  result = result.replace(/\{\{slow\}\}(.*?)\{\{\/slow\}\}/gs, (_match, content) => {
+    return content.replace(/,/g, ',,,') // triple comma = longer pause
+  })
+
+  // Fast — remove extra spaces
+  result = result.replace(/\{\{fast\}\}(.*?)\{\{\/fast\}\}/gs, (_match, content) => {
+    return content.replace(/\s+/g, ' ')
+  })
+
+  // Remove any unprocessed tags
+  result = result.replace(/\{\{\/?\w+}\}/g, '')
+
+  return result
+}
+
+// ============================================================
 // REGEX EXPANDIDO — TODOS OS PADRÕES PT-BR
 // ============================================================
 
@@ -672,6 +953,9 @@ function preprocessX(text: string): string {
  */
 export function optimizePronunciation(text: string): string {
   let result = text
+
+  // ---- 0. PROCESSAR TAGS DE CONTROLE ANTES DE TUDO ----
+  result = processControlTags(result)
 
   // ---- 1. ARTIGOS APÓS PONTUAÇÃO (elimina hesitação do TTS) ----
   // ". O sistema" → ", o sistema" (troca ponto por vírgula = une frases)
