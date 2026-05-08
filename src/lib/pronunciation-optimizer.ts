@@ -117,7 +117,7 @@ export function currencyToWords(val: string): string {
  */
 const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   // === SIGLAS / ACRÔNIMOS (soletrar) ===
-  'API': '[a p i]',
+  // REMOVIDO: API (instrucao [fonema] causava erro no TTS)
   'DVD': '[dê vê dê]',
   'GPS': '[gê pê és]',
   'IPTU': '[i pê tê u]',
@@ -171,8 +171,8 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'Link': '[Linque]',
   'links': '[linques]',
   'Links': '[Linques]',
-  'login': '[login]',
-  'Login': '[Login]',
+  // REMOVIDO: login (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Login (instrucao [fonema] causava erro no TTS)
   'logout': '[logoúte]',
   'Logout': '[Logoúte]',
   'online': '[onlaine]',
@@ -213,8 +213,8 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'Site': '[Sáite]',
   'smartphone': '[smartifone]',
   'Smartphone': '[Smartifone]',
-  'selfie': '[selfie]',
-  'Selfie': '[Selfie]',
+  // REMOVIDO: selfie (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Selfie (instrucao [fonema] causava erro no TTS)
   'hashtag': '[rastague]',
   'Hashtag': '[Rastague]',
   'influencer': '[influenser]',
@@ -288,7 +288,7 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'deploy': '[diploy]',
   'commit': '[comite]',
   'token': '[toquên]',
-  'cache': '[cache]',
+  // REMOVIDO: cache (instrucao [fonema] causava erro no TTS)
   'cookies': '[cúquis]',
   'script': '[escripte]',
   'prompt': '[prompete]',
@@ -374,12 +374,12 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'pneumático': '[peneumático]',
   'Pneumático': '[Peneumático]',
   'pneumotórax': '[peneumotórax]',
-  'psicólogo': '[psicólogo]',
-  'Psicólogo': '[Psicólogo]',
-  'psiquiatra': '[psiquiatra]',
-  'Psiquiatra': '[Psiquiatra]',
-  'psicose': '[psicose]',
-  'psicopata': '[psicopata]',
+  // REMOVIDO: psicólogo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Psicólogo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: psiquiatra (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Psiquiatra (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: psicose (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: psicopata (instrucao [fonema] causava erro no TTS)
   'ptialismo': '[petialismo]',
   'Ptialismo': '[Petialismo]',
   'ptose': '[petose]',
@@ -420,84 +420,84 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'Herança': '[Erança]',
 
   // OUTRAS PALAVRAS PROBLEMÁTICAS
-  'automóvel': '[automóvel]',
-  'Automóvel': '[Automóvel]',
-  'automóveis': '[automóveis]',
-  'Automóveis': '[Automóveis]',
-  'ecocardiograma': '[ecocardiograma]',
-  'transesofágico': '[transesofágico]',
-  'estenose': '[estenose]',
-  'adenocarcinoma': '[adenocarcinoma]',
-  'eletroencefalograma': '[eletroencefalograma]',
+  // REMOVIDO: automóvel (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Automóvel (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: automóveis (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Automóveis (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ecocardiograma (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: transesofágico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: estenose (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: adenocarcinoma (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: eletroencefalograma (instrucao [fonema] causava erro no TTS)
   'hemodiálise': '[emodiálise]',
-  'azitromicina': '[azitromicina]',
-  'omeprazol': '[omeprazol]',
-  'dipirona': '[dipirona]',
-  'ressonância': '[ressonância]',
-  'metástase': '[metástase]',
-  'aneurisma': '[aneurisma]',
-  'insuficiência': '[insuficiência]',
-  'biópsia': '[biópsia]',
+  // REMOVIDO: azitromicina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: omeprazol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: dipirona (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ressonância (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: metástase (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: aneurisma (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: insuficiência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: biópsia (instrucao [fonema] causava erro no TTS)
 
   // === NOMES PRÓPRIOS DIFÍCEIS ===
   'Wolski': '[Volski]',
   'Kowalski': '[Covalski]',
   'Higashi': '[Rigaxi]',
   'Schütz': '[Xuts]',
-  'Constança': '[Constança]',
-  'Ilhéus': '[Ilhéus]',
-  'Niterói': '[Niterói]',
-  'Teotônio': '[Teotônio]',
-  'Xangai': '[Xangai]',
+  // REMOVIDO: Constança (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Ilhéus (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Niterói (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Teotônio (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Xangai (instrucao [fonema] causava erro no TTS)
   'Yngrid': '[Ingrid]',
   "L'Oréal": '[Loreal]',
 
   // === MARCAS / NEGÓCIOS (expansão Fase 1) ===
-  'Walmart': '[Walmart]',
+  // REMOVIDO: Walmart (instrucao [fonema] causava erro no TTS)
   'Carrefour': '[Carrefur]',
-  'Nestlé': '[Nestlé]',
-  'Unilever': '[Unilever]',
-  'Google': '[Google]',
+  // REMOVIDO: Nestlé (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Unilever (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Google (instrucao [fonema] causava erro no TTS)
   'Apple': '[Épel]',
   'Microsoft': '[Maicrósofte]',
   'Amazon': '[Amazônia]',
-  'Mercado Livre': '[Mercado Livre]',
+  // REMOVIDO: Mercado Livre (instrucao [fonema] causava erro no TTS)
   'Magazine Luiza': '[Magazine Luíza]',
-  'Casas Bahia': '[Casas Bahia]',
-  'Americanas': '[Americanas]',
-  'Saraiva': '[Saraiva]',
+  // REMOVIDO: Casas Bahia (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Americanas (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Saraiva (instrucao [fonema] causava erro no TTS)
   'C&A': '[Cê e Á]',
   'HP': '[Agá Pê]',
   'Dell': '[Del]',
   'IBM': '[I Agá Bê Emme]',
-  'Intel': '[Intel]',
+  // REMOVIDO: Intel (instrucao [fonema] causava erro no TTS)
   'AMD': '[A Éme Dê]',
   'Foxconn': '[Focsone]',
-  'Uber': '[Uber]',
+  // REMOVIDO: Uber (instrucao [fonema] causava erro no TTS)
   'Airbnb': '[Ér en bi en bi]',
   'iFood': '[i fude]',
   'Nubank': '[Nubanke]',
   'PicPay': '[PicPei]',
-  'Mercado Pago': '[Mercado Pago]',
+  // REMOVIDO: Mercado Pago (instrucao [fonema] causava erro no TTS)
   'Renner': '[Réner]',
   'Herbalife': '[Erbaife]',
   'Avon': '[Avone]',
-  'Natura': '[Natura]',
+  // REMOVIDO: Natura (instrucao [fonema] causava erro no TTS)
   'ODONTOPREV': '[Odôntoprêve]',
   'UNIMED': '[Unimede]',
-  'SulAmérica': '[SulAmérica]',
-  'Porto Seguro': '[Porto Seguro]',
+  // REMOVIDO: SulAmérica (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Porto Seguro (instrucao [fonema] causava erro no TTS)
   'Bradesco': '[Bradésco]',
-  'Itaú': '[Itaú]',
-  'Santander': '[Santander]',
-  'Banco do Brasil': '[Banco do Brasil]',
-  'Caixa': '[Caixa]',
+  // REMOVIDO: Itaú (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Santander (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Banco do Brasil (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Caixa (instrucao [fonema] causava erro no TTS)
   'Renault': '[Renô]',
   'Fiat': '[Fiate]',
   'Chevrolet': '[Chevrólet]',
   'Volkswagen': '[Folquesvágue]',
-  'Toyota': '[Toyota]',
-  'Honda': '[Honda]',
+  // REMOVIDO: Toyota (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Honda (instrucao [fonema] causava erro no TTS)
   'Hyundai': '[Rundai]',
   'Peugeot': '[Pejô]',
   'Citroën': '[Citroen]',
@@ -506,28 +506,28 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
 
   // === TECNOLOGIA (expansão Fase 1) ===
   'TikTok': '[TíTóque]',
-  'YouTube': '[YouTube]',
-  'Instagram': '[Instagram]',
-  'Facebook': '[Facebook]',
-  'WhatsApp': '[WhatsApp]',
-  'Twitter': '[Twitter]',
-  'Netflix': '[Netflix]',
-  'Spotify': '[Spotify]',
-  'Telegram': '[Telegram]',
+  // REMOVIDO: YouTube (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Instagram (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Facebook (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: WhatsApp (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Twitter (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Netflix (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Spotify (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Telegram (instrucao [fonema] causava erro no TTS)
   'Discord': '[Discorde]',
-  'Slack': '[Slack]',
-  'Zoom': '[Zoom]',
+  // REMOVIDO: Slack (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Zoom (instrucao [fonema] causava erro no TTS)
   'Skype': '[Scaipe]',
-  'Pinterest': '[Pinterest]',
-  'LinkedIn': '[LinkedIn]',
+  // REMOVIDO: Pinterest (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: LinkedIn (instrucao [fonema] causava erro no TTS)
   'Twitch': '[Tuitx]',
-  'Samsung': '[Samsung]',
-  'Xiaomi': '[Xiaomi]',
+  // REMOVIDO: Samsung (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Xiaomi (instrucao [fonema] causava erro no TTS)
   'LG': '[Éle Gê]',
-  'Philips': '[Philips]',
-  'Canon': '[Canon]',
-  'Nikon': '[Nikon]',
-  'Epson': '[Epson]',
+  // REMOVIDO: Philips (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Canon (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Nikon (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Epson (instrucao [fonema] causava erro no TTS)
   'Brother': '[Bráder]',
   'JBL': '[Jota Bê Éle]',
   'Logitech': '[Lodjiteque]',
@@ -536,80 +536,53 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'Bluetooth': '[Blutuuce]',
   'Ethernet': '[Érnet]',
   'QR Code': '[quér code]',
-  'Excel': '[Excel]',
-  'PowerPoint': '[PowerPoint]',
-  'Word': '[Word]',
+  // REMOVIDO: Excel (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: PowerPoint (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Word (instrucao [fonema] causava erro no TTS)
   'Windows': '[Uíndeus]',
-  'Linux': '[Linux]',
-  'Android': '[Android]',
-  'iOS': '[i ó esse]',
-  'SQL': '[és que u éle]',
-  'Python': '[Paiton]',
-  'JavaScript': '[JavaScript]',
-  'TypeScript': '[TypeScript]',
-  'React': '[Riacte]',
-  'Node': '[Nóude]',
-  'Vue': '[Vue]',
+  // REMOVIDO: Linux (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Android (instrucao [fonema] causava erro no TTS)
+  'iOS': 'i O S',
+  'SQL': 'S Q L',
 
   // === SAÚDE / MEDICAMENTOS (expansão Fase 1) ===
-  'ibuprofeno': '[ibuprofeno]',
-  'cefaleia': '[cefaléia]',
-  'mioma': '[mioma]',
-  'endometriose': '[endometriose]',
-  'lipodistrofia': '[lipodistrofia]',
-  'hipertensão': '[ipertensão]',
-  'diabetes': '[diabétes]',
-  'colesterol': '[colesteróle]',
-  'trombose': '[trombose]',
-  'infarto': '[infarto]',
-  'AVC': '[á ve cê]',
-  'HIV': '[agá i vê]',
-  'COVID': '[côvide]',
-  'Covid': '[côvide]',
-  'omicrânio': '[omicrânio]',
-  'quimioterapia': '[quimioterapia]',
-  'radioterapia': '[radioterapia]',
-  'tomografia': '[tomografia]',
-  'ultrassonografia': '[ultrassonografia]',
-  'endoscopia': '[endoscopia]',
-  'colonoscopia': '[colonoscopia]',
-  'mamografia': '[mamografia]',
-  'insuficiência renal': '[insuficiência renal]',
-  'loxapina': '[lozapina]',
-  'prometazina': '[prometazina]',
-  'pantoprazol': '[pantoprazol]',
+  // REMOVIDAS instruções [fonema] — VozPro lia literalmente e falava errado
+  // ex: colesterol era [colesteróle] e o TTS falava "colesteróle"
+  'hipertensão': 'ipertensão',
+  'AVC': 'A V Cê',
+  'HIV': 'H I V',
+  'omicrânio': 'omicron',
+  'insuficiência renal': 'insuficiência renal',
 
   // === ALIMENTAÇÃO (expansão Fase 1) ===
-  'açaí': '[assaí]',
-  'açúcar': '[açúcar]',
-  'churrasco': '[churrasco]',
-  'empadão': '[empadão]',
-  'coxinha': '[coxinha]',
-  'brigadeiro': '[brigadeiro]',
-  'beijinho': '[beijinho]',
-  'pão de queijo': '[pão de queijo]',
-  'tapioca': '[tapioca]',
-  'acarajé': '[acarajé]',
-  'moqueca': '[moqueca]',
-  'feijoada': '[feijoada]',
-  'caruru': '[caruru]',
-  'quindim': '[quindim]',
-  'pudim': '[pudim]',
+  'açaí': 'assai',
+  // REMOVIDO: empadão (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: coxinha (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: brigadeiro (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: beijinho (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: pão de queijo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: tapioca (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: acarajé (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: moqueca (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: feijoada (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: caruru (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: quindim (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: pudim (instrucao [fonema] causava erro no TTS)
   'paçoca': '[passoca]',
-  'pé de moleque': '[pé de moleque]',
-  'rapadura': '[rapadura]',
-  'guaraná': '[guaraná]',
-  'caipirinha': '[caipirinha]',
-  'cachaça': '[cachaça]',
-  'caldinho': '[caldinho]',
-  'farofa': '[farofa]',
-  'pirão': '[pirão]',
-  'macarronada': '[macarronada]',
-  'escondidinho': '[escondidinho]',
-  'galinhada': '[galinhada]',
-  'jabá': '[jabá]',
-  'tucumã': '[tucumã]',
-  'jambu': '[jambu]',
+  // REMOVIDO: pé de moleque (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: rapadura (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: guaraná (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: caipirinha (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: cachaça (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: caldinho (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: farofa (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: pirão (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: macarronada (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: escondidinho (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: galinhada (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: jabá (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: tucumã (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: jambu (instrucao [fonema] causava erro no TTS)
 
   // === GERAL / OUTROS (expansão Fase 1) ===
   'QR code': '[cúder code]',
@@ -675,8 +648,8 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'IPTU': '[i pê tê u]',
 
   // === JURÍDICO / LEGAL ===
-  'Habeas corpus': '[Habeas corpus]',
-  'habeas corpus': '[habeas corpus]',
+  // REMOVIDO: Habeas corpus (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: habeas corpus (instrucao [fonema] causava erro no TTS)
   'STF': '[és tê éfe]',
   'STJ': '[és tê jota]',
   'TJ': '[tê jota]',
@@ -701,97 +674,97 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'AREsp': '[á erre és pê]',
   'AgRg': '[a gê erre gê]',
   'EDcl': '[é dê cê éle]',
-  'EI': '[e i]',
+  // REMOVIDO: EI (instrucao [fonema] causava erro no TTS)
   'IRDR': '[i erre dê erre]',
   'RTJ': '[erre tê jota]',
   'RTF': '[erre tê éfe]',
   'RJTJE': '[erre jota tê jota i]',
-  'Inquérito': '[inquérito]',
-  'inquérito': '[inquérito]',
-  'Apelação': '[apelação]',
-  'apelação': '[apelação]',
-  'Embargos': '[embargos]',
-  'embargos': '[embargos]',
-  'Ação': '[ação]',
-  'Petição': '[petição]',
-  'petição': '[petição]',
-  'Sentença': '[sentença]',
-  'sentença': '[sentença]',
-  'Acórdão': '[acórdão]',
-  'acórdão': '[acórdão]',
-  'Desembargador': '[desembargador]',
-  'desembargador': '[desembargador]',
-  'Relator': '[relator]',
-  'relator': '[relator]',
-  'Revisor': '[revisor]',
-  'revisor': '[revisor]',
-  'Vogal': '[vogal]',
-  'vogal': '[vogal]',
-  'Procurador': '[procurador]',
-  'procurador': '[procurador]',
-  'Defensor': '[defensor]',
-  'defensor': '[defensor]',
-  'Jurisprudência': '[jurisprudência]',
-  'jurisprudência': '[jurisprudência]',
-  'Súmula': '[súmula]',
-  'súmula': '[súmula]',
-  'Enunciado': '[enunciado]',
-  'enunciado': '[enunciado]',
-  'Precedente': '[precedente]',
-  'precedente': '[precedente]',
-  'Tutela': '[tutela]',
-  'tutela': '[tutela]',
-  'Liminar': '[liminar]',
-  'liminar': '[liminar]',
-  'Mandado': '[mandado]',
-  'mandado': '[mandado]',
-  'Autos': '[autos]',
-  'autos': '[autos]',
-  'Distribuição': '[distribuição]',
-  'distribuição': '[distribuição]',
-  'Recurso': '[recurso]',
-  'recurso': '[recurso]',
-  'Contrarrazões': '[contrarrazões]',
-  'contrarrazões': '[contrarrazões]',
-  'Razões': '[razões]',
-  'razões': '[razões]',
-  'Exceção': '[exceção]',
-  'exceção': '[exceção]',
-  'Impugnação': '[impugnação]',
-  'impugnação': '[impugnação]',
-  'Contestação': '[contestação]',
-  'contestação': '[contestação]',
-  'Diligência': '[diligência]',
-  'diligência': '[diligência]',
-  'Audiência': '[audiência]',
-  'audiência': '[audiência]',
-  'Instrução': '[instrução]',
-  'instrução': '[instrução]',
-  'Julgamento': '[julgamento]',
-  'julgamento': '[julgamento]',
-  'Trânsito em julgado': '[trânsito em julgado]',
-  'Coisa julgada': '[coisa julgada]',
-  'Prescrição': '[prescrição]',
-  'prescrição': '[prescrição]',
-  'Decadência': '[decadência]',
-  'decadência': '[decadência]',
-  'Perempção': '[perempção]',
-  'perempção': '[perempção]',
-  'Intimação': '[intimação]',
-  'intimação': '[intimação]',
-  'Citação': '[citação]',
-  'citação': '[citação]',
-  'Notificação': '[notificação]',
-  'notificação': '[notificação]',
-  'Penhora': '[penhora]',
-  'penhora': '[penhora]',
-  'Apreensão': '[apreensão]',
-  'apreensão': '[apreensão]',
-  'Hipoteca': '[hipoteca]',
-  'hipoteca': '[hipoteca]',
+  // REMOVIDO: Inquérito (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: inquérito (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Apelação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: apelação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Embargos (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: embargos (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Ação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Petição (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: petição (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Sentença (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: sentença (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Acórdão (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: acórdão (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Desembargador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: desembargador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Relator (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: relator (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Revisor (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: revisor (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Vogal (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: vogal (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Procurador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: procurador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Defensor (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: defensor (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Jurisprudência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: jurisprudência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Súmula (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: súmula (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Enunciado (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: enunciado (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Precedente (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: precedente (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Tutela (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: tutela (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Liminar (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: liminar (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Mandado (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: mandado (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Autos (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: autos (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Distribuição (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: distribuição (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Recurso (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: recurso (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Contrarrazões (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: contrarrazões (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Razões (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: razões (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Exceção (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: exceção (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Impugnação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: impugnação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Contestação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: contestação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Diligência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: diligência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Audiência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: audiência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Instrução (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: instrução (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Julgamento (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: julgamento (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Trânsito em julgado (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Coisa julgada (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Prescrição (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: prescrição (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Decadência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: decadência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Perempção (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: perempção (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Intimação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: intimação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Citação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: citação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Notificação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: notificação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Penhora (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: penhora (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Apreensão (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: apreensão (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Hipoteca (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: hipoteca (instrucao [fonema] causava erro no TTS)
 
   // === FINANCEIRO / ECONOMIA ===
-  'Bacen': '[Bacen]',
+  // REMOVIDO: Bacen (instrucao [fonema] causava erro no TTS)
   'BCB': '[bê cê bê]',
   'CDI': '[cê dê i]',
   'Selic': '[Sélique]',
@@ -807,8 +780,8 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'CRI': '[cê erre i]',
   'CRA': '[cê erre a]',
   'LCI/LCA': '[éle cê i éle cê a]',
-  'Debênture': '[debênture]',
-  'debênture': '[debênture]',
+  // REMOVIDO: Debênture (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: debênture (instrucao [fonema] causava erro no TTS)
   'FII': '[éfe i i]',
   'FIDC': '[éfe i dê cê]',
   'ETF': '[i tê éfe]',
@@ -816,19 +789,19 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'hedge': '[rédge]',
   'Swap': '[suáp]',
   'swap': '[suáp]',
-  'Derivativo': '[derivativo]',
-  'derivativo': '[derivativo]',
-  'Ações': '[ações]',
-  'ações': '[ações]',
-  'Dividendo': '[dividendo]',
-  'dividendo': '[dividendo]',
-  'Juros compostos': '[juros compostos]',
-  'Amortização': '[amortização]',
-  'amortização': '[amortização]',
-  'Depreciação': '[depreciação]',
-  'depreciação': '[depreciação]',
-  'Balancete': '[balancete]',
-  'balancete': '[balancete]',
+  // REMOVIDO: Derivativo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: derivativo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Ações (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ações (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Dividendo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: dividendo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Juros compostos (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Amortização (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: amortização (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Depreciação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: depreciação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Balancete (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: balancete (instrucao [fonema] causava erro no TTS)
   'DRE': '[dê erre e]',
   'EBITDA': '[ebitida]',
   'ROI': '[erre ó i]',
@@ -871,72 +844,72 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'UTFPR': '[ute efê tê pê erre]',
   'IFSP': '[i éfe és pê]',
   'Pos-graduação': '[pós-graduação]',
-  'pós-graduação': '[pós-graduação]',
-  'Mestrado': '[mestrado]',
-  'mestrado': '[mestrado]',
-  'Doutorado': '[doutorado]',
-  'doutorado': '[doutorado]',
+  // REMOVIDO: pós-graduação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Mestrado (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: mestrado (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Doutorado (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: doutorado (instrucao [fonema] causava erro no TTS)
   'TCC': '[tê cê cê]',
-  'Tese': '[tese]',
-  'tese': '[tese]',
-  'Dissertação': '[dissertação]',
-  'dissertação': '[dissertação]',
-  'Monografia': '[monografia]',
-  'monografia': '[monografia]',
-  'Currículo': '[currículo]',
-  'currículo': '[currículo]',
-  'Grade curricular': '[grade curricular]',
-  'Ementa': '[ementa]',
-  'ementa': '[ementa]',
-  'Frequência': '[frequência]',
-  'frequência': '[frequência]',
-  'Aproveitamento': '[aproveitamento]',
-  'aproveitamento': '[aproveitamento]',
-  'Reprovação': '[reprovação]',
-  'reprovação': '[reprovação]',
-  'Matrícula': '[matrícula]',
-  'matrícula': '[matrícula]',
-  'Trancamento': '[trancamento]',
-  'trancamento': '[trancamento]',
-  'Transferência': '[transferência]',
-  'transferência': '[transferência]',
-  'Coordenador': '[coordenador]',
-  'coordenador': '[coordenador]',
-  'Decano': '[decano]',
-  'decano': '[decano]',
-  'Reitor': '[reitor]',
-  'reitor': '[reitor]',
-  'Vice-reitor': '[vice-reitor]',
-  'Chanceler': '[chanceler]',
-  'chanceler': '[chanceler]',
+  // REMOVIDO: Tese (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: tese (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Dissertação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: dissertação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Monografia (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: monografia (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Currículo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: currículo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Grade curricular (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Ementa (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ementa (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Frequência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: frequência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Aproveitamento (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: aproveitamento (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Reprovação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: reprovação (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Matrícula (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: matrícula (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Trancamento (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: trancamento (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Transferência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: transferência (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Coordenador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: coordenador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Decano (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: decano (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Reitor (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: reitor (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Vice-reitor (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Chanceler (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: chanceler (instrucao [fonema] causava erro no TTS)
   'Campus': '[câmpus]',
   'campus': '[câmpus]',
-  'Faculdade': '[faculdade]',
-  'faculdade': '[faculdade]',
-  'Departamento': '[departamento]',
-  'departamento': '[departamento]',
-  'Programa': '[programa]',
-  'programa': '[programa]',
-  'Disciplina': '[disciplina]',
-  'disciplina': '[disciplina]',
-  'Docente': '[docente]',
-  'docente': '[docente]',
-  'Discente': '[discente]',
-  'discente': '[discente]',
+  // REMOVIDO: Faculdade (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: faculdade (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Departamento (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: departamento (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Programa (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: programa (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Disciplina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: disciplina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Docente (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: docente (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Discente (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: discente (instrucao [fonema] causava erro no TTS)
 
   // === GOVERNO / ÓRGÃOS PÚBLICOS ===
-  'ANVISA': '[anvisa]',
-  'ANATEL': '[anatel]',
-  'ANCINE': '[ancine]',
+  // REMOVIDO: ANVISA (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ANATEL (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ANCINE (instrucao [fonema] causava erro no TTS)
   'ANP': '[a êne pê]',
   'ANA': '[a êne a]',
   'ANTT': '[a êne tê tê]',
   'ANS': '[a êne és]',
-  'ANAC': '[anac]',
+  // REMOVIDO: ANAC (instrucao [fonema] causava erro no TTS)
   'CVM': '[cê vê éme]',
   'INPI': '[i êne pê i]',
-  'INCRA': '[incra]',
-  'IBAMA': '[ibama]',
+  // REMOVIDO: INCRA (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: IBAMA (instrucao [fonema] causava erro no TTS)
   'PF': '[pê éfe]',
   'ABIN': '[abine]',
   'CGU': '[cê gê u]',
@@ -950,38 +923,38 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'TRF4': '[tê erre éfe quatro]',
   'TRF5': '[tê erre éfe cinco]',
   'TRF6': '[tê erre éfe seis]',
-  'Receita Federal': '[Receita Federal]',
+  // REMOVIDO: Receita Federal (instrucao [fonema] causava erro no TTS)
   'Carf': '[carfe]',
   'CARF': '[carfe]',
   'PGFN': '[pê gê éfe éne]',
   'AGU': '[a gê u]',
   'PGU': '[pê gê u]',
-  'Prefeitura': '[prefeitura]',
-  'prefeitura': '[prefeitura]',
-  'Governador': '[governador]',
-  'governador': '[governador]',
-  'Vice-governador': '[vice-governador]',
-  'Prefeito': '[prefeito]',
-  'prefeito': '[prefeito]',
-  'Vereador': '[vereador]',
-  'vereador': '[vereador]',
-  'Secretário': '[secretário]',
-  'secretário': '[secretário]',
-  'Ministro': '[ministro]',
-  'ministro': '[ministro]',
-  'Senador': '[senador]',
-  'senador': '[senador]',
-  'Deputado': '[deputado]',
-  'deputado': '[deputado]',
-  'Presidente': '[presidente]',
-  'presidente': '[presidente]',
+  // REMOVIDO: Prefeitura (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: prefeitura (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Governador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: governador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Vice-governador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Prefeito (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: prefeito (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Vereador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: vereador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Secretário (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: secretário (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Ministro (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ministro (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Senador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: senador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Deputado (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: deputado (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Presidente (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: presidente (instrucao [fonema] causava erro no TTS)
 
   // === MAIS TECNOLOGIA ===
   'ChatGPT': '[Chat Gê Pê Tê]',
   'GPT-4': '[gê pê tê quatro]',
   'GPT-3': '[gê pê tê três]',
-  'OpenAI': '[Open AI]',
-  'Claude': '[Claude]',
+  // REMOVIDO: OpenAI (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Claude (instrucao [fonema] causava erro no TTS)
   'Gemini': '[Gêmeine]',
   'Copilot': '[Copailete]',
   'Midjourney': '[Midjórnei]',
@@ -998,16 +971,16 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'Go': '[Gó]',
   'MongoDB': '[Mongó DB]',
   'Redis': '[Rédise]',
-  'PostgreSQL': '[Postgres QL]',
-  'GraphQL': '[Graph QL]',
+  // REMOVIDO: PostgreSQL (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: GraphQL (instrucao [fonema] causava erro no TTS)
   'REST': '[réste]',
   'REST API': '[réste API]',
   'WebSocket': '[Uébe Sócquete]',
   'Nginx': '[Njinxe]',
-  'Apache': '[Apache]',
+  // REMOVIDO: Apache (instrucao [fonema] causava erro no TTS)
   'Jenkins': '[Jênquins]',
   'GitLab': '[GitLabe]',
-  'Jira': '[Jira]',
+  // REMOVIDO: Jira (instrucao [fonema] causava erro no TTS)
   'Notion': '[Nócion]',
   'Figma': '[Fígma]',
   'Canva': '[Cánva]',
@@ -1026,7 +999,7 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'Azure': '[ézurre]',
 
   // === MAIS MARCAS BRASILEIRAS ===
-  'Magalu': '[Magalu]',
+  // REMOVIDO: Magalu (instrucao [fonema] causava erro no TTS)
   'Shopee': '[Xópi]',
   'OLX': '[ó éle ixe]',
   'Rappi': '[Rapi]',
@@ -1034,30 +1007,30 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'Stone': '[Istóne]',
   'PagSeguro': '[Pague Seguro]',
   'Cielo': '[Siélo]',
-  'Rede': '[Rede]',
+  // REMOVIDO: Rede (instrucao [fonema] causava erro no TTS)
   'Getnet': '[Guetnete]',
   'Elavon': '[Elavóne]',
   'Adyen': '[Aidéne]',
   'Stripe': '[Estraípe]',
   'Wise': '[Uáize]',
-  'Remessa Online': '[Remessa Online]',
+  // REMOVIDO: Remessa Online (instrucao [fonema] causava erro no TTS)
   'Nomad': '[Nômade]',
-  'Inter': '[Inter]',
+  // REMOVIDO: Inter (instrucao [fonema] causava erro no TTS)
   'C6 Bank': '[Cê Seis Bank]',
   'BTG Pactual': '[Bê Tê Gê Pactual]',
-  'XP Investimentos': '[XP Investimentos]',
+  // REMOVIDO: XP Investimentos (instrucao [fonema] causava erro no TTS)
   'Clear': '[Clír]',
-  'Guide Investimentos': '[Guide Investimentos]',
+  // REMOVIDO: Guide Investimentos (instrucao [fonema] causava erro no TTS)
   'Modal': '[Módau]',
   'Easynvest': '[Easinvést]',
-  'Rico': '[Rico]',
-  'Toro': '[Toro]',
-  'Nu Pagamentos': '[Nu Pagamentos]',
+  // REMOVIDO: Rico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Toro (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Nu Pagamentos (instrucao [fonema] causava erro no TTS)
   'Conductor': '[Condutor]',
   'Wirecard': '[Uáiarcárde]',
   'Moip': '[Móipe]',
   'PayPal': '[Pei Pei El]',
-  'Mercado Bitcoin': '[Mercado Bitcoin]',
+  // REMOVIDO: Mercado Bitcoin (instrucao [fonema] causava erro no TTS)
   'Bitcoin': '[Bicoine]',
   'Ethereum': '[Ethereúme]',
   'Litecoin': '[Láitecoine]',
@@ -1065,174 +1038,174 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'Stablecoin': '[Steibolcoine]',
   'Blockchain': '[Blocqueine]',
   'Web3': '[Uébe três]',
-  'Metaverso': '[Metaverso]',
-  'metaverso': '[metaverso]',
+  // REMOVIDO: Metaverso (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: metaverso (instrucao [fonema] causava erro no TTS)
   'NFT': '[éne éfe tê]',
 
   // === MAIS SAÚDE / MEDICAMENTOS ===
-  'amoxicilina': '[amoxicilina]',
-  'azitromicina': '[azitromicina]',
-  'loratadina': '[loratadina]',
-  'dipirona': '[dipirona]',
-  'paracetamol': '[paracetamol]',
-  'ibuprofeno': '[ibuprofeno]',
-  'diclofenaco': '[diclofenaco]',
-  'nimesulida': '[nimesulida]',
-  'omeprazol': '[omeprazol]',
-  'pantoprazol': '[pantoprazol]',
-  'ranitidina': '[ranitidina]',
-  'losartana': '[losartana]',
-  'atenolol': '[atenolol]',
-  'captopril': '[captopril]',
-  'enalapril': '[enalapril]',
-  'sinvastatina': '[sinvastatina]',
-  'atorvastatina': '[atorvastatina]',
-  'rosuvastatina': '[rosuvastatina]',
-  'metformina': '[metformina]',
-  'glibenclamida': '[glibenclamida]',
-  'insulina': '[insulina]',
-  'prednisona': '[prednisona]',
-  'dexametasona': '[dexametasona]',
-  'hidroxicloroquina': '[hidroxicloroquina]',
-  'cloroquina': '[cloroquina]',
-  'ivermectina': '[ivermectina]',
-  'warfarina': '[warfarina]',
-  'heparina': '[heparina]',
-  'enoxaparina': '[enoxaparina]',
-  'diazepam': '[diazepam]',
-  'clonazepam': '[clonazepam]',
-  'alprazolam': '[alprazolam]',
-  'sertralina': '[sertralina]',
-  'fluoxetina': '[fluoxetina]',
-  'escitalopram': '[escitalopram]',
-  'bupropiona': '[bupropiona]',
-  'venlafaxina': '[venlafaxina]',
-  'carbamazepina': '[carbamazepina]',
-  'valproato': '[valproato]',
-  'topiramato': '[topiramato]',
-  'lamotrigina': '[lamotrigina]',
-  'levetiracetam': '[levetiracetam]',
-  'fenitoína': '[fenitoína]',
-  'carvedilol': '[carvedilol]',
-  'anlodipino': '[anlodipino]',
-  'furosemida': '[furosemida]',
-  'espironolactona': '[espironolactona]',
-  'sacubitril': '[sacubitril]',
-  'digoxina': '[digoxina]',
-  'amiodarona': '[amiodarona]',
-  'sotalol': '[sotalol]',
-  'propafenona': '[propafenona]',
-  'flecainida': '[flecainida]',
-  'metoprolol': '[metoprolol]',
-  'propranolol': '[propranolol]',
-  'mesalazina': '[mesalazina]',
-  'olsalazina': '[olsalazina]',
-  'sulfasalazina': '[sulfasalazina]',
-  'azatioprina': '[azatioprina]',
-  'metotrexato': '[metotrexato]',
-  'aciclovir': '[aciclovir]',
-  'valaciclovir': '[valaciclovir]',
-  'oseltamivir': '[oseltamivir]',
-  'ritonavir': '[ritonavir]',
-  'lopinavir': '[lopinavir]',
-  'ceftriaxona': '[ceftriaxona]',
-  'cefazolina': '[cefazolina]',
-  'vancomicina': '[vancomicina]',
-  'meropenem': '[meropenem]',
-  'piperacilina': '[piperacilina]',
-  'gentamicina': '[gentamicina]',
-  'anfotericina': '[anfotericina]',
-  'fluconazol': '[fluconazol]',
-  'itraconazol': '[itraconazol]',
-  'ambroxol': '[ambroxol]',
-  'salbutamol': '[salbutamol]',
-  'prednisolona': '[prednisolona]',
-  'budesonida': '[budesonida]',
-  'fluticasona': '[fluticasona]',
-  'montelucaste': '[montelucaste]',
-  'desloratadina': '[desloratadina]',
-  'cetirizina': '[cetirizina]',
-  'fexofenadina': '[fexofenadina]',
-  'ebastina': '[ebastina]',
-  'ketotifeno': '[ketotifeno]',
-  'betametasona': '[betametasona]',
+  // REMOVIDO: amoxicilina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: azitromicina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: loratadina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: dipirona (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: paracetamol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ibuprofeno (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: diclofenaco (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: nimesulida (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: omeprazol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: pantoprazol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ranitidina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: losartana (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: atenolol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: captopril (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: enalapril (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: sinvastatina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: atorvastatina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: rosuvastatina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: metformina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: glibenclamida (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: insulina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: prednisona (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: dexametasona (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: hidroxicloroquina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: cloroquina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ivermectina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: warfarina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: heparina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: enoxaparina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: diazepam (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: clonazepam (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: alprazolam (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: sertralina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: fluoxetina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: escitalopram (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: bupropiona (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: venlafaxina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: carbamazepina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: valproato (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: topiramato (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: lamotrigina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: levetiracetam (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: fenitoína (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: carvedilol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: anlodipino (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: furosemida (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: espironolactona (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: sacubitril (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: digoxina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: amiodarona (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: sotalol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: propafenona (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: flecainida (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: metoprolol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: propranolol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: mesalazina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: olsalazina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: sulfasalazina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: azatioprina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: metotrexato (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: aciclovir (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: valaciclovir (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: oseltamivir (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ritonavir (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: lopinavir (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ceftriaxona (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: cefazolina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: vancomicina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: meropenem (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: piperacilina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: gentamicina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: anfotericina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: fluconazol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: itraconazol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ambroxol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: salbutamol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: prednisolona (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: budesonida (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: fluticasona (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: montelucaste (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: desloratadina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: cetirizina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: fexofenadina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ebastina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ketotifeno (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: betametasona (instrucao [fonema] causava erro no TTS)
   'vitamina D': '[vitamina dê]',
   'vitamina B12': '[vitamina bê doze]',
   'vitamina C': '[vitamina cê]',
-  'óleo de cozinha': '[óleo de cozinha]',
-  'antibiótico': '[antibiótico]',
-  'anti-inflamatório': '[anti-inflamatório]',
-  'antialérgico': '[antialérgico]',
-  'analgésico': '[analgésico]',
-  'antipirético': '[antipirético]',
-  'anticonvulsivante': '[anticonvulsivante]',
-  'antidepressivo': '[antidepressivo]',
-  'ansiolítico': '[ansiolítico]',
-  'hipnótico': '[hipnótico]',
-  'antipsicótico': '[antipsicótico]',
-  'estabilizador de humor': '[estabilizador de humor]',
-  'broncodilatador': '[broncodilatador]',
-  'corticosteroide': '[corticosteroide]',
-  'imunossupressor': '[imunossupressor]',
-  'anti-hipertensivo': '[anti-hipertensivo]',
-  'anticoagulante': '[anticoagulante]',
-  'antiagregante': '[antiagregante]',
-  'estatina': '[estatina]',
-  'betabloqueador': '[betabloqueador]',
-  'inibidor': '[inibidor]',
-  'bloqueador': '[bloqueador]',
-  'diurético': '[diurético]',
-  'vasodilatador': '[vasodilatador]',
-  'antiarrítmico': '[antiarrítmico]',
-  'cardioversor': '[cardioversor]',
-  'antihistamínico': '[antihistamínico]',
-  'probiótico': '[probiótico]',
-  'laxante': '[laxante]',
-  'antisséptico': '[antisséptico]',
-  'anestésico': '[anestésico]',
-  'anticoncepcional': '[anticoncepcional]',
-  'hormônio': '[hormônio]',
-  'cortisol': '[cortisol]',
-  'tiroxina': '[tiroxina]',
-  'levo-tiroxina': '[levo-tiroxina]',
-  'alendronato': '[alendronato]',
-  'calcitriol': '[calcitriol]',
-  'colecalciferol': '[colecalciferol]',
-  'carbonato de cálcio': '[carbonato de cálcio]',
-  'sulfato ferroso': '[sulfato ferroso]',
-  'ácido fólico': '[ácido fólico]',
-  'dabigatrana': '[dabigatrana]',
-  'rivaroxabana': '[rivaroxabana]',
-  'apixabana': '[apixabana]',
-  'edoxabana': '[edoxabana]',
-  'dalteparina': '[dalteparina]',
-  'nadroparina': '[nadroparina]',
-  'bemiparina': '[bemiparina]',
-  'fibrinolítico': '[fibrinolítico]',
-  'trombolítico': '[trombolítico]',
-  'radiografia': '[radiografia]',
-  'eletrocardiograma': '[eletrocardiograma]',
-  'ressonância magnética': '[ressonância magnética]',
-  'tomografia computadorizada': '[tomografia computadorizada]',
-  'ultrassom': '[ultrassom]',
-  'ecocardiograma': '[ecocardiograma]',
-  'holter': '[holter]',
-  'ergométrico': '[ergométrico]',
-  'cateterismo': '[cateterismo]',
-  'endoscopia': '[endoscopia]',
-  'colonoscopia': '[colonoscopia]',
-  'biópsia': '[biópsia]',
-  'polissonografia': '[polissonografia]',
-  'espirometria': '[espirometria]',
-  'eletroencefalograma': '[eletroencefalograma]',
-  'eletromiografia': '[eletromiografia]',
-  'mamografia': '[mamografia]',
-  'densitometria': '[densitometria]',
-  'hemograma': '[hemograma]',
-  'glicemia': '[glicemia]',
-  'hemoglobina glicada': '[hemoglobina glicada]',
-  'creatinina': '[creatinina]',
-  'ureia': '[ureia]',
+  // REMOVIDO: óleo de cozinha (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: antibiótico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: anti-inflamatório (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: antialérgico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: analgésico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: antipirético (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: anticonvulsivante (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: antidepressivo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ansiolítico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: hipnótico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: antipsicótico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: estabilizador de humor (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: broncodilatador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: corticosteroide (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: imunossupressor (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: anti-hipertensivo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: anticoagulante (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: antiagregante (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: estatina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: betabloqueador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: inibidor (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: bloqueador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: diurético (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: vasodilatador (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: antiarrítmico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: cardioversor (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: antihistamínico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: probiótico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: laxante (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: antisséptico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: anestésico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: anticoncepcional (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: hormônio (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: cortisol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: tiroxina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: levo-tiroxina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: alendronato (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: calcitriol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: colecalciferol (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: carbonato de cálcio (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: sulfato ferroso (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ácido fólico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: dabigatrana (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: rivaroxabana (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: apixabana (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: edoxabana (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: dalteparina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: nadroparina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: bemiparina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: fibrinolítico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: trombolítico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: radiografia (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: eletrocardiograma (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ressonância magnética (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: tomografia computadorizada (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ultrassom (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ecocardiograma (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: holter (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ergométrico (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: cateterismo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: endoscopia (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: colonoscopia (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: biópsia (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: polissonografia (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: espirometria (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: eletroencefalograma (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: eletromiografia (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: mamografia (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: densitometria (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: hemograma (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: glicemia (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: hemoglobina glicada (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: creatinina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ureia (instrucao [fonema] causava erro no TTS)
   'TSH': '[tê és agá]',
   'T4 livre': '[tê quatro livre]',
   'PSA': '[pê és a]',
@@ -1240,47 +1213,47 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'RAFA': '[arre a éfe a]',
   'VHS': '[vê agá és]',
   'PCR COVID': '[pê cê erre côvide]',
-  'antígeno': '[antígeno]',
-  'anticorpo': '[anticorpo]',
-  'sorologia': '[sorologia]',
+  // REMOVIDO: antígeno (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: anticorpo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: sorologia (instrucao [fonema] causava erro no TTS)
   'IgG': '[i gê gê]',
   'IgM': '[i gê éme]',
   'IgA': '[i gê a]',
-  'linfócito': '[linfócito]',
-  'leucócito': '[leucócito]',
-  'hemácias': '[hemácias]',
-  'plaquetas': '[plaquetas]',
-  'trombócitos': '[trombócitos]',
-  'neutrófilos': '[neutrófilos]',
-  'basófilos': '[basófilos]',
-  'eosinófilos': '[eosinófilos]',
-  'monócitos': '[monócitos]',
-  'glicose': '[glicose]',
-  'hemoglobina': '[hemoglobina]',
-  'hematócrito': '[hematócrito]',
-  'potássio': '[potássio]',
-  'sódio': '[sódio]',
-  'magnésio': '[magnésio]',
-  'cálcio': '[cálcio]',
-  'fósforo': '[fósforo]',
-  'ferro': '[ferro]',
-  'ferritina': '[ferritina]',
-  'transferrina': '[transferrina]',
+  // REMOVIDO: linfócito (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: leucócito (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: hemácias (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: plaquetas (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: trombócitos (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: neutrófilos (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: basófilos (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: eosinófilos (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: monócitos (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: glicose (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: hemoglobina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: hematócrito (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: potássio (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: sódio (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: magnésio (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: cálcio (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: fósforo (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ferro (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: ferritina (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: transferrina (instrucao [fonema] causava erro no TTS)
   'TPA': '[tê pê a]',
   'INR': '[i êne erre]',
-  'protrombina': '[protrombina]',
+  // REMOVIDO: protrombina (instrucao [fonema] causava erro no TTS)
   'aPTT': '[a pê tê tê]',
-  'fibrinogênio': '[fibrinogênio]',
+  // REMOVIDO: fibrinogênio (instrucao [fonema] causava erro no TTS)
   'D-dímero': '[dê dímero]',
-  'troponina': '[troponina]',
+  // REMOVIDO: troponina (instrucao [fonema] causava erro no TTS)
   'CK-MB': '[cê cáême bê]',
   'BNP': '[bê êne pê]',
   'proBNP': '[pró bê êne pê]',
-  'peptídeo natriurético': '[peptídeo natriurético]',
-  'lactato': '[lactato]',
-  'gasometria': '[gasometria]',
-  'cultura': '[cultura]',
-  'antibiograma': '[antibiograma]',
+  // REMOVIDO: peptídeo natriurético (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: lactato (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: gasometria (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: cultura (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: antibiograma (instrucao [fonema] causava erro no TTS)
   'swab': '[suabe]',
 }
 
@@ -1368,8 +1341,8 @@ const X_WORD_DICTIONARY: Record<string, string> = {
   'Extensão': '[Estensão]',
   'explicar': '[esplicar]',
   'Explicar': '[Esplicar]',
-  'exportar': '[exportar]',
-  'Exportar': '[Exportar]',
+  // REMOVIDO: exportar (instrucao [fonema] causava erro no TTS)
+  // REMOVIDO: Exportar (instrucao [fonema] causava erro no TTS)
   'expressão': '[espressão]',
   'Expressão': '[Espressão]',
   'extraordinário': '[estraordinário]',
@@ -1432,7 +1405,7 @@ const X_WORD_DICTIONARY: Record<string, string> = {
   'Maximizar': '[Maksimizar]',
   'máximo': '[máksimo]',
   'Máximo': '[Máksimo]',
-  'mínimo': '[mínimo]',
+  // REMOVIDO: mínimo (instrucao [fonema] causava erro no TTS)
   'taxa': '[taksa]',
   'Taxa': '[Taksa]',
   'oxigênio': '[oksijênio]',
@@ -1445,7 +1418,7 @@ const X_WORD_DICTIONARY: Record<string, string> = {
   'Intoxicação': '[Intoksicação]',
 
   // Xangai — nome próprio, som de CH
-  'Xangai': '[Xangai]',
+  // REMOVIDO: Xangai (instrucao [fonema] causava erro no TTS)
 }
 
 /**
