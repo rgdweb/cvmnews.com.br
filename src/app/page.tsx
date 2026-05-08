@@ -493,13 +493,13 @@ export default function VozProClient() {
     const engine: TTSEngine = ttsModel === 'omnivoice' ? 'vozpro' : 'f5tts'
     const hasSSML = containsSSML(textToSend)
 
-    if (hasSSML && engine === 'vozpro') {
-      // VozPro Turbo suporta SSML nativamente — enviar direto sem processar
-      console.log('[Pipeline] SSML detectado + VozPro Turbo → enviando SSML direto ao engine')
-    } else if (hasSSML && engine === 'f5tts') {
-      // F5-TTS NÃO suporta SSML — converter para texto plano
-      console.log('[Pipeline] SSML detectado + F5-TTS → convertendo SSML para texto plano')
-      textToSend = processControlTags(textToSend, 'f5tts')
+    if (hasSSML) {
+      // SSML detectado — converter para formato nativo do engine (AMBOS)
+      // VozPro: <break> → {{pause:500}}, <emphasis> → {{emphasis}}, <prosody rate="slow"> → {{slow}}
+      // F5-TTS: <break> → pontuação/pausas, <emphasis> → CAPS
+      const engineLabel = engine === 'vozpro' ? 'VozPro Turbo' : 'F5-TTS'
+      console.log(`[Pipeline] SSML detectado + ${engineLabel} → convertendo SSML para formato nativo`)
+      textToSend = processControlTags(textToSend, engine)
     } else {
       // Texto normal — processar pipeline completo
       // 1. Control tags (sempre ativo)
