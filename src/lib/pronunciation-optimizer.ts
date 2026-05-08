@@ -1003,8 +1003,8 @@ const X_WORD_DICTIONARY: Record<string, string> = {
   // X = KS (som de "ks")
   'táxi': 'tácsi',
   'Táxi': 'Tácsi',
-  'sexo': 'sesso',
-  'Sexo': 'Sesso',
+  'sexo': 'sékisso',
+  'Sexo': 'Sékisso',
   'complexo': 'complekso',
   'Complexo': 'Complekso',
   'perplexo': 'perplekso',
