@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { stripSSMLForTTS } from '@/lib/ssml-parser'
 
 // Vercel serverless function timeout - TTS generation can take up to 5 minutes
 export const maxDuration = 300
@@ -342,6 +343,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Texto é obrigatório', debug: debug.result() }, { status: 400 })
     }
 
+    // DEFESA DUPLA: remover tags SSML que passaram pelo frontend sem processar
+    const cleanText = stripSSMLForTTS(text)
+
     if (!variationId) {
       return NextResponse.json({ error: 'Selecione uma variação de voz', debug: debug.result() }, { status: 400 })
     }
@@ -388,7 +392,7 @@ export async function POST(req: NextRequest) {
 
     // Build Gradio params
     const data = [
-      text,
+      cleanText,
       language || 'Auto',
       {} as unknown, // placeholder, preenchido no runGeneration
       '',  // refText: SEMPRE vazio - texto causa alucinacao (fala "to", "ba", outra lingua)

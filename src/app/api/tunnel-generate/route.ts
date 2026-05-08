@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chunkText, formatChunkSummary, type TextChunk } from '@/lib/tts-chunker'
 import { concatenateAudioBuffers, applyFadeOut, type AudioChunk } from '@/lib/audio-concatenator'
 import { validateGeneratedAudio, shouldRetry, formatValidationLog } from '@/lib/asr-validator'
+import { stripSSMLForTTS } from '@/lib/ssml-parser'
 
 // POST /api/tunnel-generate - Geracao direta via tunnel cloudflared
 // Pipeline completo com prosódia:
@@ -370,6 +371,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Texto obrigatório', debug: debug.result() }, { status: 400 })
     }
 
+    // DEFESA DUPLA: remover tags SSML que passaram pelo frontend sem processar
+    const cleanText = stripSSMLForTTS(text)
+    debug.log('SSML Strip', 'info', cleanText !== text ? 'SSML detectado, tags removidas' : 'sem SSML')
+
     // 1. Descobrir tunnel
     debug.log('Tunnel', 'info', 'Descobrindo URL do tunnel...')
     const tunnelUrl = await getTunnelUrl(debug)
@@ -415,7 +420,7 @@ export async function POST(req: NextRequest) {
     // 4. Montar dados BASE do Gradio (texto será substituído por chunk)
     // No modo design/auto, ref_audio é null (vazio)
     const gradioBaseData = [
-      text,  // placeholder — será substituído por cada chunk
+      cleanText,  // placeholder — será substituído por cada chunk
       language,
       filePath ? {
         path: filePath,
@@ -443,22 +448,22 @@ export async function POST(req: NextRequest) {
     let finalBuffer: Buffer | null = null
     let chunkInfo: TextChunk[] | null = null
 
-    if (useChunking && text.length > 20) {
+    if (useChunking && cleanText.length > 20) {
       // MODO CHUNKING — gera frase por frase, concatena com silêncio
       debug.log('Pipeline', 'info', 'Modo CHUNKING ativo (prosódia explícita)')
-      const chunkResult = await generateWithChunking(tunnelUrl, text, gradioBaseData, debug)
+      const chunkResult = await generateWithChunking(tunnelUrl, cleanText, gradioBaseData, debug)
       if (chunkResult) {
         finalBuffer = chunkResult.finalBuffer
         chunkInfo = chunkResult.chunks
       } else {
         // Fallback para single-shot se chunking falhar completamente
         debug.log('Pipeline', 'warn', 'Chunking falhou, tentando single-shot como fallback...')
-        finalBuffer = await generateSingleShot(tunnelUrl, text, gradioBaseData, debug)
+        finalBuffer = await generateSingleShot(tunnelUrl, cleanText, gradioBaseData, debug)
       }
     } else {
       // MODO SINGLE-SHOT — texto curto ou chunking desativado
       debug.log('Pipeline', 'info', `Modo SINGLE-SHOT (${!useChunking ? 'desativado' : 'texto curto'})`)
-      finalBuffer = await generateSingleShot(tunnelUrl, text, gradioBaseData, debug)
+      finalBuffer = await generateSingleShot(tunnelUrl, cleanText, gradioBaseData, debug)
     }
 
     // 6. Verificar resultado
