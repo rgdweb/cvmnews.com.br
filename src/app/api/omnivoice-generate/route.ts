@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { stripSSMLForTTS } from '@/lib/ssml-parser'
 
 // POST /api/omnivoice-generate — Proxy para VozPro (k2-fsa) via tunnel
 // Usa API Gradio nativa do VozPro com parametros corretos
@@ -240,6 +241,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Texto e obrigatorio' }, { status: 400 })
     }
 
+    // DEFESA DUPLA: remover tags SSML que passaram pelo frontend sem processar
+    const cleanText = stripSSMLForTTS(text)
+    debug.log('SSML Strip', containsSSML(text) ? 'ok' : 'info', containsSSML(text) ? 'SSML detectado, tags removidas' : 'sem SSML')
+
     // Obter tunnel URL dinamicamente do HostGator (igual F5-TTS)
     debug.log('Tunnel', 'info', 'Descobrindo URL do tunnel...')
     const effectiveUrl = await getTunnelUrl(debug)
@@ -251,7 +256,7 @@ export async function POST(request: NextRequest) {
       // MODO CLONE: _clone_fn endpoint
       // Params: text, lang, ref_aud, ref_text, instruct, ns, gs, dn, sp, du, pp, po
       // =============================================================
-      debug.log('VozPro Clone', 'info', `text: "${text.substring(0, 60)}..."`)
+      debug.log('VozPro Clone', 'info', `text: "${cleanText.substring(0, 60)}..."`)
 
       // 1. Baixar e fazer upload do audio de referencia
       let refAudioPath: string | null = null
@@ -279,7 +284,7 @@ export async function POST(request: NextRequest) {
 
       // 2. Montar dados para o Gradio
       const gradioData = [
-        text,                    // text
+        cleanText,                   // text
         language || 'Auto',      // lang
         {                        // ref_aud (FileData)
           path: refAudioPath,
@@ -346,10 +351,10 @@ export async function POST(request: NextRequest) {
       // Params: text, lang, ns, gs, dn, sp, du, pp, po, gender, age, pitch, style, accent, dialect
       // =============================================================
       const modeLabel = mode === 'design' ? 'Design' : 'Auto'
-      debug.log(`VozPro ${modeLabel}`, 'info', `text: "${text.substring(0, 60)}..."`)
+      debug.log(`VozPro ${modeLabel}`, 'info', `text: "${cleanText.substring(0, 60)}..."`)
 
       const gradioData = [
-        text,                        // text
+        cleanText,                      // text
         language || 'Auto',          // lang
         numStep,                     // ns (inference steps)
         2.0,                         // gs (guidance scale / CFG)

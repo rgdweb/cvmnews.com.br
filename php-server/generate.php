@@ -100,6 +100,35 @@ function returnError($msg, $code = 500) {
     exit;
 }
 
+// ===================== STRIP SSML (defesa dupla) =====================
+function stripSSML($text) {
+    if (!preg_match('/<(speak|break|emphasis|prosody|say-as|phoneme|sub)\b/i', $text)) return $text;
+    $r = preg_replace('/<\/?speak[^>]*>/i', '', $text);
+    $r = preg_replace('/<sub\s+alias="([^"]+)">[^<]*<\/sub>/i', '$1', $r);
+    $r = preg_replace('/<phoneme\s+[^>]*ph="([^"]+)"[^>]*>[^<]*<\/phoneme>/i', '[$1]', $r);
+    $r = preg_replace_callback('/<say-as\s+[^>]*interpret-as="characters"[^>]*>([^<]*)<\/say-as>/i', function($m) { return implode(', ', mb_str_split($m[1])); }, $r);
+    $r = preg_replace_callback('/<say-as\s+[^>]*interpret-as="date"[^>]*>([^<]*)<\/say-as>/i', function($m) {
+        if (preg_match('/(\d{4})-(\d{2})-(\d{2})/', $m[1], $d)) { $months = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro']; return intval($d[3]) . ' de ' . ($months[intval($d[2])-1] ?? $d[2]) . ' de ' . $d[1]; } return $m[1];
+    }, $r);
+    $r = preg_replace('/<say-as\s[^>]*>([^<]*)<\/say-as>/i', '$1', $r);
+    $r = preg_replace_callback('/<break\s+[^>]*time="(\d+)(ms|s)"[^>]*\/?>/i', function($m) { $ms = intval($m[1]); if ($m[2]==='s') $ms*=1000; if ($ms>=800) return ".\n"; if ($ms>=500) return "...\n"; if ($ms>=300) return ",\n"; return ",  "; }, $r);
+    $r = preg_replace('/<break\s+[^>]*strength="x-strong"[^>]*\/?>/i', ".\n", $r);
+    $r = preg_replace('/<break\s+[^>]*strength="strong"[^>]*\/?>/i', "...\n", $r);
+    $r = preg_replace('/<break\s+[^>]*strength="medium"[^>]*\/?>/i', ",\n", $r);
+    $r = preg_replace('/<break\s+[^>]*strength="weak"[^>]*\/?>/i', ",  ", $r);
+    $r = preg_replace('/<break\s*\/?>/i', ',  ', $r);
+    $r = preg_replace('/<emphasis[^>]*>([\s\S]*?)<\/emphasis>/i', '[$1]', $r);
+    $r = preg_replace_callback('/<prosody\s+[^>]*rate="(slow|x-slow)[^"]*"[^>]*>([\s\S]*?)<\/prosody>/i', function($m) { return preg_replace('/(\s+)/', ', $1', $m[2]); }, $r);
+    $r = preg_replace('/<prosody[^>]*>([\s\S]*?)<\/prosody>/i', '$1', $r);
+    $r = preg_replace('/<\/p>/i', ".\n\n", $r);
+    $r = preg_replace('/<p[^>]*>/i', '', $r);
+    $r = preg_replace('/<\/s>/i', '. ', $r);
+    $r = preg_replace('/<s[^>]*>/i', '', $r);
+    $r = preg_replace('/<[^>]+>/', '', $r);
+    $r = preg_replace('/[ \t]+/', ' ', $r);
+    return trim($r);
+}
+
 // ===================== LER INPUT JSON =====================
 $rawInput = file_get_contents('php://input');
 $input = json_decode($rawInput, true);
@@ -117,6 +146,9 @@ $instruct = $input['instruct'] ?? '';
 $refAudioName = $input['refAudioName'] ?? 'ref_audio.wav';
 $speed = $input['speed'] ?? 1.0;
 $numStep = $input['numStep'] ?? 32;
+
+// DEFESA DUPLA: strip SSML antes de enviar ao TTS
+$texto = stripSSML($texto);
 $guidanceScale = $input['guidanceScale'] ?? 2.0;
 
 debugLog('Input recebido', 'info', "texto: " . mb_substr($texto, 0, 50) . " | idioma: $idioma | steps: $numStep");
