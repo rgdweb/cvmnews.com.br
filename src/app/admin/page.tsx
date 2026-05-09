@@ -282,6 +282,10 @@ export default function AdminDashboard() {
   const [newCatName, setNewCatName] = useState('')
   const [newCatEmoji, setNewCatEmoji] = useState('')
   const [savingCategories, setSavingCategories] = useState(false)
+  // Category edit state (inline editing in list)
+  const [editingCatIndex, setEditingCatIndex] = useState<{ type: 'tracks' | 'voices'; index: number } | null>(null)
+  const [editingCatName, setEditingCatName] = useState('')
+  const [editingCatEmoji, setEditingCatEmoji] = useState('')
 
   // Batch upload state (tracks)
   const [batchUploadOpen, setBatchUploadOpen] = useState(false)
@@ -1160,6 +1164,67 @@ export default function AdminDashboard() {
 
     const updated = categories.filter((_, i) => i !== index)
     handleSaveManagedCategories(type, updated)
+  }
+
+  const startEditCategory = (type: 'tracks' | 'voices', index: number) => {
+    const categories = type === 'tracks' ? managedTrackCategories : managedVoiceCategories
+    const cat = categories[index]
+    if (!cat) return
+    setEditingCatIndex({ type, index })
+    setEditingCatName(cat.name)
+    setEditingCatEmoji(cat.emoji || '')
+  }
+
+  const saveEditCategory = () => {
+    if (!editingCatIndex || !editingCatName.trim()) {
+      toast.error('Nome da categoria é obrigatório')
+      return
+    }
+    const { type, index } = editingCatIndex
+    const categories = type === 'tracks' ? managedTrackCategories : managedVoiceCategories
+    // Check duplicate (excluding current)
+    const duplicate = categories.find((c, i) => i !== index && c.name.toUpperCase() === editingCatName.trim().toUpperCase())
+    if (duplicate) {
+      toast.error(`Categoria "${duplicate.name}" já existe`)
+      return
+    }
+
+    // Check if name changed — need to update items in DB
+    const oldName = categories[index].name
+    const newName = editingCatName.trim()
+    const nameChanged = oldName.toUpperCase() !== newName.toUpperCase()
+
+    const updated = categories.map((c, i) => {
+      if (i === index) return { name: newName, emoji: editingCatEmoji || '📁' }
+      return c
+    })
+
+    // Save categories first
+    const doSave = async () => {
+      await handleSaveManagedCategories(type, updated)
+      // If name changed, update all items with the old category name
+      if (nameChanged) {
+        try {
+          await fetch('/api/admin/rename-category', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type, oldName, newName }),
+          })
+        } catch {
+          // Best effort — categories already saved
+        }
+      }
+    }
+    doSave()
+    setEditingCatIndex(null)
+    setEditingCatName('')
+    setEditingCatEmoji('')
+  }
+
+  const cancelEditCategory = () => {
+    setEditingCatIndex(null)
+    setEditingCatName('')
+    setEditingCatEmoji('')
   }
 
   // Build a combined list of managed + ad-hoc categories for dropdowns (with counts)
@@ -2174,19 +2239,65 @@ export default function AdminDashboard() {
               ) : (
                 managedTrackCategories.map((cat, i) => {
                   const catCount = trackCategories.find(tc => tc.name === cat.name)?.count || 0
+                  const isEditing = editingCatIndex?.type === 'tracks' && editingCatIndex?.index === i
                   return (
                     <div key={cat.name} className="flex items-center gap-2 bg-slate-900/50 rounded-lg px-3 py-2">
-                      <span className="text-xl">{cat.emoji || '📁'}</span>
-                      <span className="text-sm text-white flex-1">{cat.name}</span>
-                      <span className="text-xs text-slate-400">{catCount} item(ns)</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeManagedCategory('tracks', i)}
-                        className="h-7 w-7 text-slate-400 hover:text-red-400 shrink-0"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      {isEditing ? (
+                        <>
+                          <Input
+                            value={editingCatEmoji}
+                            onChange={e => setEditingCatEmoji(e.target.value)}
+                            className="bg-slate-800 border-slate-600 text-white h-7 w-12 text-center text-sm px-1"
+                            maxLength={4}
+                            onKeyDown={e => { if (e.key === 'Enter') saveEditCategory(); if (e.key === 'Escape') cancelEditCategory() }}
+                            autoFocus
+                          />
+                          <Input
+                            value={editingCatName}
+                            onChange={e => setEditingCatName(e.target.value)}
+                            className="bg-slate-800 border-slate-600 text-white h-7 flex-1 text-sm"
+                            onKeyDown={e => { if (e.key === 'Enter') saveEditCategory(); if (e.key === 'Escape') cancelEditCategory() }}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={saveEditCategory}
+                            className="h-7 w-7 text-green-400 hover:text-green-300 shrink-0"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={cancelEditCategory}
+                            className="h-7 w-7 text-slate-400 hover:text-slate-300 shrink-0"
+                          >
+                            ✕
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xl">{cat.emoji || '📁'}</span>
+                          <span className="text-sm text-white flex-1">{cat.name}</span>
+                          <span className="text-xs text-slate-400">{catCount} item(ns)</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => startEditCategory('tracks', i)}
+                            className="h-7 w-7 text-slate-400 hover:text-violet-400 shrink-0"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeManagedCategory('tracks', i)}
+                            className="h-7 w-7 text-slate-400 hover:text-red-400 shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   )
                 })
@@ -2235,19 +2346,65 @@ export default function AdminDashboard() {
               ) : (
                 managedVoiceCategories.map((cat, i) => {
                   const catCount = voiceCategories.find(vc => vc.name === cat.name)?.count || 0
+                  const isEditing = editingCatIndex?.type === 'voices' && editingCatIndex?.index === i
                   return (
                     <div key={cat.name} className="flex items-center gap-2 bg-slate-900/50 rounded-lg px-3 py-2">
-                      <span className="text-xl">{cat.emoji || '📁'}</span>
-                      <span className="text-sm text-white flex-1">{cat.name}</span>
-                      <span className="text-xs text-slate-400">{catCount} item(ns)</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeManagedCategory('voices', i)}
-                        className="h-7 w-7 text-slate-400 hover:text-red-400 shrink-0"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      {isEditing ? (
+                        <>
+                          <Input
+                            value={editingCatEmoji}
+                            onChange={e => setEditingCatEmoji(e.target.value)}
+                            className="bg-slate-800 border-slate-600 text-white h-7 w-12 text-center text-sm px-1"
+                            maxLength={4}
+                            onKeyDown={e => { if (e.key === 'Enter') saveEditCategory(); if (e.key === 'Escape') cancelEditCategory() }}
+                            autoFocus
+                          />
+                          <Input
+                            value={editingCatName}
+                            onChange={e => setEditingCatName(e.target.value)}
+                            className="bg-slate-800 border-slate-600 text-white h-7 flex-1 text-sm"
+                            onKeyDown={e => { if (e.key === 'Enter') saveEditCategory(); if (e.key === 'Escape') cancelEditCategory() }}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={saveEditCategory}
+                            className="h-7 w-7 text-green-400 hover:text-green-300 shrink-0"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={cancelEditCategory}
+                            className="h-7 w-7 text-slate-400 hover:text-slate-300 shrink-0"
+                          >
+                            ✕
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xl">{cat.emoji || '📁'}</span>
+                          <span className="text-sm text-white flex-1">{cat.name}</span>
+                          <span className="text-xs text-slate-400">{catCount} item(ns)</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => startEditCategory('voices', i)}
+                            className="h-7 w-7 text-slate-400 hover:text-violet-400 shrink-0"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeManagedCategory('voices', i)}
+                            className="h-7 w-7 text-slate-400 hover:text-red-400 shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   )
                 })
