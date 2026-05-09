@@ -466,6 +466,7 @@ export default function VozProClient() {
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('')
   const [selectedVariationId, setSelectedVariationId] = useState<string>('')
   const [previewingVoiceId, setPreviewingVoiceId] = useState<string | null>(null)
+  const [previewingTrackId, setPreviewingTrackId] = useState<string | null>(null)
   const [selectedTrackId, setSelectedTrackId] = useState<string>('')
   const [language, setLanguage] = useState('Portuguese')
 
@@ -1764,9 +1765,16 @@ export default function VozProClient() {
                               >
                                 <div className="flex items-center gap-2 mb-1">
                                   <span className="text-lg">{track.emoji || '🎵'}</span>
-                                  <span className={`text-sm font-medium ${selectedTrackId === track.id ? 'text-purple-200' : 'text-slate-300'}`}>
+                                  <span className={`text-sm font-medium flex-1 min-w-0 ${selectedTrackId === track.id ? 'text-purple-200' : 'text-slate-300'}`}>
                                     {track.name}
                                   </span>
+                                  <VoicePreviewButton
+                                    audioUrl={track.audioPath || undefined}
+                                    voiceId={track.id}
+                                    currentlyPlayingId={previewingTrackId}
+                                    onPlayStart={setPreviewingTrackId}
+                                    onPlayEnd={() => setPreviewingTrackId(null)}
+                                  />
                                 </div>
                                 <p className="text-xs text-slate-500 line-clamp-1">{track.description}</p>
                               </button>
@@ -1815,9 +1823,16 @@ export default function VozProClient() {
                               >
                                 <div className="flex items-center gap-2 mb-1">
                                   <span className="text-lg">{track.emoji || '🎵'}</span>
-                                  <span className={`text-sm font-medium ${selectedTrackId === track.id ? 'text-purple-200' : 'text-slate-300'}`}>
+                                  <span className={`text-sm font-medium flex-1 min-w-0 ${selectedTrackId === track.id ? 'text-purple-200' : 'text-slate-300'}`}>
                                     {track.name}
                                   </span>
+                                  <VoicePreviewButton
+                                    audioUrl={track.audioPath || undefined}
+                                    voiceId={track.id}
+                                    currentlyPlayingId={previewingTrackId}
+                                    onPlayStart={setPreviewingTrackId}
+                                    onPlayEnd={() => setPreviewingTrackId(null)}
+                                  />
                                 </div>
                                 <p className="text-xs text-slate-500 line-clamp-1">{track.description}</p>
                               </button>
@@ -1876,9 +1891,16 @@ export default function VozProClient() {
                           >
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-lg">{track.emoji || '🎵'}</span>
-                              <span className={`text-sm font-medium ${selectedTrackId === track.id ? 'text-purple-200' : 'text-slate-300'}`}>
+                              <span className={`text-sm font-medium flex-1 min-w-0 ${selectedTrackId === track.id ? 'text-purple-200' : 'text-slate-300'}`}>
                                 {track.name}
                               </span>
+                              <VoicePreviewButton
+                                audioUrl={track.audioPath || undefined}
+                                voiceId={track.id}
+                                currentlyPlayingId={previewingTrackId}
+                                onPlayStart={setPreviewingTrackId}
+                                onPlayEnd={() => setPreviewingTrackId(null)}
+                              />
                             </div>
                             <p className="text-xs text-slate-500 line-clamp-1">{track.description}</p>
                           </button>
