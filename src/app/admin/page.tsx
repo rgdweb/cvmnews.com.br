@@ -281,12 +281,19 @@ export default function AdminDashboard() {
   const [newCatEmoji, setNewCatEmoji] = useState('')
   const [savingCategories, setSavingCategories] = useState(false)
 
-  // Batch upload state
+  // Batch upload state (tracks)
   const [batchUploadOpen, setBatchUploadOpen] = useState(false)
   const [batchUploadCategory, setBatchUploadCategory] = useState('')
   const [batchFiles, setBatchFiles] = useState<File[]>([])
   const [batchUploading, setBatchUploading] = useState(false)
   const [batchProgress, setBatchProgress] = useState('')
+
+  // Batch voice upload state
+  const [voiceBatchOpen, setVoiceBatchOpen] = useState(false)
+  const [voiceBatchVoiceId, setVoiceBatchVoiceId] = useState('')
+  const [voiceBatchFiles, setVoiceBatchFiles] = useState<File[]>([])
+  const [voiceBatchUploading, setVoiceBatchUploading] = useState(false)
+  const [voiceBatchProgress, setVoiceBatchProgress] = useState('')
 
   // Settings state
   const [enableVoiceUpload, setEnableVoiceUpload] = useState(false)
@@ -745,12 +752,14 @@ export default function AdminDashboard() {
 
     const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-    // Build a set of existing track names in this category for fast lookup
+    // Build a set of existing track names in this category for fast lookup (DB names have no extension)
     const existingNames = new Set(
       tracks
         .filter(t => t.category === batchUploadCategory)
         .map(t => t.name.toLowerCase())
     )
+    // Within-batch dedup: use FULL filename (with extension) so .mp3 and .wav are different
+    const batchFileNames = new Set<string>()
 
     for (let i = 0; i < batchFiles.length; i++) {
       const file = batchFiles[i]
@@ -764,11 +773,20 @@ export default function AdminDashboard() {
         continue
       }
 
-      // Check duplicate: same name already exists in this category
+      // Check duplicate within batch: full filename (with extension)
+      if (batchFileNames.has(file.name.toLowerCase())) {
+        skippedMessages.push(file.name)
+        skipped++
+        console.log(`[BatchUpload] Pulado (duplicata no lote): ${file.name}`)
+        continue
+      }
+      batchFileNames.add(file.name.toLowerCase())
+
+      // Check duplicate against DB: track name only (no extension)
       if (existingNames.has(trackName.toLowerCase())) {
         skippedMessages.push(file.name)
         skipped++
-        console.log(`[BatchUpload] Pulado (duplicata): ${file.name}`)
+        console.log(`[BatchUpload] Pulado (já existe no BD): ${file.name}`)
         continue
       }
 
@@ -871,6 +889,145 @@ export default function AdminDashboard() {
 
     setBatchUploading(false)
     setBatchProgress('')
+  }
+
+  // --- BATCH VOICE UPLOAD (select voice + multiple files → auto-create variations) ---
+  const handleVoiceBatchUpload = async () => {
+    if (voiceBatchFiles.length === 0) {
+      toast.error('Selecione pelo menos um arquivo')
+      return
+    }
+    if (!voiceBatchVoiceId) {
+      toast.error('Selecione uma voz')
+      return
+    }
+
+    const voice = voices.find(v => v.id === voiceBatchVoiceId)
+    if (!voice) {
+      toast.error('Voz não encontrada')
+      return
+    }
+
+    // Build set of existing variation labels (case-insensitive) to skip duplicates
+    const existingLabels = new Set(voice.variations.map(v => v.label.toLowerCase()))
+    const batchFileNames = new Set<string>()
+
+    setVoiceBatchUploading(true)
+    let created = 0
+    let skipped = 0
+    let failed = 0
+    const errorMessages: string[] = []
+    const skippedMessages: string[] = []
+    const validExts = ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.webm']
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+    for (let i = 0; i < voiceBatchFiles.length; i++) {
+      const file = voiceBatchFiles[i]
+      const ext = '.' + file.name.split('.').pop()?.toLowerCase()
+      const label = file.name.replace(/\.[^.]+$/, '')
+
+      // Validate extension
+      if (!validExts.includes(ext)) {
+        errorMessages.push(`${file.name}: formato não suportado`)
+        failed++
+        continue
+      }
+
+      // Check duplicate within batch: full filename
+      if (batchFileNames.has(file.name.toLowerCase())) {
+        skippedMessages.push(file.name)
+        skipped++
+        continue
+      }
+      batchFileNames.add(file.name.toLowerCase())
+
+      // Check duplicate against existing variations: label (no extension)
+      if (existingLabels.has(label.toLowerCase())) {
+        skippedMessages.push(file.name)
+        skipped++
+        console.log(`[VoiceBatch] Pulado (variação já existe): ${file.name}`)
+        continue
+      }
+
+      setVoiceBatchProgress(`${i + 1}/${voiceBatchFiles.length} — ${file.name}`)
+
+      let success = false
+      for (let attempt = 1; attempt <= 2 && !success; attempt++) {
+        try {
+          // Upload file to voice server
+          const formData = new FormData()
+          formData.append('file', file)
+          const uploadRes = await fetch('/api/upload-voice', { method: 'POST', body: formData })
+
+          let uploadData: Record<string, unknown>
+          const contentType = uploadRes.headers.get('content-type') || ''
+          if (contentType.includes('application/json')) {
+            uploadData = await uploadRes.json()
+          } else {
+            const textBody = await uploadRes.text()
+            const shortMsg = textBody.substring(0, 120).replace(/<[^>]*>/g, '').trim()
+            if (attempt === 2) errorMessages.push(`${file.name}: ${shortMsg || `erro HTTP ${uploadRes.status}`}`)
+            await sleep(3000)
+            continue
+          }
+
+          if (!uploadRes.ok || (!uploadData.serverUrl && !uploadData.url)) {
+            if (attempt === 2) errorMessages.push(`${file.name}: ${uploadData.error || 'falha no upload'}`)
+            await sleep(2000)
+            continue
+          }
+
+          // Create variation
+          const createRes = await fetch(`/api/voices/${voiceBatchVoiceId}/variations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              label,
+              emoji: '',
+              refAudioPath: uploadData.path || '',
+              refAudioServerUrl: uploadData.serverUrl || uploadData.url || '',
+              refAudioFilename: uploadData.filename || '',
+              refAudioName: file.name,
+              refText: '',
+              instruct: '',
+            }),
+          })
+
+          if (!createRes.ok) {
+            if (attempt === 2) errorMessages.push(`${file.name}: erro ao criar variação`)
+            await sleep(2000)
+            continue
+          }
+
+          created++
+          existingLabels.add(label.toLowerCase())
+          success = true
+        } catch (err) {
+          if (attempt === 2) {
+            const msg = (err as Error)?.message || 'erro de conexão'
+            errorMessages.push(`${file.name}: ${msg.replace(/Unexpected token.*/i, 'resposta inválida do servidor')}`)
+          }
+          await sleep(3000)
+        }
+      }
+
+      if (!success) failed++
+      if (i < voiceBatchFiles.length - 1) await sleep(1000)
+    }
+
+    // Show results
+    if (created > 0) toast.success(`${created} variação(ões) criada(s) em "${voice.name}"!`)
+    if (skipped > 0) toast.warning(`${skipped} arquivo(s) ignorado(s) — duplicata:\n${skippedMessages.slice(0, 5).join('\n')}${skippedMessages.length > 5 ? `\n...e mais ${skippedMessages.length - 5}` : ''}`, { duration: 10000 })
+    if (failed > 0) toast.error(`${failed} falha(s):\n${errorMessages.slice(0, 5).join('\n')}${errorMessages.length > 5 ? `\n...e mais ${errorMessages.length - 5}` : ''}`, { duration: 10000 })
+
+    setVoiceBatchUploading(false)
+    setVoiceBatchProgress('')
+    if (created > 0 || skipped > 0) {
+      setVoiceBatchOpen(false)
+      setVoiceBatchFiles([])
+      setVoiceBatchVoiceId('')
+      loadData()
+    }
   }
 
   // --- SETTINGS ---
@@ -1048,8 +1205,65 @@ export default function AdminDashboard() {
                   className="border-slate-600 text-slate-300 hover:text-white hover:bg-slate-700 gap-2"
                 >
                   <FolderPlus className="w-4 h-4" />
-                  Gerenciar Categorias
+                  Categorias
                 </Button>
+                <Dialog open={voiceBatchOpen} onOpenChange={(open) => { setVoiceBatchOpen(open); if (!open) { setVoiceBatchFiles([]); setVoiceBatchVoiceId('') } }}>
+                <DialogTrigger asChild>
+                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+                    <Upload className="w-4 h-4" />
+                    Upload Vozes em Lote
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>Upload Vozes em Lote</DialogTitle>
+                    <DialogDescription className="text-slate-400">Selecione uma voz e envie múltiplos áudios. Cada arquivo será criado como uma variação.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">Voz *</Label>
+                      <Select value={voiceBatchVoiceId} onValueChange={setVoiceBatchVoiceId}>
+                        <SelectTrigger className="bg-slate-900/50 border-slate-600 text-white">
+                          <SelectValue placeholder="Selecionar voz..." />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-slate-700 max-h-60">
+                          {voices.map(v => (
+                            <SelectItem key={v.id} value={v.id}>
+                              {v.name} <span className="text-slate-500 text-xs ml-1">({v.variations.length} var.)</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">Arquivos de Áudio * (MP3, WAV, OGG...)</Label>
+                      <input type="file" accept="audio/*" multiple onChange={(e) => { if (e.target.files) setVoiceBatchFiles(Array.from(e.target.files)) }} className="hidden" id="voice-batch-file-input" />
+                      <Button type="button" variant="outline" onClick={() => document.getElementById('voice-batch-file-input')?.click()} className="w-full border-slate-500 text-white hover:bg-slate-700 gap-2">
+                        <FolderPlus className="w-4 h-4" />
+                        {voiceBatchFiles.length > 0 ? `${voiceBatchFiles.length} arquivo(s) selecionado(s)` : 'Selecionar arquivos...'}
+                      </Button>
+                      {voiceBatchFiles.length > 0 && (
+                        <div className="max-h-40 overflow-y-auto space-y-1 text-xs text-slate-400">
+                          {voiceBatchFiles.map((f, i) => (<p key={i}>🎤 {f.name} ({(f.size / 1024 / 1024).toFixed(1)}MB)</p>))}
+                        </div>
+                      )}
+                    </div>
+                    {voiceBatchProgress && (
+                      <div className="flex items-center gap-2 text-sm text-slate-300">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {voiceBatchProgress}
+                      </div>
+                    )}
+                  </div>
+                  <DialogFooter>
+                    <Button variant="ghost" onClick={() => setVoiceBatchOpen(false)} className="text-slate-400">Cancelar</Button>
+                    <Button onClick={handleVoiceBatchUpload} disabled={voiceBatchUploading || voiceBatchFiles.length === 0 || !voiceBatchVoiceId} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                      {voiceBatchUploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                      Enviar {voiceBatchFiles.length} variação(ões)
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
                 <Dialog open={voiceDialogOpen} onOpenChange={setVoiceDialogOpen}>
                 <DialogTrigger asChild>
                   <Button
