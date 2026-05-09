@@ -772,17 +772,47 @@ export default function AdminDashboard() {
         continue
       }
 
-      setBatchProgress(`${i + 1}/${batchFiles.length} — ${file.name}`)
+      setBatchProgress(`${i + 1}/${batchFiles.length} — processando ${file.name}...`)
+
+      // Process file: trim to 80s + compress to MP3 (keeps under 3.5MB)
+      let processedBlob: Blob
+      let processedName: string
+      try {
+        const result = await processTrackFile(file)
+        processedBlob = result.blob
+        processedName = result.name
+        console.log(`[BatchUpload] Processado: ${file.name} → ${result.info}`)
+      } catch (err) {
+        console.error(`[BatchUpload] Erro ao processar ${file.name}:`, err)
+        errorMessages.push(`${file.name}: erro ao processar áudio`)
+        failed++
+        continue
+      }
+
+      setBatchProgress(`${i + 1}/${batchFiles.length} — enviando ${processedName}...`)
 
       // Try up to 2 retries
       let success = false
       for (let attempt = 1; attempt <= 2 && !success; attempt++) {
         try {
-          // Upload file to server
+          // Upload processed file to server
           const formData = new FormData()
-          formData.append('file', file)
+          formData.append('file', processedBlob, processedName)
           const uploadRes = await fetch('/api/upload-track', { method: 'POST', body: formData })
-          const uploadData = await uploadRes.json()
+
+          // Handle non-JSON responses (e.g. Vercel 413 "Request Entity Too Large")
+          let uploadData: Record<string, unknown>
+          const contentType = uploadRes.headers.get('content-type') || ''
+          if (contentType.includes('application/json')) {
+            uploadData = await uploadRes.json()
+          } else {
+            // Server returned HTML error page
+            const textBody = await uploadRes.text()
+            const shortMsg = textBody.substring(0, 120).replace(/<[^>]*>/g, '').trim()
+            if (attempt === 2) errorMessages.push(`${file.name}: ${shortMsg || `erro HTTP ${uploadRes.status}`}`)
+            await sleep(3000)
+            continue
+          }
 
           if (!uploadRes.ok || (!uploadData.path && !uploadData.url)) {
             if (attempt === 2) errorMessages.push(`${file.name}: ${uploadData.error || 'falha no upload'}`)
@@ -815,7 +845,9 @@ export default function AdminDashboard() {
           success = true
         } catch (err) {
           if (attempt === 2) {
-            errorMessages.push(`${file.name}: ${(err as Error)?.message || 'erro de conexão'}`)
+            const msg = (err as Error)?.message || 'erro de conexão'
+            // Clean up common unhelpful error messages
+            errorMessages.push(`${file.name}: ${msg.replace(/Unexpected token.*/i, 'resposta inválida do servidor')}`)
           }
           await sleep(3000)
         }
