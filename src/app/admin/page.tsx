@@ -33,13 +33,13 @@ import AudioPlayer from '@/components/audio-player'
 
 const MAX_UPLOAD_SIZE = 3.5 * 1024 * 1024 // 3.5MB (margem segura do limite 4.5MB)
 const MAX_DURATION = 80 // segundos maximo para trilha de propaganda
-const MP3_BITRATE = 192 // kbps — alta qualidade pra musica
+const MP3_BITRATE = 320 // kbps — qualidade maxima do MP3 (80s * 320kbps ≈ 3.0MB, dentro do limite)
 
 /**
  * Converte AudioBuffer para MP3 usando lamejs (alta qualidade, arquivo pequeno).
  * Carrega lamejs dinamicamente do CDN para evitar problemas com bundler.
  */
-async function encodeMp3(buffer: AudioBuffer, kbps: number = 192): Promise<Blob> {
+async function encodeMp3(buffer: AudioBuffer, kbps: number = 320): Promise<Blob> {
   // Carregar lamejs do CDN se ainda nao foi carregado
   if (!(window as unknown as { lamejs?: object }).lamejs) {
     await new Promise<void>((resolve, reject) => {
