@@ -20,7 +20,7 @@ import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
 import AudioPlayer from '@/components/audio-player'
 import { optimizePronunciation, processControlTags, containsSSML, type TTSEngine } from '@/lib/pronunciation-optimizer'
-import { preprocessTTS, calculateAutoSpeed } from '@/lib/tts-text-preprocessor'
+import { preprocessTTS } from '@/lib/tts-text-preprocessor'
 
 interface TrackControlsProps {
   selectedTrack: { id: string; name: string; audioPath: string; [key: string]: unknown } | null
@@ -634,8 +634,6 @@ export default function VozProClient() {
       textToSend = optimizePronunciation(textToSend)
     }
 
-    console.log('[Pipeline] Texto final enviado ao TTS:', textToSend.substring(0, 200))
-
     // 4. LLM pre-processor (opcional, só quando toggle ativo)
     if (llmPreprocess && textToSend.length > 20) {
       try {
@@ -672,13 +670,18 @@ export default function VozProClient() {
 
     try {
       // Montar instruct a partir dos metadados da voz
+      // IMPORTANTE: só usar instruct se a variação pertence à voz selecionada
       const voice = selectedVoice
+      const variationBelongsToVoice = selectedVoice?.variations.some(v => v.id === selectedVariationId)
       const instructParts: string[] = []
       if (voice && voice.gender !== 'Auto') instructParts.push(voice.gender.toLowerCase())
       if (voice && voice.age !== 'Auto') instructParts.push(voice.age.toLowerCase())
       if (voice && voice.pitch !== 'Auto') instructParts.push(voice.pitch.toLowerCase())
       if (voice && voice.accent !== 'Auto') instructParts.push(voice.accent.toLowerCase())
-      if (selectedVariation?.instruct && selectedVariation.instruct.trim()) instructParts.push(selectedVariation.instruct.trim())
+      // Só adicionar instruct da variação se ela realmente pertence à voz selecionada
+      if (variationBelongsToVoice && selectedVariation?.instruct && selectedVariation.instruct.trim()) {
+        instructParts.push(selectedVariation.instruct.trim())
+      }
       const instructStr = instructParts.join(', ')
 
       // CORPO DA REQUISICAO - todos os dados que o PHP precisa
@@ -1254,7 +1257,7 @@ export default function VozProClient() {
                   /* INSIDE A VOICE CATEGORY */
                   <>
                     <button
-                      onClick={() => setSelectedVoiceCategory(null)}
+                      onClick={() => { setSelectedVoiceCategory(null); setSelectedVoiceId(''); setSelectedVariationId('') }}
                       className="flex items-center gap-2 text-sm text-violet-400 hover:text-violet-300 transition-colors"
                     >
                       <ChevronLeft className="w-4 h-4" />
@@ -1338,7 +1341,7 @@ export default function VozProClient() {
                       {voiceCategories.map(cat => (
                         <button
                           key={cat.name}
-                          onClick={() => setSelectedVoiceCategory(cat.name)}
+                          onClick={() => { setSelectedVoiceCategory(cat.name); setSelectedVoiceId(''); setSelectedVariationId('') }}
                           className="flex flex-col items-center gap-2 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-violet-500/10 hover:border-violet-500/50 hover:scale-105 transition-all duration-200 cursor-pointer group"
                         >
                           <span className="text-3xl group-hover:scale-110 transition-transform">{cat.emoji || '📁'}</span>
