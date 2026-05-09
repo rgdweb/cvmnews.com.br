@@ -18,7 +18,6 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
-import AudioPlayer from '@/components/audio-player'
 import VoicePreviewButton from '@/components/voice-preview-button'
 import { optimizePronunciation, processControlTags, containsSSML, type TTSEngine } from '@/lib/pronunciation-optimizer'
 import { preprocessTTS } from '@/lib/tts-text-preprocessor'
@@ -70,7 +69,6 @@ function TrackControls({
         <span className="text-xs text-slate-500">{Math.round(trackVolume * 100)}%</span>
       </div>
       <Slider value={[trackVolume]} onValueChange={([v]) => onTrackVolumeChange(v)} min={0} max={1} step={0.05} className="w-full" />
-      <AudioPlayer audioPath={selectedTrack.audioPath} />
       <div className="pt-3 border-t border-white/10">
         <button onClick={onToggleDuckingSettings} className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-300 transition-colors w-full">
           <Volume2 className="w-4 h-4" />
@@ -1929,7 +1927,6 @@ export default function VozProClient() {
                             <span className="text-xs text-slate-500">{Math.round(trackVolume * 100)}%</span>
                           </div>
                           <Slider value={[trackVolume]} onValueChange={([v]) => setTrackVolume(v)} min={0} max={1} step={0.05} className="w-full" />
-                          <AudioPlayer audioPath={selectedTrack.audioPath} />
                           <div className="pt-3 border-t border-white/10">
                             <button onClick={() => setShowDuckingSettings(!showDuckingSettings)} className="flex items-center gap-2 text-sm text-slate-400 hover:text-slate-300 transition-colors w-full">
                               <Volume2 className="w-4 h-4" />
