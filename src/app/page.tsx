@@ -1148,31 +1148,90 @@ export default function VozProClient() {
     }
   }, [])
 
-  const handleDownload = useCallback(() => {
+  const handleDownload = useCallback(async () => {
     const url = mixedAudioUrl || audioUrl
     if (!url) return
 
-    if (url.startsWith('data:')) {
-      // Base64 audio - convert to blob
-      const byteString = atob(url.split(',')[1])
-      const mimeString = url.split(',')[0].split(':')[1].split(';')[0]
-      const ab = new ArrayBuffer(byteString.length)
-      const ia = new Uint8Array(ab)
-      for (let i = 0; i < byteString.length; i++) {
-        ia[i] = byteString.charCodeAt(i)
+    toast.info('Convertendo para MP3...')
+
+    try {
+      let audioBuffer: AudioBuffer
+
+      if (url.startsWith('data:')) {
+        // Base64 audio
+        const byteString = atob(url.split(',')[1])
+        const ab = new ArrayBuffer(byteString.length)
+        const ia = new Uint8Array(ab)
+        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i)
+        const blob = new Blob([ab], { type: url.split(',')[0].split(':')[1].split(';')[0] })
+        const arrayBuffer = await blob.arrayBuffer()
+        const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+        audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+        await audioCtx.close()
+      } else {
+        // Remote URL
+        const response = await fetch(url)
+        const arrayBuffer = await response.arrayBuffer()
+        const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+        audioBuffer = await audioCtx.decodeAudioData(arrayBuffer)
+        await audioCtx.close()
       }
-      const blob = new Blob([ab], { type: mimeString })
+
+      // Encode to MP3 using lamejs
+      if (!(window as unknown as { lamejs?: object }).lamejs) {
+        await new Promise<void>((resolve, reject) => {
+          if (document.querySelector('script[src*="lame"]')) { resolve(); return }
+          const script = document.createElement('script')
+          script.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js'
+          script.onload = () => resolve()
+          script.onerror = () => reject(new Error('Falha ao carregar encoder MP3'))
+          document.head.appendChild(script)
+        })
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const lamejsMod = (window as any).lamejs
+      const Mp3Encoder = lamejsMod.Mp3Encoder
+      const numCh = Math.min(audioBuffer.numberOfChannels, 2)
+      const sr = audioBuffer.sampleRate
+      const encoder = new Mp3Encoder(numCh, sr, 320)
+      const mp3Data: Int8Array[] = []
+      const sampleBlockSize = 1152
+      const left = audioBuffer.getChannelData(0)
+      const right = numCh > 1 ? audioBuffer.getChannelData(1) : left
+
+      for (let i = 0; i < left.length; i += sampleBlockSize) {
+        const leftChunk = new Int16Array(sampleBlockSize)
+        const rightChunk = numCh > 1 ? new Int16Array(sampleBlockSize) : undefined
+        for (let j = 0; j < sampleBlockSize; j++) {
+          const idx = i + j
+          if (idx < left.length) {
+            leftChunk[j] = Math.max(-32768, Math.min(32767, Math.round(left[idx] * 32767)))
+            if (rightChunk) rightChunk[j] = Math.max(-32768, Math.min(32767, Math.round(right[idx] * 32767)))
+          }
+        }
+        const mp3buf = encoder.encodeBuffer(leftChunk, rightChunk)
+        if (mp3buf.length > 0) mp3Data.push(mp3buf)
+      }
+      const end = encoder.flush()
+      if (end.length > 0) mp3Data.push(end)
+
+      const blob = new Blob(mp3Data, { type: 'audio/mpeg' })
       const blobUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = blobUrl
-      a.download = `vozpro_${Date.now()}.wav`
+      a.download = `vozpro_${Date.now()}.mp3`
       a.click()
       URL.revokeObjectURL(blobUrl)
-    } else {
+      toast.success('MP3 baixado com sucesso!')
+    } catch (err) {
+      console.error('MP3 encode error:', err)
+      // Fallback: download as original
       const a = document.createElement('a')
       a.href = url
       a.download = `vozpro_${Date.now()}.wav`
       a.click()
+      toast.error('Erro ao converter MP3, baixando WAV original.')
     }
   }, [mixedAudioUrl, audioUrl])
 
@@ -2128,7 +2187,7 @@ export default function VozProClient() {
                         className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white gap-1.5"
                       >
                         <Download className="w-4 h-4" />
-                        Baixar
+                        Baixar MP3
                       </Button>
                     </div>
 

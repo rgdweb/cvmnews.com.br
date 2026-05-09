@@ -299,6 +299,10 @@ export default function AdminDashboard() {
   const [previewingTrackId, setPreviewingTrackId] = useState<string | null>(null)
   const trackPreviewAudioRef = useRef<HTMLAudioElement | null>(null)
 
+  // Voice preview state (inline play/pause)
+  const [previewingVoiceVarId, setPreviewingVoiceVarId] = useState<string | null>(null)
+  const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null)
+
   const toggleTrackPreview = (track: Track) => {
     if (previewingTrackId === track.id) {
       trackPreviewAudioRef.current?.pause()
@@ -317,8 +321,27 @@ export default function AdminDashboard() {
     }
   }
 
+  const toggleVoicePreview = (variation: VoiceVariation) => {
+    if (previewingVoiceVarId === variation.id) {
+      voicePreviewAudioRef.current?.pause()
+      voicePreviewAudioRef.current = null
+      setPreviewingVoiceVarId(null)
+    } else {
+      voicePreviewAudioRef.current?.pause()
+      voicePreviewAudioRef.current = null
+      const audioUrl = variation.refAudioServerUrl || variation.refAudioPath
+      if (audioUrl) {
+        const audio = new Audio(audioUrl)
+        audio.play().catch(() => {})
+        audio.onended = () => setPreviewingVoiceVarId(null)
+        voicePreviewAudioRef.current = audio
+        setPreviewingVoiceVarId(variation.id)
+      }
+    }
+  }
+
   useEffect(() => {
-    return () => { trackPreviewAudioRef.current?.pause() }
+    return () => { trackPreviewAudioRef.current?.pause(); voicePreviewAudioRef.current?.pause() }
   }, [])
 
   // Settings state
@@ -1451,7 +1474,7 @@ export default function AdminDashboard() {
                         <CardContent className="py-4">
                           <div className="flex items-start justify-between mb-3">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                              <div className="w-10 h-10 rounded-full bg-violet-500/20 flex items-center justify-center">
                                 <Mic className="w-5 h-5 text-violet-400" />
                               </div>
                               <div>
@@ -1497,6 +1520,15 @@ export default function AdminDashboard() {
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
+                                      {v.refAudioPath && (
+                                        <button
+                                          onClick={() => toggleVoicePreview(v)}
+                                          className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 ${previewingVoiceVarId === v.id ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/30 scale-110' : 'bg-violet-500/20 text-violet-400 hover:bg-violet-500/20 hover:text-violet-300'}`}
+                                          title={previewingVoiceVarId === v.id ? 'Parar' : 'Ouvir'}
+                                        >
+                                          {previewingVoiceVarId === v.id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
+                                        </button>
+                                      )}
                                       <input type="file" accept="audio/*" onChange={(e) => handleQuickUploadAudio(v.id, e)} className="hidden" id={`quick-audio-${selectedVoiceCategory}-${v.id}`} />
                                       <Button variant="ghost" size="sm" onClick={() => document.getElementById(`quick-audio-${selectedVoiceCategory}-${v.id}`)?.click()} className={`h-7 px-2 text-xs gap-1 ${v.refAudioPath ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/30' : 'text-amber-400 hover:text-amber-300 hover:bg-amber-900/30'}`}><Upload className="w-3 h-3" />{v.refAudioPath ? 'Update' : 'Add'}</Button>
                                       <Button variant="ghost" size="sm" onClick={() => { setEditingVariationId(v.id); setAddingVariationTo(null); setVariationForm({ label: v.label, emoji: v.emoji, refAudioPath: '', serverUrl: '', filename: '', refAudioName: v.refAudioName, refText: v.refText, instruct: v.instruct || 'none' }); setPendingVoiceFile(null); setVariationDialogOpen(true) }} className="h-7 px-2 text-xs text-slate-400 hover:text-white hover:bg-slate-700 gap-1"><Edit className="w-3 h-3" />Editar</Button>
@@ -1535,7 +1567,15 @@ export default function AdminDashboard() {
                           <CardContent className="py-3">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center"><Mic className="w-4 h-4 text-violet-400" /></div>
+                                <button
+                                  onClick={() => {
+                                    const firstActiveVar = voice.variations.find(v => v.active !== false && v.refAudioPath)
+                                    if (firstActiveVar) toggleVoicePreview(firstActiveVar)
+                                  }}
+                                  className={`w-8 h-8 rounded-full bg-violet-500/20 flex items-center justify-center shrink-0 transition-all duration-200 ${voice.variations.some(v => v.id === previewingVoiceVarId) ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/30' : 'hover:bg-violet-500/30'}`}
+                                >
+                                  {voice.variations.some(v => v.id === previewingVoiceVarId) ? <Pause className="w-4 h-4" /> : <Mic className="w-4 h-4 text-violet-400" />}
+                                </button>
                                 <div>
                                   <span className="font-medium text-sm text-white">{voice.name}</span>
                                   <p className="text-xs text-slate-500">{voice.variations.length} variação(ões)</p>
