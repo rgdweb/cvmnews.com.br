@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import {
   AudioWaveform, LogOut, Plus, Trash2, Edit, Upload, Music, Mic,
   Loader2, RefreshCw, Volume2, FileAudio, CheckCircle2, Settings2,
-  FolderOpen, ChevronLeft, FolderPlus, Folder
+  FolderOpen, ChevronLeft, FolderPlus, Folder, Play, Pause
 } from 'lucide-react'
 import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
@@ -294,6 +294,32 @@ export default function AdminDashboard() {
   const [voiceBatchFiles, setVoiceBatchFiles] = useState<File[]>([])
   const [voiceBatchUploading, setVoiceBatchUploading] = useState(false)
   const [voiceBatchProgress, setVoiceBatchProgress] = useState('')
+
+  // Track preview state (inline play/pause)
+  const [previewingTrackId, setPreviewingTrackId] = useState<string | null>(null)
+  const trackPreviewAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  const toggleTrackPreview = (track: Track) => {
+    if (previewingTrackId === track.id) {
+      trackPreviewAudioRef.current?.pause()
+      trackPreviewAudioRef.current = null
+      setPreviewingTrackId(null)
+    } else {
+      trackPreviewAudioRef.current?.pause()
+      trackPreviewAudioRef.current = null
+      if (track.audioPath) {
+        const audio = new Audio(track.audioPath)
+        audio.play().catch(() => {})
+        audio.onended = () => setPreviewingTrackId(null)
+        trackPreviewAudioRef.current = audio
+        setPreviewingTrackId(track.id)
+      }
+    }
+  }
+
+  useEffect(() => {
+    return () => { trackPreviewAudioRef.current?.pause() }
+  }, [])
 
   // Settings state
   const [enableVoiceUpload, setEnableVoiceUpload] = useState(false)
@@ -1945,9 +1971,12 @@ export default function AdminDashboard() {
                         <CardContent className="py-4">
                           <div className="flex items-start justify-between mb-3">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                                <Music className="w-5 h-5 text-purple-400" />
-                              </div>
+                              <button
+                                onClick={() => toggleTrackPreview(track)}
+                                className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-all ${previewingTrackId === track.id ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30' : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'}`}
+                              >
+                                {previewingTrackId === track.id ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+                              </button>
                               <div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-lg">{track.emoji || '🎵'}</span>
@@ -1970,15 +1999,7 @@ export default function AdminDashboard() {
                               <Button variant="ghost" size="icon" onClick={() => handleDeleteTrack(track.id)} className="text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></Button>
                             </div>
                           </div>
-                          {track.audioPath && (
-                            <div className="mt-2 rounded-lg bg-slate-900/50 border border-slate-700 p-2">
-                              <div className="flex items-center gap-2 mb-1">
-                                <Volume2 className="w-3.5 h-3.5 text-purple-400" />
-                                <span className="text-xs text-slate-400">Preview</span>
-                              </div>
-                              <AudioPlayer audioPath={track.audioPath} />
-                            </div>
-                          )}
+
                         </CardContent>
                       </Card>
                     ))}
@@ -2006,7 +2027,12 @@ export default function AdminDashboard() {
                           <CardContent className="py-3">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center"><Music className="w-4 h-4 text-purple-400" /></div>
+                                <button
+                                  onClick={() => toggleTrackPreview(track)}
+                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all ${previewingTrackId === track.id ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30' : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'}`}
+                                >
+                                  {previewingTrackId === track.id ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+                                </button>
                                 <div>
                                   <span className="font-medium text-sm text-white">{track.name}</span>
                                   <p className="text-xs text-slate-500">{track.description || 'Sem descrição'}</p>
