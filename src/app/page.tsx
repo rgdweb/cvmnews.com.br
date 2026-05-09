@@ -2005,7 +2005,7 @@ export default function VozProClient() {
             {/* Generate Button */}
             <Button
               onClick={handleGenerate}
-              disabled={isGenerating || !text.trim() || !selectedVariationId}
+              disabled={isGenerating || !text.trim() || (!selectedVariationId && !uploadedVoiceUrl)}
               className="w-full h-14 text-lg font-bold bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50"
             >
               {isGenerating ? (
