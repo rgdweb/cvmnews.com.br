@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label'
 import VoicePreviewButton from '@/components/voice-preview-button'
 import { optimizePronunciation, processControlTags, containsSSML, type TTSEngine } from '@/lib/pronunciation-optimizer'
 import { preprocessTTS } from '@/lib/tts-text-preprocessor'
+import { chunkText, type TextChunk } from '@/lib/tts-chunker'
 
 interface TrackControlsProps {
   selectedTrack: { id: string; name: string; audioPath: string; [key: string]: unknown } | null
@@ -452,6 +453,51 @@ function writeString(view: DataView, offset: number, str: string) {
   }
 }
 
+function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
+  const numChannels = buffer.numberOfChannels
+  const sampleRate = buffer.sampleRate
+  const bitDepth = 16
+  const bytesPerSample = bitDepth / 8
+  const blockAlign = numChannels * bytesPerSample
+  const dataSize = buffer.length * blockAlign
+  const headerSize = 44
+  const totalSize = headerSize + dataSize
+
+  const arrayBuffer = new ArrayBuffer(totalSize)
+  const view = new DataView(arrayBuffer)
+
+  writeString(view, 0, 'RIFF')
+  view.setUint32(4, totalSize - 8, true)
+  writeString(view, 8, 'WAVE')
+  writeString(view, 12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true) // PCM
+  view.setUint16(22, numChannels, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * blockAlign, true)
+  view.setUint16(32, blockAlign, true)
+  view.setUint16(34, bitDepth, true)
+  writeString(view, 36, 'data')
+  view.setUint32(40, dataSize, true)
+
+  const channels: Float32Array[] = []
+  for (let ch = 0; ch < numChannels; ch++) {
+    channels.push(buffer.getChannelData(ch))
+  }
+
+  let offset = 44
+  for (let i = 0; i < buffer.length; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const sample = Math.max(-1, Math.min(1, channels[ch][i]))
+      const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF
+      view.setInt16(offset, intSample, true)
+      offset += 2
+    }
+  }
+
+  return new Blob([arrayBuffer], { type: 'audio/wav' })
+}
+
 export default function VozProClient() {
   const router = useRouter()
   const [authChecked, setAuthChecked] = useState(false)
@@ -754,6 +800,126 @@ export default function VozProClient() {
         const isAutoMode = voiceMode === 'auto'
         const isDesignMode = voiceMode === 'design'
         const designParams = isDesignMode ? parseVoiceDesignToParams(voiceDesignInstruct) : { gender: 'Auto', age: 'Auto', pitch: 'Auto', style: 'Auto', accent: 'Auto' }
+
+        // ===== CHUNKING: gerar frase por frase com pausas reais =====
+        // Resolve: mistura de ref audio, pontuação falada, texto robótico
+        const shouldChunk = textToSend.length > 100 && voiceMode === 'clone'
+
+        if (shouldChunk) {
+          console.log('[VozPro] Usando chunking (frase por frase)...')
+          const chunks = chunkText(textToSend)
+          console.log(`[VozPro] ${chunks.length} chunks identificados`)
+
+          if (chunks.length > 1 && chunks.length <= 30) {
+            // Gerar cada chunk separadamente e concatenar
+            const audioBuffers: { buffer: ArrayBuffer; pauseMs: number }[] = []
+            let failedCount = 0
+
+            for (let i = 0; i < chunks.length; i++) {
+              const chunk = chunks[i]
+              // Progresso visual
+
+              const chunkBody: Record<string, unknown> = {
+                text: chunk.text,
+                mode: voiceMode,
+                instruct: '',
+                referenceAudioUrl: uploadedVoiceUrl || selectedVariation?.refAudioServerUrl || '',
+                referenceAudioName: uploadedVoiceFile?.name || selectedVariation?.refAudioName || 'ref_audio.wav',
+                refText: selectedVariation?.refText || '',
+                numStep: 32,
+                speed,
+                language,
+                gender: isAutoMode ? 'Auto' : (isDesignMode ? designParams.gender : 'Auto'),
+                age: isAutoMode ? 'Auto' : (isDesignMode ? designParams.age : 'Auto'),
+                pitch: isAutoMode ? 'Auto' : (isDesignMode ? designParams.pitch : 'Auto'),
+                style: isAutoMode ? 'Auto' : (isDesignMode ? designParams.style : 'Auto'),
+                accent: isAutoMode ? 'Auto' : (isDesignMode ? designParams.accent : 'Auto'),
+              }
+
+              try {
+                let chunkRes: Response
+                if (omnivoicePhpUrl) {
+                  const tokenData = await fetch('/api/omnivoice-token').then(r => r.json())
+                  if (tokenData.generateUrl && tokenData.token) {
+                    chunkRes = await fetch(tokenData.generateUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'X-Generate-Token': tokenData.token },
+                      body: JSON.stringify(chunkBody),
+                      signal: controller.signal,
+                    })
+                  } else {
+                    chunkRes = await fetch('/api/omnivoice-generate', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(chunkBody),
+                      signal: controller.signal,
+                    })
+                  }
+                } else {
+                  chunkRes = await fetch('/api/omnivoice-generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(chunkBody),
+                    signal: controller.signal,
+                  })
+                }
+
+                if (chunkRes.ok) {
+                  const contentType = chunkRes.headers.get('content-type') || ''
+                  if (contentType.includes('audio') || contentType.includes('octet-stream')) {
+                    const buffer = await chunkRes.arrayBuffer()
+                    audioBuffers.push({ buffer, pauseMs: chunk.pauseAfterMs })
+                  } else {
+                    failedCount++
+                    console.warn(`[VozPro Chunk ${i + 1}] Resposta não-audio: ${contentType}`)
+                  }
+                } else {
+                  failedCount++
+                  console.warn(`[VozPro Chunk ${i + 1}] Erro: ${chunkRes.status}`)
+                }
+              } catch (err) {
+                failedCount++
+                console.warn(`[VozPro Chunk ${i + 1}] Falha:`, err)
+              }
+            }
+
+            // Concatenar áudios com silêncio entre chunks
+            if (audioBuffers.length > 0) {
+              // Juntando frases...
+              const audioCtx = new AudioContext({ sampleRate: 44100 })
+              const offlineCtx = new OfflineAudioContext(1, 44100 * 600, 44100) // max 10 min
+
+              let currentTime = 0
+              for (const { buffer, pauseMs } of audioBuffers) {
+                try {
+                  const audioBuffer = await audioCtx.decodeAudioData(buffer.slice(0))
+                  const source = offlineCtx.createBufferSource()
+                  source.buffer = audioBuffer
+                  source.connect(offlineCtx.destination)
+                  source.start(currentTime)
+                  currentTime += audioBuffer.duration + (pauseMs / 1000)
+                } catch {
+                  console.warn('[VozPro Chunk] Falha ao decodificar áudio')
+                }
+              }
+
+              const renderedBuffer = await offlineCtx.startRendering()
+              // Converter para WAV blob
+              const wavBlob = audioBufferToWavBlob(renderedBuffer)
+              const finalUrl = URL.createObjectURL(wavBlob)
+
+              setAudioUrl(finalUrl)
+              setIsGenerating(false)
+              // Cleanup
+              clearInterval(timerInterval)
+              setGeneratingTime(Math.floor((Date.now() - genStartTime) / 1000))
+              toast.success(`${audioBuffers.length} frases geradas!${failedCount > 0 ? ` (${failedCount} falha(s))` : ''}`)
+              return
+            }
+            // Se todos falharam, cai pro fluxo normal
+            console.warn('[VozPro] Todos os chunks falharam, tentando single-shot...')
+          }
+        }
 
         const ovBody: Record<string, unknown> = {
           text: textToSend,

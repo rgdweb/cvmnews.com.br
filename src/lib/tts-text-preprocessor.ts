@@ -58,87 +58,39 @@ export function preprocessTTS(text: string, config: Partial<PreprocessConfig> = 
 
   let result = text
 
-  // 0. Reticências Unicode (U+2026 …) → remover (ANTES de qualquer regex de ponto)
-  result = result.replace(/\u2026/g, ' ')
+  // 1. Reticências Unicode (U+2026 …) → ponto normal
+  result = result.replace(/\u2026/g, '.')
 
-  // 1. Pontuação dupla/errada: "!." "?." ".." "!!" → manter só a primeira
-  result = result.replace(/([!?])[.]+/g, '$1')
-  result = result.replace(/([.])[.]+/g, '$1')
-  result = result.replace(/([!?])[!?]+/g, '$1')
+  // 2. Pontuação triplicada/duplicada → manter só uma
+  // "!!!" → "!", "..." → ".", "!." → "!"
+  result = result.replace(/([!?])\1+/g, '$1')     // !! → !, ?? → ?
+  result = result.replace(/\.{2,}/g, '.')          // ... → .
+  result = result.replace(/([!?])[.]+/g, '$1')     // !. !.. → ! ?
+  result = result.replace(/([.])[!?]+$/gm, '$1')   // .! .? no final → .
 
-  // 2. "..." ou ".." no FINAL de palavras = pausa dramática (emoção!)
-  // Converte para newline + newline = pausa longa sem falar os pontos
-  result = result.replace(/\.{2,}\s*/g, '\n\n')
+  // 3. Ponto e vírgula / dois pontos → ponto (pausa similar)
+  result = result.replace(/[;]\s*/g, '. ')
+  result = result.replace(/[:]\s*/g, ', ')
 
-  // 3. "!" no final = pausa com energia (exclamação vira quebra forte)
-  // "!" no meio da frase = manter (o TTS usa pra ênfase sem falar)
-  result = result.replace(/!+/g, (match, offset, str) => {
-    const after = str.substring(offset + match.length).trim()
-    // Se tem texto depois, manter o ! (ênfase no meio da frase)
-    if (after.length > 0 && !/^[.!?,;:\n]/.test(after)) return match
-    // Se é final de frase, virar newline (pausa energética)
-    return '\n'
-  })
-
-  // 4. "?" no final = pausa com tom de pergunta
-  result = result.replace(/\?+/g, (match, offset, str) => {
-    const after = str.substring(offset + match.length).trim()
-    if (after.length > 0 && !/^[.!?,;:\n]/.test(after)) return match
-    return '\n'
-  })
-
-  // 5. "." final de frase = pausa normal (newline)
-  if (cfg.useNewlines) {
-    result = result.replace(/([.])\s*/g, '$1\n')
-  }
-
-  // 6. Vírgula → espaço extra (micro-pausa, o TTS respeita sem falar)
+  // 4. Vírgula → espaço normal (o TTS já respeita vírgula para micro-pausa)
   if (cfg.commaSpace) {
-    result = result.replace(/,\s*/g, ',  ')
+    result = result.replace(/,\s*/g, ', ')
   }
 
-  // 7. Ponto e vírgula / dois pontos → newline
-  result = result.replace(/[;:]\s*/g, '\n')
+  // 5. Limpar espaços múltiplos
+  result = result.replace(/  +/g, ' ')
 
-  // 8. Limpar newlines múltiplos (mas manter double-newline como pausa dramática)
-  result = result.replace(/\n{3,}/g, '\n\n')
-
-  // 9. Limpar espaços múltiplos
-  result = result.split('\n').map(line => line.trim().replace(/  +/g, ' ')).join('\n')
-
-  // 10. Frases muito longas → quebrar com newline
+  // 6. Frases muito longas → quebrar com newline (ponto de referência pro chunking)
   if (cfg.sentenceBreak) {
     result = breakLongSentences(result, cfg.maxSentenceLength)
   }
 
-  // 11. Repetir última palavra de cada frase (opcional)
+  // 7. Repetir última palavra de cada frase (opcional)
   if (cfg.repeatLastWord) {
     result = repeatLastWordOfSentences(result)
   }
 
-  // 12. Limpar linhas vazias (MAS manter double-newline como pausa dramática)
-  const lines = result.split('\n')
-  const finalLines: string[] = []
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed) {
-      // Linha vazia = pausa dramática (vem de "..." ou "!.")
-      // Adicionar como linha especial que o TTS interpreta como silêncio
-      if (finalLines.length > 0 && finalLines[finalLines.length - 1] !== '') {
-        finalLines.push('...')
-      }
-      continue
-    }
-    // Remover pontuação solta no final: "estremecer." → "estremecer"
-    let cleaned = trimmed.replace(/[.]+$/g, '')
-    // Remover pontuação solta no início: ". Ajeite" → "Ajeite"
-    cleaned = cleaned.replace(/^[.]+/g, '')
-    if (cleaned) finalLines.push(cleaned)
-  }
-
-  // 13. Converter "..." (pausa dramática) de volta para double-newline
-  result = finalLines.join('\n').replace(/\.\.\./g, '\n')
-  result = result.replace(/\n{3,}/g, '\n\n')
+  // 8. Trim
   result = result.trim()
 
   return result
