@@ -19,6 +19,7 @@ model User {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  sessions  Session[]
 }
 
 model Voice {
@@ -68,6 +69,20 @@ model Track {
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   // hash SHA-256 do token da sessão
+  deviceInfo String   @default("") // User-Agent do dispositivo
+  ipAddress  String   @default("") // IP do dispositivo
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime // quando a sessão expira
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
 }
 
 model SystemSetting {
