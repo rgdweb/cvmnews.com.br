@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   title: "VozPro - Sintetizador de Voz Profissional com IA",
   description: "Crie vozes profissionais com IA. Clonagem de voz, emoções e trilhas musicais para suas propagandas e conteúdos.",
   icons: {
-    icon: "/logo.svg",
+    icon: "/logo.jpg",
   },
 };
 
