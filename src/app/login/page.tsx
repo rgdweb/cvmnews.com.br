@@ -107,7 +107,7 @@ export default function LoginPage() {
           >
             <div className="flex items-center gap-4 mb-10">
               <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center shadow-2xl">
-                <Image src="/logo.svg" alt="VozPro" width={40} height={40} />
+                <Image src="/logo.jpg" alt="VozPro" width={40} height={40} className="rounded" />
               </div>
               <div>
                 <h1 className="text-3xl font-bold text-white tracking-tight">VozPro</h1>
@@ -171,7 +171,7 @@ export default function LoginPage() {
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 mb-10">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
-              <Image src="/logo.svg" alt="VozPro" width={28} height={28} />
+              <Image src="/logo.jpg" alt="VozPro" width={28} height={28} className="rounded" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-white">VozPro</h1>

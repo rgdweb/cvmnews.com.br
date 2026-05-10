@@ -64,7 +64,7 @@ function AdminLoginForm() {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg shadow-violet-500/20 mb-4">
-            <Image src="/logo.svg" alt="VozPro" width={32} height={32} />
+            <Image src="/logo.jpg" alt="VozPro" width={32} height={32} className="rounded" />
           </div>
           <h1 className="text-xl font-bold text-white">VozPro Admin</h1>
           <div className="flex items-center justify-center gap-1.5 mt-1.5">
