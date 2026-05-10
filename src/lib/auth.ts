@@ -79,8 +79,31 @@ function hashLegacyToken(payload: string): string {
   return createHash('sha256').update(payload + JWT_SECRET).digest('hex')
 }
 
+export async function ensureAdminExists(): Promise<void> {
+  try {
+    const adminCount = await db.user.count({ where: { role: 'admin' } })
+    if (adminCount === 0) {
+      // Criar primeiro admin automaticamente usando ADMIN_PASSWORD
+      await db.user.create({
+        data: {
+          name: 'Administrador',
+          email: 'admin@vozpro.com',
+          password: hashPassword(ADMIN_PASSWORD),
+          role: 'admin',
+        },
+      })
+      console.log('[Auth] Primeiro admin criado automaticamente: admin@vozpro.com')
+    }
+  } catch (err) {
+    console.error('[Auth] Erro ao criar admin automaticamente:', err)
+  }
+}
+
 export async function getAdminSession(): Promise<boolean> {
   const cookieStore = await cookies()
+
+  // Garantir que existe pelo menos um admin no banco
+  await ensureAdminExists()
 
   // Tentar nova sessão (User-based)
   const newToken = cookieStore.get(NEW_SESSION_KEY)?.value
