@@ -742,60 +742,66 @@ export default function AdminDashboard() {
       toast.error('Selecione pelo menos um arquivo de áudio')
       return
     }
+    if (!bulkCategory) {
+      toast.error('Selecione uma categoria')
+      return
+    }
 
     setBulkUploading(true)
     setBulkProgress(`Enviando 0 de ${bulkFiles.length}...`)
 
     try {
-      const formData = new FormData()
-      for (const file of bulkFiles) {
-        formData.append('files', file)
+      // Enviar arquivos um a um para evitar timeout do Vercel
+      let created = 0
+      let failed = 0
+      const errors: string[] = []
+
+      for (let i = 0; i < bulkFiles.length; i++) {
+        const file = bulkFiles[i]
+        setBulkProgress(`Enviando ${i + 1} de ${bulkFiles.length}: ${file.name}`)
+
+        try {
+          const formData = new FormData()
+          formData.append('files', file)
+          formData.append('category', bulkCategory)
+          formData.append('gender', bulkGender)
+          formData.append('accent', bulkAccent)
+          formData.append('pitch', bulkPitch)
+          formData.append('age', bulkAge)
+
+          const res = await fetch('/api/admin/voices/bulk-upload', {
+            method: 'POST',
+            body: formData,
+          })
+
+          const data = await res.json()
+
+          if (res.ok && data.success && data.created > 0) {
+            created += data.created
+          } else {
+            failed++
+            if (data.error) errors.push(data.error)
+          }
+        } catch (err) {
+          failed++
+          errors.push(`Erro em ${file.name}: ${err instanceof Error ? err.message : 'falha'}`)
+        }
       }
-      formData.append('category', bulkCategory)
-      formData.append('gender', bulkGender)
-      formData.append('accent', bulkAccent)
-      formData.append('pitch', bulkPitch)
-      formData.append('age', bulkAge)
 
-      // Usar upload direto via PHP para evitar timeout do Vercel
-      const tokenRes = await fetch('/api/upload-token')
-      const { uploadUrl, token } = await tokenRes.json()
-
-      if (!uploadUrl || !token) {
-        toast.error('Servidor de upload não configurado')
-        setBulkUploading(false)
-        return
-      }
-
-      // Progress simulado
-      const progressInterval = setInterval(() => {
-        setBulkProgress(prev => {
-          const match = prev.match(/Enviando (\d+)/)
-          const current = match ? parseInt(match[1]) : 0
-          const next = Math.min(current + 1, bulkFiles.length)
-          return `Enviando ${next} de ${bulkFiles.length}...`
-        })
-      }, 3000)
-
-      const res = await fetch('/api/admin/voices/bulk-upload', {
-        method: 'POST',
-        body: formData,
-      })
-
-      clearInterval(progressInterval)
-
-      const data = await res.json()
-
-      if (res.ok && data.success) {
-        toast.success(`${data.created} voz(es) criada(s)! ${data.failed > 0 ? `${data.failed} falha(s)` : ''}`)
+      if (created > 0) {
+        toast.success(`${created} voz(es) criada(s)!${failed > 0 ? ` ${failed} falha(s).` : ''}`)
         setBulkDialogOpen(false)
         setBulkFiles([])
         loadData()
       } else {
-        toast.error(data.error || 'Erro no upload em massa')
+        toast.error(`Nenhuma voz criada. ${errors.length > 0 ? errors[0] : 'Verifique os arquivos e tente novamente.'}`)
       }
-    } catch {
-      toast.error('Erro de conexão')
+
+      if (errors.length > 1) {
+        console.warn('[BulkUpload] Errors:', errors)
+      }
+    } catch (err) {
+      toast.error(`Erro: ${err instanceof Error ? err.message : 'Erro de conexão'}`)
     } finally {
       setBulkUploading(false)
       setBulkProgress('')
