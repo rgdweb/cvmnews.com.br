@@ -16,17 +16,57 @@ export function hashPassword(password: string): string {
 // ============================================================
 // SESSION TOKEN (cookie-based, sem JWT library)
 // ============================================================
-// Formato: base64(userId:timestamp:hmac_sha256)
+// Formato: base64(userId:role:timestamp:hmac_sha256)
 
 function hashToken(payload: string): string {
   return createHash('sha256').update(payload + JWT_SECRET).digest('hex')
 }
 
-export async function createSession(userId: string, role: string): Promise<string> {
+export async function createSession(
+  userId: string,
+  role: string,
+  deviceInfo: string = '',
+  ipAddress: string = ''
+): Promise<string> {
   const timestamp = Date.now()
   const payload = `${userId}:${role}:${timestamp}`
   const hash = hashToken(payload)
-  return Buffer.from(`${userId}:${role}:${timestamp}:${hash}`).toString('base64')
+  const token = Buffer.from(`${userId}:${role}:${timestamp}:${hash}`).toString('base64')
+
+  // Calcular expiração (24 horas)
+  const expiresAt = new Date(timestamp + 24 * 60 * 60 * 1000)
+
+  // Hash do token para armazenar no banco (não guardamos o token em texto puro)
+  const tokenHash = createHash('sha256').update(token).digest('hex')
+
+  // Para usuários normais (NÃO admin): invalidar todas as sessões anteriores
+  // Admin pode ter múltiplas sessões (múltiplos dispositivos)
+  if (role !== 'admin') {
+    try {
+      await db.session.deleteMany({
+        where: { userId },
+      })
+    } catch (err) {
+      console.error('[Auth] Erro ao invalidar sessões anteriores:', err)
+    }
+  }
+
+  // Salvar nova sessão no banco
+  try {
+    await db.session.create({
+      data: {
+        userId,
+        tokenHash,
+        deviceInfo: deviceInfo.substring(0, 500),
+        ipAddress: ipAddress.substring(0, 45),
+        expiresAt,
+      },
+    })
+  } catch (err) {
+    console.error('[Auth] Erro ao salvar sessão no banco:', err)
+  }
+
+  return token
 }
 
 export interface SessionData {
@@ -54,6 +94,27 @@ export async function verifySession(token: string): Promise<SessionData> {
       return { userId: '', role: '', authenticated: false }
     }
 
+    // Verificar se a sessão existe no banco de dados (para usuários normais)
+    // Admin pula essa verificação para permitir múltiplos dispositivos
+    if (role !== 'admin') {
+      const tokenHash = createHash('sha256').update(token).digest('hex')
+      const session = await db.session.findFirst({
+        where: { tokenHash },
+      })
+
+      if (!session) {
+        // Sessão não existe no banco = foi invalidada por outro login
+        return { userId: '', role: '', authenticated: false }
+      }
+
+      // Verificar expiração no banco
+      if (new Date() > session.expiresAt) {
+        // Sessão expirada, limpar do banco
+        await db.session.delete({ where: { id: session.id } }).catch(() => {})
+        return { userId: '', role: '', authenticated: false }
+      }
+    }
+
     return { userId, role, authenticated: true }
   } catch {
     return { userId: '', role: '', authenticated: false }
@@ -65,6 +126,35 @@ export async function getSession(): Promise<SessionData> {
   const token = cookieStore.get('vozpro_session')?.value
   if (!token) return { userId: '', role: '', authenticated: false }
   return verifySession(token)
+}
+
+// ============================================================
+// INVALIDAR SESSÃO NO BANCO (usado no logout)
+// ============================================================
+
+export async function invalidateSession(token: string): Promise<void> {
+  try {
+    const tokenHash = createHash('sha256').update(token).digest('hex')
+    await db.session.deleteMany({ where: { tokenHash } })
+  } catch (err) {
+    console.error('[Auth] Erro ao invalidar sessão:', err)
+  }
+}
+
+// ============================================================
+// LIMPAR SESSÕES EXPIRADAS (manutenção)
+// ============================================================
+
+export async function cleanExpiredSessions(): Promise<number> {
+  try {
+    const result = await db.session.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    })
+    return result.count
+  } catch (err) {
+    console.error('[Auth] Erro ao limpar sessões expiradas:', err)
+    return 0
+  }
 }
 
 // ============================================================
