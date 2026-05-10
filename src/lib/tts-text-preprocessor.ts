@@ -58,12 +58,18 @@ export function preprocessTTS(text: string, config: Partial<PreprocessConfig> = 
 
   let result = text
 
-  // 1. Reticências existentes → newline (são usadas como pausa, converter para quebra)
-  result = result.replace(/\.{3,}/g, '.\n')
+  // 0. Reticências Unicode (U+2026 …) → espaço (ANTES de qualquer regex de ponto)
+  // O TTS NAO sabe ler "…" e tenta falar alguma coisa estranha
+  result = result.replace(/\u2026/g, ' ')
+
+  // 1. Pontuação dupla/errada: "!." "?.", ".." "!!" "..." → manter só a primeira
+  // "vai estremecer!." → "vai estremecer!"
+  result = result.replace(/([!?])[.]+/g, '$1')      // !. !.. ?. → ! ?
+  result = result.replace(/([.])[.]+/g, '$1')        // .. ... → .
+  result = result.replace(/([!?])[!?]+/g, '$1')      // !! ?? → ! ?
 
   // 2. Pontuação forte (. ! ?) → newline (quebra de sentença)
   if (cfg.useNewlines) {
-    // Cada pontuação forte vira uma nova linha
     result = result.replace(/([.!?])\s*/g, '$1\n')
   }
 
@@ -73,7 +79,7 @@ export function preprocessTTS(text: string, config: Partial<PreprocessConfig> = 
   }
 
   // 4. Ponto e vírgula / dois pontos → newline (pausa média)
-  result = result.replace(/[;:]\s*/g, '.\n')
+  result = result.replace(/[;:]\s*/g, '\n')
 
   // 5. Limpar newlines múltiplos
   result = result.replace(/\n{2,}/g, '\n')
@@ -94,7 +100,22 @@ export function preprocessTTS(text: string, config: Partial<PreprocessConfig> = 
   // 9. Limpar linhas vazias
   result = result.split('\n').filter(line => line.trim().length > 0).join('\n')
 
-  // 10. Trim final
+  // 10. *** CRÍTICO ***: Remover TODA pontuação do FINAL e INÍCIO de cada linha
+  // O TTS fala "ponto", "exclamação", "interrogação" literalmente
+  result = result
+    .split('\n')
+    .map(line => {
+      let cleaned = line.trim()
+      // Remover pontuação do final: "estremecer!." → "estremecer"
+      cleaned = cleaned.replace(/[.!?,;:~\-]+$/g, '')
+      // Remover pontuação do início: ". Ajeite" → "Ajeite"
+      cleaned = cleaned.replace(/^[.!?,;:~\-]+/g, '')
+      return cleaned.trim()
+    })
+    .filter(line => line.trim().length > 0)
+    .join('\n')
+
+  // 11. Trim final
   result = result.trim()
 
   return result
