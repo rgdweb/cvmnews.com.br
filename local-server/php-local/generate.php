@@ -509,8 +509,8 @@ $gradioData = [
     (int)$numStep,
     (float)$guidanceScale,
     true,      // denoise
-    (int)$speed, // speed como int (a interface envia int, nao float)
-    0,         // duration: 0 (a interface envia 0, nao null!)
+    (float)$speed, // speed como float (1.3, nao 1!)
+    null,      // duration: null = auto (usa speed para calcular)
     true,      // preprocess
     true       // postprocess
 ];
