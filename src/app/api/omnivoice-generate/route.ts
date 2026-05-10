@@ -265,6 +265,14 @@ export async function POST(request: NextRequest) {
 
     debug.log('Text Clean', 'ok', `${cleanText.length} chars`)
 
+    // Strip punctuation that TTS might speak aloud (chunking system handles pauses)
+    cleanText = cleanText
+      .replace(/[.,!?;:]+/g, ' ')  // replace punctuation with space
+      .replace(/  +/g, ' ')        // collapse multiple spaces
+      .trim()
+
+    debug.log('Text Clean (no punct)', 'ok', `${cleanText.length} chars`)
+
     // Obter tunnel URL dinamicamente do HostGator (igual F5-TTS)
     debug.log('Tunnel', 'info', 'Descobrindo URL do tunnel...')
     const effectiveUrl = await getTunnelUrl(debug)

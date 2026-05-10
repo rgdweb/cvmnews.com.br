@@ -530,7 +530,7 @@ export default function VozProClient() {
   const [musicStartLeadMs, setMusicStartLeadMs] = useState(DEFAULT_DUCKING.musicStartLeadMs)
   const [showDuckingSettings, setShowDuckingSettings] = useState(false)
   const [speed, setSpeed] = useState(1.0)
-  const [numStep, setNumStep] = useState(20)
+  const [numStep, setNumStep] = useState(32)
   const [guidanceScale, setGuidanceScale] = useState(1.5)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [pronunciationOptimization, setPronunciationOptimization] = useState(true) // Agente IA de pronúncia (ligado por padrão)
@@ -803,7 +803,7 @@ export default function VozProClient() {
 
         // ===== CHUNKING: gerar frase por frase com pausas reais =====
         // Resolve: mistura de ref audio, pontuação falada, texto robótico
-        const shouldChunk = textToSend.length > 100 && voiceMode === 'clone'
+        const shouldChunk = (textToSend.length > 50 || /[.!?]/.test(textToSend)) && ttsModel === 'omnivoice'
 
         if (shouldChunk) {
           console.log('[VozPro] Usando chunking (frase por frase)...')
