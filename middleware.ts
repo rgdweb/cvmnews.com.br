@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 // Rotas que requerem autenticação
 const PROTECTED_ROUTES = ['/', '/admin']
 // Rotas que NÃO devem redirecionar (login, API, assets)
-const PUBLIC_PATHS = ['/login', '/api', '/_next', '/favicon', '/robots', '/sitemap']
+const PUBLIC_PATHS = ['/login', '/admin/login', '/api', '/_next', '/favicon', '/robots', '/sitemap', '/logo']
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

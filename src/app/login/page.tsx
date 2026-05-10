@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Lock, AudioWaveform, Loader2, Mail, Eye, EyeOff, ArrowRight, Sparkles, Shield, Zap } from 'lucide-react'
+import { Lock, AudioWaveform, Loader2, Mail, Eye, EyeOff, ArrowRight, Sparkles, Shield, Zap, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 import Image from 'next/image'
 
@@ -264,6 +264,15 @@ export default function LoginPage() {
             <p className="text-center text-xs text-slate-600">
               OmniVoice &copy; {new Date().getFullYear()} — Plataforma de síntese de voz com IA
             </p>
+            <div className="mt-4 text-center">
+              <a
+                href="/admin/login"
+                className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-400 transition-colors"
+              >
+                <Settings className="w-3 h-3" />
+                Painel Administrativo
+              </a>
+            </div>
           </div>
         </div>
       </div>
