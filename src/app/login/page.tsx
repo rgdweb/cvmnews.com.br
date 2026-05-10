@@ -5,15 +5,22 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Lock, AudioWaveform, Loader2, Mail } from 'lucide-react'
+import { Lock, AudioWaveform, Loader2, Mail, Eye, EyeOff, ArrowRight, Sparkles, Shield, Zap } from 'lucide-react'
 import { toast } from 'sonner'
+import Image from 'next/image'
 
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  // Animação de entrada
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Verificar se já está logado
   useEffect(() => {
@@ -55,65 +62,218 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
-      <Card className="w-full max-w-md border-slate-700 bg-slate-800/50 backdrop-blur">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
-            <AudioWaveform className="w-7 h-7 text-white" />
+    <div className="min-h-screen flex flex-col lg:flex-row">
+      {/* ====== LADO ESQUERDO - Branding ====== */}
+      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] relative overflow-hidden bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700">
+        {/* Background decoration */}
+        <div className="absolute inset-0">
+          {/* Gradient orbs */}
+          <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-purple-400/20 blur-3xl animate-pulse" />
+          <div className="absolute bottom-[-15%] left-[-5%] w-[400px] h-[400px] rounded-full bg-violet-400/20 blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+          <div className="absolute top-[40%] left-[30%] w-[200px] h-[200px] rounded-full bg-indigo-400/15 blur-2xl animate-pulse" style={{ animationDelay: '2s' }} />
+
+          {/* Grid pattern overlay */}
+          <div
+            className="absolute inset-0 opacity-[0.03]"
+            style={{
+              backgroundImage: `linear-gradient(rgba(255,255,255,.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.5) 1px, transparent 1px)`,
+              backgroundSize: '50px 50px',
+            }}
+          />
+
+          {/* Floating sound wave bars */}
+          <div className="absolute bottom-12 left-12 flex items-end gap-1.5 opacity-60">
+            {[40, 65, 45, 80, 55, 70, 35, 60, 50, 75, 42, 68, 58].map((h, i) => (
+              <div
+                key={i}
+                className="w-1 bg-white/40 rounded-full"
+                style={{
+                  height: `${h}px`,
+                  animation: `pulse 2s ease-in-out ${i * 0.1}s infinite`,
+                }}
+              />
+            ))}
           </div>
-          <CardTitle className="text-2xl text-white">OmniVoice</CardTitle>
-          <CardDescription className="text-slate-400">
-            Faça login para acessar o sistema
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+        </div>
+
+        {/* Content */}
+        <div className="relative z-10 flex flex-col justify-center px-12 xl:px-20">
+          {/* Logo */}
+          <div
+            className={`transition-all duration-1000 ease-out ${
+              mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+            }`}
+          >
+            <div className="flex items-center gap-4 mb-10">
+              <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center shadow-2xl">
+                <Image src="/logo.svg" alt="VozPro" width={40} height={40} />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-white tracking-tight">VozPro</h1>
+                <p className="text-purple-200 text-sm font-medium">by OmniVoice</p>
+              </div>
+            </div>
+
+            {/* Tagline */}
+            <div className="max-w-lg">
+              <h2 className="text-4xl xl:text-5xl font-bold text-white leading-tight mb-6">
+                Sintetizador de voz
+                <span className="block text-transparent bg-clip-text bg-gradient-to-r from-purple-200 to-pink-200">
+                  com inteligência artificial
+                </span>
+              </h2>
+              <p className="text-lg text-purple-100/80 leading-relaxed mb-12">
+                Crie vozes profissionais, clonagem vocal, controle de emoções e trilhas musicais para seus projetos.
+              </p>
+            </div>
+
+            {/* Feature cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg">
+              {[
+                { icon: Sparkles, title: 'IA Avançada', desc: 'Vozes naturais e realistas' },
+                { icon: Shield, title: 'Seguro', desc: 'Seus dados protegidos' },
+                { icon: Zap, title: 'Rápido', desc: 'Geração em segundos' },
+                { icon: AudioWaveform, title: 'Qualidade Pro', desc: 'Áudio profissional' },
+              ].map((feature, i) => (
+                <div
+                  key={i}
+                  className={`flex items-start gap-3 p-4 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 transition-all duration-700 ${
+                    mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                  }`}
+                  style={{ transitionDelay: `${300 + i * 100}ms` }}
+                >
+                  <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                    <feature.icon className="w-4.5 h-4.5 text-purple-200" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">{feature.title}</p>
+                    <p className="text-xs text-purple-200/70">{feature.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ====== LADO DIREITO - Login Form ====== */}
+      <div className="flex-1 flex items-center justify-center bg-slate-950 px-6 py-12 lg:px-12 xl:px-20 relative">
+        {/* Subtle bg pattern for mobile feel */}
+        <div className="absolute inset-0 lg:hidden">
+          <div className="absolute top-[-20%] right-[-20%] w-[400px] h-[400px] rounded-full bg-violet-600/10 blur-3xl" />
+          <div className="absolute bottom-[-20%] left-[-20%] w-[300px] h-[300px] rounded-full bg-purple-600/10 blur-3xl" />
+        </div>
+
+        <div className={`w-full max-w-md relative z-10 transition-all duration-700 ease-out ${
+          mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+        }`}>
+          {/* Mobile logo */}
+          <div className="lg:hidden flex items-center gap-3 mb-10">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
+              <Image src="/logo.svg" alt="VozPro" width={28} height={28} />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white">VozPro</h1>
+              <p className="text-slate-500 text-xs">by OmniVoice</p>
+            </div>
+          </div>
+
+          {/* Header */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-white mb-2">Bem-vindo de volta</h2>
+            <p className="text-slate-400">
+              Faça login para acessar o painel de síntese de voz
+            </p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-5">
+            {/* Email */}
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-slate-300">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <Label htmlFor="email" className="text-sm font-medium text-slate-300">
+                Email
+              </Label>
+              <div className="relative group">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500 group-focus-within:text-violet-400 transition-colors" />
                 <Input
                   id="email"
                   type="email"
                   placeholder="seu@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 bg-slate-900/50 border-slate-600 text-white placeholder:text-slate-500"
+                  className="pl-11 h-12 bg-slate-900/80 border-slate-800 text-white placeholder:text-slate-600 rounded-xl focus:border-violet-500/50 focus:ring-violet-500/20 transition-all text-[15px]"
                   autoFocus
+                  autoComplete="email"
                 />
               </div>
             </div>
+
+            {/* Password */}
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-slate-300">Senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <Label htmlFor="password" className="text-sm font-medium text-slate-300">
+                Senha
+              </Label>
+              <div className="relative group">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-500 group-focus-within:text-violet-400 transition-colors" />
                 <Input
                   id="password"
-                  type="password"
-                  placeholder="Sua senha"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Digite sua senha"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 bg-slate-900/50 border-slate-600 text-white placeholder:text-slate-500"
+                  className="pl-11 pr-11 h-12 bg-slate-900/80 border-slate-800 text-white placeholder:text-slate-600 rounded-xl focus:border-violet-500/50 focus:ring-violet-500/20 transition-all text-[15px]"
+                  autoComplete="current-password"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4.5 h-4.5" />
+                  ) : (
+                    <Eye className="w-4.5 h-4.5" />
+                  )}
+                </button>
               </div>
             </div>
+
+            {/* Submit */}
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-semibold"
+              className="w-full h-12 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-violet-500/20 hover:shadow-violet-500/30 transition-all duration-300 text-[15px] mt-2"
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Entrando...
+                  <Loader2 className="w-4.5 h-4.5 mr-2 animate-spin" />
+                  Verificando...
                 </>
               ) : (
-                'Entrar'
+                <>
+                  Entrar
+                  <ArrowRight className="w-4.5 h-4.5 ml-2" />
+                </>
               )}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+
+          {/* Footer info */}
+          <div className="mt-10 pt-6 border-t border-slate-800/50">
+            <p className="text-center text-xs text-slate-600">
+              OmniVoice &copy; {new Date().getFullYear()} — Plataforma de síntese de voz com IA
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* CSS Animation for sound bars */}
+      <style jsx>{`
+        @keyframes pulse {
+          0%, 100% { transform: scaleY(1); }
+          50% { transform: scaleY(0.4); }
+        }
+      `}</style>
     </div>
   )
 }
