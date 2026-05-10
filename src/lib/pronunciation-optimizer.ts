@@ -677,6 +677,14 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
 
   'xingar': 'chingar',
   'xingamento': 'chingamento',
+
+  // === ACENTOS QUE CONFUNDEM O TTS ===
+  // O acento agudo faz o TTS alongar/distorcer a vogal
+  // "frequência" → TTS lê com ê esticado e errado, mas "frequencia" → pronuncia certo
+  'frequência': 'frequencia',
+  'Frequência': 'Frequencia',
+  'FREQUÊNCIA': 'FREQUENCIA',
+
   'lapso': 'lápisso',
   'Lapso': 'Lápisso',
 
