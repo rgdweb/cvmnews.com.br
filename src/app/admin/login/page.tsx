@@ -1,51 +1,41 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Lock, Loader2, Mail, Eye, EyeOff, ArrowRight, Shield } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Lock, AudioWaveform, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import Image from 'next/image'
 
-function AdminLoginForm() {
+export default function AdminLoginPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => { setMounted(true) }, [])
-
-  useEffect(() => {
-    fetch('/api/auth/verify').then(res => res.json()).then(data => {
-      if (data.authenticated) router.push('/admin')
-    }).catch(() => {})
-  }, [router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email.trim() || !password.trim()) {
-      toast.error('Preencha email e senha')
+    if (!password.trim()) {
+      toast.error('Digite a senha')
       return
     }
+
     setLoading(true)
     try {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ password }),
       })
+
       const data = await res.json()
+
       if (res.ok && data.success) {
         toast.success('Login realizado!')
-        const from = searchParams.get('from') || '/admin'
-        router.push(from)
+        router.push('/admin')
       } else {
-        toast.error(data.error || 'Email ou senha incorretos')
+        toast.error(data.error || 'Senha incorreta')
       }
     } catch {
       toast.error('Erro de conexão')
@@ -55,97 +45,51 @@ function AdminLoginForm() {
   }
 
   return (
-    <div className={`min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 transition-opacity duration-500 ${mounted ? 'opacity-100' : 'opacity-0'}`}>
-      {/* Background subtle glow */}
-      <div className="fixed top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-violet-600/5 blur-3xl pointer-events-none" />
-      <div className="fixed bottom-[-20%] right-[-10%] w-[400px] h-[400px] rounded-full bg-purple-600/5 blur-3xl pointer-events-none" />
-
-      <div className="w-full max-w-sm relative z-10">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg shadow-violet-500/20 mb-4">
-            <Image src="/logo.jpg" alt="VozPro" width={32} height={32} className="rounded" />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
+      <Card className="w-full max-w-md border-slate-700 bg-slate-800/50 backdrop-blur">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4 w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
+            <AudioWaveform className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-white">VozPro Admin</h1>
-          <div className="flex items-center justify-center gap-1.5 mt-1.5">
-            <Shield className="w-3 h-3 text-violet-400" />
-            <span className="text-xs text-violet-400 font-medium">Acesso restrito</span>
-          </div>
-        </div>
-
-        {/* Card */}
-        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm">
-          <p className="text-sm text-slate-400 text-center mb-6">
-            Apenas administradores podem acessar
-          </p>
-
+          <CardTitle className="text-2xl text-white">VozPro Admin</CardTitle>
+          <CardDescription className="text-slate-400">
+            Digite a senha para acessar o painel
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="admin-email" className="text-xs font-medium text-slate-400">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <Input
-                  id="admin-email"
-                  type="email"
-                  placeholder="admin@vozpro.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-9 h-10 bg-slate-800/80 border-slate-700 text-white placeholder:text-slate-600 rounded-lg text-sm focus:border-violet-500/50 focus:ring-violet-500/20"
-                  autoFocus
-                  autoComplete="email"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="admin-password" className="text-xs font-medium text-slate-400">Senha</Label>
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-slate-300">Senha</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <Input
-                  id="admin-password"
-                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  type="password"
                   placeholder="Senha de administrador"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-9 pr-9 h-10 bg-slate-800/80 border-slate-700 text-white placeholder:text-slate-600 rounded-lg text-sm focus:border-violet-500/50 focus:ring-violet-500/20"
-                  autoComplete="current-password"
+                  className="pl-10 bg-slate-900/50 border-slate-600 text-white placeholder:text-slate-500"
+                  autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
               </div>
             </div>
-
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-10 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg text-sm mt-1"
+              className="w-full bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-semibold"
             >
               {loading ? (
-                <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Verificando...</>
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Entrando...
+                </>
               ) : (
-                <><span>Entrar</span><ArrowRight className="w-3.5 h-3.5 ml-1.5" /></>
+                'Entrar'
               )}
             </Button>
           </form>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
-  )
-}
-
-export default function AdminLoginPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <div className="text-slate-500">Carregando...</div>
-      </div>
-    }>
-      <AdminLoginForm />
-    </Suspense>
   )
 }
