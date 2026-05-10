@@ -34,7 +34,7 @@ const DEFAULT_CONFIG: PreprocessConfig = {
   repeatLastWord: false,   // desativado — soa estranho repetir palavras
   sentenceBreak: true,
   maxSentenceLength: 20,
-  autoSpeed: true,         // ATIVADO — reduz velocidade quando texto é complexo
+  autoSpeed: false,        // DESATIVADO — usuário controla velocidade via slider
 }
 
 // ============================================================
@@ -85,12 +85,15 @@ export function preprocessTTS(text: string, config: Partial<PreprocessConfig> = 
     result = breakLongSentences(result, cfg.maxSentenceLength)
   }
 
-  // 7. Repetir última palavra de cada frase (opcional)
-  if (cfg.repeatLastWord) {
-    result = repeatLastWordOfSentences(result)
-  }
+  // 7. Repetir última palavra de cada frase (desativado permanentemente)
+  // repeatLastWord removido — soava estranho repetir palavras
 
-  // 8. Trim
+  // 8. Strip trailing punctuation from each line (chunking handles pauses)
+  result = result.split('\n').map(line => {
+    return line.replace(/[,;:.!?]+$/, '').trim()
+  }).filter(line => line.length > 0).join('\n')
+
+  // 9. Trim
   result = result.trim()
 
   return result
