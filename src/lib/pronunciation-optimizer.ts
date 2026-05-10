@@ -163,6 +163,42 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'HELLO': 'RELOU',
   'hi': 'rai',
   'Hi': 'Rai',
+  'how': 'ráu',
+  'How': 'Ráu',
+  'help': 'répe',
+  'Help': 'Répe',
+  'here': 'ríar',
+  'Here': 'Ríar',
+  'her': 'rêr',
+  'Her': 'Rêr',
+  'him': 'ríme',
+  'Him': 'Ríme',
+  'his': 'ríz',
+  'His': 'Ríz',
+  'happy': 'répi',
+  'Happy': 'Répi',
+  'hope': 'rôupe',
+  'Hope': 'Rôupe',
+  'heart': 'rárt',
+  'Heart': 'Rárt',
+  'health': 'rélfe',
+  'Health': 'Rélfe',
+  'half': 'réfe',
+  'Half': 'Réfe',
+  'hand': 'rénde',
+  'Hand': 'Rénde',
+  'head': 'réd',
+  'Head': 'Réd',
+  'hold': 'róulde',
+  'Hold': 'Róulde',
+  'hard': 'rárde',
+  'Hard': 'Rárde',
+  'hurt': 'rêrte',
+  'Hurt': 'Rêrte',
+  'huge': 'iúdje',
+  'Huge': 'Iúdje',
+  'human': 'iúmene',
+  'Human': 'Iúmene',
   'thank': 'fénque',
   'Thank': 'Fénque',
   'thanks': 'fénques',
@@ -1057,6 +1093,22 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
 }
 
 // ============================================================
+// SET DE PALAVRAS DO DICIONÁRIO QUE COMEÇAM COM H
+// ============================================================
+/**
+ * Palavras do dicionário que começam com H/h.
+ * Usado para PROTEGER essas palavras da regex do H mudo (passo 1d).
+ * Sem essa proteção, "Hello" virava "ello" antes do dicionário poder substituir.
+ * Inclui tanto palavras em inglês ("Hello", "Hear") quanto marcas ("Herbalife", "Heroku").
+ */
+const H_DICT_WORDS = new Set<string>()
+for (const w of Object.keys(PRONUNCIATION_DICTIONARY)) {
+  if (/^[Hh]/.test(w)) {
+    H_DICT_WORDS.add(w.toLowerCase())
+  }
+}
+
+// ============================================================
 // PRÉ-PROCESSADOR DE X — 6 sons contextuais
 // ============================================================
 
@@ -1378,7 +1430,13 @@ export function optimizePronunciation(text: string): string {
   // H MUDO no início de palavras — PT-BR: H inicial é SEMPRE mudo
   // "hoje" → "oje", "Hoje" → "oje", "HOMEM" → "omem"
   // IMPORTANTE: manter minúsculo! O TTS lê letra maiúscula como nome próprio e inventa H
-  result = result.replace(/\b[Hh]([aeiouáàãâéèêíïóôõúü])/g, (_, v) => v)
+  // ATENÇÃO: Não remover H de palavras que estão no dicionário (ex: "Hello" → dicionário vira "relou")
+  result = result.replace(/\b[Hh]([aeiouáàãâéèêíïóôõúü][a-zA-Záàãâéèêíïóôõúüç]*)/g, (match, rest) => {
+    // Se a palavra está no dicionário, manter intacta (será substituída no passo 9)
+    if (H_DICT_WORDS.has(match.toLowerCase())) return match
+    // Senão, remover o H mudo
+    return rest
+  })
 
   // ---- 2. NÚMEROS GRANDES POR EXTENSO ----
   // Anos: "2024" → "[dois mil vinte e quatro]" (quando precedido por "ano" ou similar)
