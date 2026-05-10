@@ -8,34 +8,38 @@ export async function POST(req: NextRequest) {
   try {
     const { email, password } = await req.json()
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email e senha são obrigatórios' }, { status: 400 })
+    if (!password) {
+      return NextResponse.json({ error: 'Senha é obrigatória' }, { status: 400 })
     }
 
-    // Tentar login com User (email + senha)
-    const result = await loginUser(email, password)
+    // Se tem email, tentar login com User (email + senha)
+    if (email) {
+      const result = await loginUser(email, password)
 
-    if (result.success && result.userId && result.role) {
-      const token = await createSession(result.userId, result.role)
-      const response = NextResponse.json({
-        success: true,
-        name: result.name,
-        role: result.role,
-      })
+      if (result.success && result.userId && result.role) {
+        const token = await createSession(result.userId, result.role)
+        const response = NextResponse.json({
+          success: true,
+          name: result.name,
+          role: result.role,
+        })
 
-      response.cookies.set(NEW_SESSION_KEY, token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24, // 24 hours
-        path: '/',
-      })
+        response.cookies.set(NEW_SESSION_KEY, token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24, // 24 hours
+          path: '/',
+        })
 
-      return response
+        return response
+      }
+
+      // Se o login por email falhou, retorna erro
+      return NextResponse.json({ error: result.error || 'Email ou senha incorretos' }, { status: 401 })
     }
 
-    // Fallback: login legado com senha única (ADMIN_PASSWORD)
-    // O email é usado como senha legada para compatibilidade
+    // Sem email = login legado com senha única (ADMIN_PASSWORD)
     const legacyResult = await loginLegacy(password)
     if (legacyResult.success && legacyResult.token) {
       const response = NextResponse.json({ success: true, name: 'Admin', role: 'admin' })
@@ -51,7 +55,7 @@ export async function POST(req: NextRequest) {
       return response
     }
 
-    return NextResponse.json({ error: result.error || 'Email ou senha incorretos' }, { status: 401 })
+    return NextResponse.json({ error: 'Senha incorreta' }, { status: 401 })
   } catch (error) {
     console.error('Auth error:', error)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
