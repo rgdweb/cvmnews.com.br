@@ -249,16 +249,21 @@ export async function POST(request: NextRequest) {
       .replace(/https?:\/\/[^\s]+/g, '')
       .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '')
 
-    // PASSO 3: Manter apenas letras, numeros, espacos e acentos PT-BR
-    cleanText = cleanText.replace(/[^\w\s\u00C0-\u024F]/g, ' ')
+    // PASSO 3: Manter letras, numeros, espacos, acentos PT-BR E pontuação de pausa
+    // Preservar: vírgula (,) ponto-e-vírgula (;) dois pontos (:) exclamação (!) interrogação (?)
+    // O GPT-SoVITS respeita vírgulas naturalmente — isso garante pausas corretas
+    cleanText = cleanText.replace(/[^\w\s\u00C0-\u024F,;:!?.]/g, ' ')
 
     // PASSO 4: Remover colchetes de pronuncia forçada [palavra] → palavra
     cleanText = cleanText.replace(/\[([^\]]+)\]/g, '$1')
 
-    // PASSO 5: Limpar espaços multiplos
+    // PASSO 5: Limpar espaços multiplos (mas não remover espaços após vírgula)
     cleanText = cleanText.replace(/  +/g, ' ').trim()
 
-    // PASSO 6: Limitar tamanho (max 800 chars por chunk = seguro)
+    // PASSO 6: Garantir espaço após vírgula e ponto-e-vírgula (para o TTS não colar palavras)
+    cleanText = cleanText.replace(/([,;])(?=[^\s\d])/g, '$1 ')
+
+    // PASSO 7: Limitar tamanho (max 800 chars por chunk = seguro)
     if (cleanText.length > 800) {
       cleanText = cleanText.substring(0, 800).trim()
       debug.log('Text Guard', 'warn', `Texto truncado para 800 chars`)
@@ -266,7 +271,7 @@ export async function POST(request: NextRequest) {
 
     // Sanidade: se ficou vazio, usar original limpo
     if (!cleanText) {
-      cleanText = text.replace(/[^\w\s\u00C0-\u024F]/g, '').trim().substring(0, 500)
+      cleanText = text.replace(/[^\w\s\u00C0-\u024F,;:!?]/g, '').trim().substring(0, 500)
     }
 
     // PASSO 7: Clamp speed para range seguro do VozPro (0.25 a 4.0)

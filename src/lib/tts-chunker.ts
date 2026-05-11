@@ -1,20 +1,24 @@
 /**
  * TTS Text Chunker — Divide texto em frases com controle de prosódia
- * Estilo NaturalReaders: pontuação = pausas reais
+ * Estilo NaturalReaders: pontuação forte = pausas reais entre chunks
  * 
- * Pipeline obrigatório (não depende do modelo para pausas):
+ * Pipeline otimizado (v2 — velocidade + qualidade):
  * 
  * Entrada: "Olá, tudo bem? Hoje é dia especial."
  * ↓
- * Chunk 1: "Olá" → pausa: 180ms (vírgula)
- * Chunk 2: "tudo bem" → pausa: 500ms (interrogação)
- * Chunk 3: "Hoje é dia especial" → pausa: 0ms (fim)
+ * Chunk 1: "Olá, tudo bem" → pausa: 500ms (interrogação)
+ * Chunk 2: "Hoje é dia especial" → pausa: 0ms (fim)
  * ↓
  * Cada chunk é gerado separadamente pelo TTS
  * Áudios são concatenados com silêncio real entre eles
  * 
- * PRINCÍPIO: NENHUMA pontuação chega ao TTS.
- * Toda pontuação é convertida em pausas reais (silêncio).
+ * PRINCÍPIO: 
+ * - Pontuação FORTE (. ! ? ...) = quebra de chunk + silêncio real
+ * - Pontuação FRACA (, ; :) = mantida no texto do chunk (o TTS respeita naturalmente)
+ * - Isso reduz DRASTICAMENTE o número de chamadas à API
+ *   Ex: texto com 3 pontos e 8 vírgulas
+ *     Antes: 11 chunks = 11 chamadas API
+ *     Depois: 3 chunks = 3 chamadas API (3.6x mais rápido!)
  */
 
 // ============================================================
@@ -22,9 +26,9 @@
 // ============================================================
 
 export interface TextChunk {
-  text: string           // texto limpo SEM pontuação
+  text: string           // texto com vírgulas mantidas (TTS respeita naturalmente)
   pauseAfterMs: number   // silêncio REAL em ms após esta frase
-  punctuation: string    // pontuação original que causou a quebra: '.', '!', '?', ',', ';'
+  punctuation: string    // pontuação forte que causou a quebra: '.', '!', '?', '...'
   index: number          // índice do chunk (0-based)
 }
 
@@ -33,17 +37,14 @@ export interface TextChunk {
 // ============================================================
 
 const PAUSE_DURATION: Record<string, number> = {
-  ',': 180,     // vírgula → micro-pausa natural (NaturalReaders: ~150-200ms)
-  ';': 280,     // ponto e vírgula → pausa média
-  ':': 280,     // dois pontos → pausa média (equivalente a ponto e vírgula)
   '.': 400,     // ponto final → pausa longa (NaturalReaders: ~350-450ms)
   '!': 450,     // exclamação → pausa expressiva
   '?': 500,     // interrogação → pausa expressiva
   '...': 600,   // reticências → pausa alongada
 }
 
-const MIN_CHUNK_CHARS = 3    // mínimo de caracteres por chunk
-const MAX_CHUNK_WORDS = 20   // máximo antes de forçar quebra
+const MIN_CHUNK_CHARS = 3     // mínimo de caracteres por chunk
+const MAX_CHUNK_WORDS = 30    // máximo de palavras antes de forçar quebra (aumentado)
 
 // ============================================================
 // CHUNKING PRINCIPAL
@@ -51,16 +52,16 @@ const MAX_CHUNK_WORDS = 20   // máximo antes de forçar quebra
 
 /**
  * Divide texto em chunks com controle de prosódia.
- * Estilo NaturalReaders: cada pontuação vira uma pausa real.
+ * Estilo NaturalReaders: pontuação forte = pausas reais.
  * 
- * Regras:
- * 1. Vírgula (,) → quebra com pausa curta (180ms)
- * 2. Ponto e vírgula (;) / dois pontos (:) → quebra com pausa média (280ms)
- * 3. Ponto final (.) → quebra com pausa longa (400ms)
- * 4. Exclamação (!) / interrogação (?) → pausa expressiva (450-500ms)
- * 5. Reticências (...) → pausa alongada (600ms)
- * 6. Frases muito longas (>20 palavras) → quebra forçada
- * 7. Frases muito curtas (< 3 chars) → mescla com a próxima
+ * Estratégia v2 (otimizada para velocidade):
+ * 1. Ponto final (.) → quebra com pausa longa (400ms)
+ * 2. Exclamação (!) / interrogação (?) → pausa expressiva (450-500ms)
+ * 3. Reticências (...) → pausa alongada (600ms)
+ * 4. Vírgulas (,) e ponto-e-vírgula (;) → MANTIDAS no texto do chunk
+ *    (o GPT-SoVITS respeita vírgulas naturalmente no texto)
+ * 5. Frases muito longas (>30 palavras) → quebra forçada em conjunções
+ * 6. Frases muito curtas (< 3 chars) → mescla com a próxima
  */
 export function chunkText(text: string): TextChunk[] {
   if (!text || !text.trim()) return []
@@ -71,11 +72,10 @@ export function chunkText(text: string): TextChunk[] {
   // Se o texto já tem newlines, usar como quebras primárias
   if (normalized.includes('\n')) {
     const newlineChunks = chunkByNewlines(normalized)
-    // Mas ainda processar cada linha para vírgulas internas
-    return expandChunksWithCommas(newlineChunks)
+    return splitLongChunks(newlineChunks)
   }
 
-  // Passo 1: Identificar TODOS os pontos de quebra (incluindo vírgulas)
+  // Passo 1: Identificar apenas pontos de quebra FORTE (. ! ? ...)
   const breakPoints = findBreakPoints(normalized)
 
   // Passo 2: Dividir texto nos pontos de quebra
@@ -92,7 +92,7 @@ export function chunkText(text: string): TextChunk[] {
 }
 
 // ============================================================
-// PASSO 1: ENCONTRAR PONTOS DE QUEBRA
+// PASSO 1: ENCONTRAR PONTOS DE QUEBRA (APENAS PONTUAÇÃO FORTE)
 // ============================================================
 
 interface BreakPoint {
@@ -102,8 +102,8 @@ interface BreakPoint {
 }
 
 /**
- * Encontra todos os pontos de quebra no texto.
- * Agora INCLUI vírgulas como pontos de quebra (estilo NaturalReaders).
+ * Encontra pontos de quebra FORTE no texto (. ! ? ...).
+ * Vírgulas e ponto-e-vírgula NÃO são pontos de quebra — ficam no texto.
  */
 function findBreakPoints(text: string): BreakPoint[] {
   const breaks: BreakPoint[] = []
@@ -128,12 +128,11 @@ function findBreakPoints(text: string): BreakPoint[] {
     
     // Pontuação forte (. ! ?) → quebra de sentença
     if (char === '.' || char === '!' || char === '?') {
-      // Ignorar pontos que são parte de abreviações ou números
       const nextChar = text[i + 1] || ''
       const prevChar = text[i - 1] || ''
       
-      // Ponto seguido de espaço ou fim = fim de frase
       // Ponto seguido de letra = abreviação (não quebrar)
+      // Ex: "Dr. Silva", "Av. Paulista"
       if (char === '.' && /[a-zA-ZÀ-ÿ]/.test(nextChar) && /[a-zA-ZÀ-ÿ]/.test(prevChar)) {
         i++
         continue
@@ -145,27 +144,20 @@ function findBreakPoints(text: string): BreakPoint[] {
         continue
       }
       
-      breaks.push({ index: i, punctuation: char, length: 1 })
-      i++
-      continue
-    }
-    
-    // Vírgula → quebra com pausa curta (NOVA: agora respeita vírgulas!)
-    if (char === ',') {
-      // Ignorar vírgulas dentro de números (1.000,50)
-      const nextChar = text[i + 1] || ''
-      if (/\d/.test(nextChar)) {
+      // Ponto seguido de outro ponto = reticências (já tratado acima)
+      if (char === '.' && nextChar === '.') {
         i++
         continue
       }
-      breaks.push({ index: i, punctuation: ',', length: 1 })
+      
+      breaks.push({ index: i, punctuation: char, length: 1 })
       i++
       continue
     }
     
-    // Ponto e vírgula / dois pontos → quebra média
-    if (char === ';' || char === ':') {
-      breaks.push({ index: i, punctuation: char, length: 1 })
+    // Vírgula, ponto-e-vírgula e dois pontos — NÃO quebram
+    // Elas ficam no texto do chunk (o TTS respeita naturalmente)
+    if (char === ',' || char === ';' || char === ':') {
       i++
       continue
     }
@@ -182,6 +174,7 @@ function findBreakPoints(text: string): BreakPoint[] {
 
 function splitAtBreakPoints(text: string, breakPoints: BreakPoint[]): TextChunk[] {
   if (breakPoints.length === 0) {
+    // Sem pontuação forte — retorna texto inteiro como um chunk
     return [{ text: text.trim(), pauseAfterMs: 0, punctuation: '.', index: 0 }]
   }
   
@@ -194,9 +187,16 @@ function splitAtBreakPoints(text: string, breakPoints: BreakPoint[]): TextChunk[
     const isLast = i === breakPoints.length - 1
     
     if (textBefore) {
+      // Manter vírgulas e pontuação fraca no texto
+      // Remover apenas a pontuação forte do final se tiver
+      let cleanText = textBefore
+      if (/[.!?]$/.test(cleanText) && !/\.{3}$/.test(cleanText)) {
+        cleanText = cleanText.slice(0, -1).trim()
+      }
+      
       chunks.push({
-        text: textBefore,
-        pauseAfterMs: isLast ? 0 : (PAUSE_DURATION[bp.punctuation] || 300),
+        text: cleanText || textBefore,
+        pauseAfterMs: isLast ? 0 : (PAUSE_DURATION[bp.punctuation] || 400),
         punctuation: bp.punctuation,
         index: chunks.length,
       })
@@ -226,7 +226,8 @@ function splitAtBreakPoints(text: string, breakPoints: BreakPoint[]): TextChunk[
 /**
  * Mescla chunks muito curtos com o próximo.
  * Evita chunks como "sim" ou "não" que geram áudio muito curto/artificial.
- * Mas NÃO mescla se a pausa for forte (. ! ?) — preserva parada natural.
+ * Só mescla se a pontuação que separa for vírgula (pontuação fraca no contexto
+ * de quebra = o ponto final de uma frase curta como "Ok.").
  */
 function mergeShortChunks(chunks: TextChunk[]): TextChunk[] {
   if (chunks.length <= 1) return chunks
@@ -237,23 +238,17 @@ function mergeShortChunks(chunks: TextChunk[]): TextChunk[] {
   while (i < chunks.length) {
     const current = chunks[i]
     const wordCount = current.text.split(/\s+/).filter(w => w.length > 0).length
+    const isShort = (wordCount < 3 && current.text.length < 20) || current.text.length < MIN_CHUNK_CHARS
 
-    // Só mescla se:
-    // 1. Chunk é curto (< 3 palavras E < 15 chars)
-    // 2. Não é o último chunk
-    // 3. A pontuação não é forte (. ! ?) — vírgula e ; podem mesclar
-    const isWeakPunct = current.punctuation === ',' || current.punctuation === ';'
-    const isShort = (wordCount < 3 && current.text.length < 15) || current.text.length < MIN_CHUNK_CHARS
-
-    if (isShort && isWeakPunct && i < chunks.length - 1) {
+    if (isShort && i < chunks.length - 1) {
       const next = chunks[i + 1]
       result.push({
-        text: current.text + ' ' + next.text,
-        pauseAfterMs: next.pauseAfterMs,  // usa a pausa do PRÓXIMO chunk
-        punctuation: next.punctuation,     // usa a pontuação do PRÓXIMO
+        text: current.text + ', ' + next.text,
+        pauseAfterMs: next.pauseAfterMs,
+        punctuation: next.punctuation,
         index: result.length,
       })
-      i += 2 // pula o próximo (já foi mesclado)
+      i += 2
     } else {
       result.push({ ...current, index: result.length })
       i++
@@ -269,7 +264,7 @@ function mergeShortChunks(chunks: TextChunk[]): TextChunk[] {
 
 /**
  * Quebra chunks com mais de MAX_CHUNK_WORDS palavras.
- * Procura vírgulas ou conjunções como ponto natural de quebra.
+ * Procura conjunções como ponto natural de quebra.
  */
 function splitLongChunks(chunks: TextChunk[]): TextChunk[] {
   const result: TextChunk[] = []
@@ -282,7 +277,7 @@ function splitLongChunks(chunks: TextChunk[]): TextChunk[] {
       continue
     }
 
-    // Procura ponto natural de quebra
+    // Procura ponto natural de quebra em conjunções
     const breakWords = ['e', 'mas', 'porem', 'contudo', 'porque', 'pois', 'portanto',
       'alem', 'tambem', 'quando', 'onde', 'como', 'para', 'com', 'mais', 'nao',
       'se', 'ou', 'essa', 'esse', 'esta', 'este', 'que', 'num', 'uma']
@@ -316,7 +311,7 @@ function splitLongChunks(chunks: TextChunk[]): TextChunk[] {
       const isLast = s === subChunks.length - 1
       result.push({
         text: subText,
-        pauseAfterMs: isLast ? chunk.pauseAfterMs : 200, // pausa curta entre sub-chunks
+        pauseAfterMs: isLast ? chunk.pauseAfterMs : 250, // pausa entre sub-chunks
         punctuation: isLast ? chunk.punctuation : ',',
         index: result.length,
       })
@@ -324,59 +319,6 @@ function splitLongChunks(chunks: TextChunk[]): TextChunk[] {
   }
 
   return result
-}
-
-// ============================================================
-// EXPANDIR CHUNKS COM VÍRGULAS INTERNAS
-// ============================================================
-
-/**
- * Para chunks que vieram de newline splitting, expandir vírgulas internas.
- * Transforma: "Olá, tudo bem, como vai?" em 3 chunks separados.
- */
-function expandChunksWithCommas(chunks: TextChunk[]): TextChunk[] {
-  const expanded: TextChunk[] = []
-
-  for (const chunk of chunks) {
-    // Verificar se tem vírgulas, ponto-e-vírgula ou dois pontos
-    const hasCommas = /[;,]/.test(chunk.text)
-    
-    if (!hasCommas || chunk.text.length < 10) {
-      expanded.push(chunk)
-      continue
-    }
-
-    // Encontrar pontos de vírgula/vírgula para quebrar
-    const commaBreaks: BreakPoint[] = []
-    for (let i = 0; i < chunk.text.length; i++) {
-      const char = chunk.text[i]
-      if (char === ',' || char === ';') {
-        const nextChar = chunk.text[i + 1] || ''
-        if (char === ',' && /\d/.test(nextChar)) continue // número
-        commaBreaks.push({ index: i, punctuation: char, length: 1 })
-      }
-    }
-
-    if (commaBreaks.length === 0) {
-      expanded.push(chunk)
-      continue
-    }
-
-    // Dividir nas vírgulas
-    const subChunks = splitAtBreakPoints(chunk.text, commaBreaks)
-    
-    for (let s = 0; s < subChunks.length; s++) {
-      const isLast = s === subChunks.length - 1
-      expanded.push({
-        text: subChunks[s].text,
-        pauseAfterMs: isLast ? chunk.pauseAfterMs : subChunks[s].pauseAfterMs,
-        punctuation: isLast ? chunk.punctuation : subChunks[s].punctuation,
-        index: expanded.length,
-      })
-    }
-  }
-
-  return expanded
 }
 
 // ============================================================
@@ -393,7 +335,7 @@ function chunkByNewlines(text: string): TextChunk[] {
   return lines.map((line, i) => {
     const trimmed = line.trim()
 
-    // Detectar pontuação final
+    // Detectar pontuação forte final
     const punctMatch = trimmed.match(/([.!?])\s*$/)
     const punctuation = punctMatch ? punctMatch[1] : '.'
     const cleanText = punctMatch ? trimmed.slice(0, -1).trim() : trimmed
@@ -402,7 +344,7 @@ function chunkByNewlines(text: string): TextChunk[] {
       text: cleanText || trimmed,
       pauseAfterMs: i < lines.length - 1
         ? (PAUSE_DURATION[punctuation] || 400)
-        : 0, // último chunk sem pausa
+        : 0,
       punctuation,
       index: i,
     }
