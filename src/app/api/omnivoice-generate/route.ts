@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripSSMLForTTS, parseSSML, containsSSML } from '@/lib/ssml-parser'
+import { trimAudioBuffer } from '@/lib/audio-trimmer'
 
 // POST /api/omnivoice-generate - Proxy para VozPro (k2-fsa) via tunnel
 // Usa API Gradio nativa do VozPro com parametros corretos
@@ -297,14 +298,20 @@ export async function POST(request: NextRequest) {
       // =============================================================
       debug.log('VozPro Clone', 'info', `Gerando voz clonada...`)
 
-      // 1. Baixar e fazer upload do audio de referencia
+      // 1. Baixar, trimar e fazer upload do audio de referencia
       let refAudioPath: string | null = null
       if (referenceAudioUrl) {
         debug.log('Ref Audio', 'info', 'Baixando audio de referencia...')
         try {
           const audioRes = await fetch(referenceAudioUrl)
           if (audioRes.ok) {
-            const audioBuffer = await audioRes.arrayBuffer()
+            let audioBuffer = await audioRes.arrayBuffer()
+            // Auto-trim: limitar a 12s para evitar CUDA OOM e melhorar qualidade
+            const trimResult = trimAudioBuffer(audioBuffer, referenceAudioName || 'ref.wav', 12)
+            if (trimResult.trimmed) {
+              audioBuffer = trimResult.buffer
+              debug.log('Ref Audio', 'info', `Trimado: ${trimResult.originalDurationSec.toFixed(1)}s → ${trimResult.resultDurationSec.toFixed(1)}s (${trimResult.format})`)
+            }
             refAudioPath = await uploadToGradio(effectiveUrl, audioBuffer, referenceAudioName, debug)
           } else {
             debug.log('Ref Audio', 'error', `Falha ao baixar: HTTP ${audioRes.status}`)
