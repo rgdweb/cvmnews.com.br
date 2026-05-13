@@ -864,14 +864,40 @@ export default function VozProClient() {
                 if (chunkRes.ok) {
                   const contentType = chunkRes.headers.get('content-type') || ''
                   if (contentType.includes('audio') || contentType.includes('octet-stream')) {
+                    // Resposta raw (wav/mp3 direto)
                     const buffer = await chunkRes.arrayBuffer()
                     return { buffer, pauseMs: chunk.pauseAfterMs }
-                  } else {
-                    // Se a resposta é JSON (erro), tenta single-shot fallback
-                    const json = await chunkRes.json().catch(() => null)
-                    console.warn(`[VozPro Chunk ${chunkIndex + 1}] Resposta não-audio: ${contentType}`, json?.error || '')
-                    return null
                   }
+                  // API retorna JSON com { audioUrl, ... } — buscar o áudio real
+                  const json = await chunkRes.json().catch(() => null)
+                  if (json?.audioUrl) {
+                    try {
+                      const url = json.audioUrl
+                      let buffer: ArrayBuffer
+
+                      if (url.startsWith('data:')) {
+                        // Data URI (base64) — converter direto para ArrayBuffer
+                        const base64 = url.split(',')[1]
+                        const binaryStr = atob(base64)
+                        const bytes = new Uint8Array(binaryStr.length)
+                        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
+                        buffer = bytes.buffer
+                      } else {
+                        // URL remoto — buscar
+                        const audioRes = await fetch(url)
+                        if (!audioRes.ok) throw new Error(`HTTP ${audioRes.status}`)
+                        buffer = await audioRes.arrayBuffer()
+                      }
+
+                      console.log(`[VozPro Chunk ${chunkIndex + 1}] Áudio obtido (${(buffer.byteLength / 1024).toFixed(0)} KB)`)
+                      return { buffer, pauseMs: chunk.pauseAfterMs }
+                    } catch (e) {
+                      console.warn(`[VozPro Chunk ${chunkIndex + 1}] Falha ao obter áudio:`, e)
+                    }
+                  }
+                  // Sem audioUrl — é erro mesmo
+                  console.warn(`[VozPro Chunk ${chunkIndex + 1}] Resposta sem áudio: ${contentType}`, json?.error || json?.message || '')
+                  return null
                 } else {
                   console.warn(`[VozPro Chunk ${chunkIndex + 1}] Erro: ${chunkRes.status}`)
                   return null
