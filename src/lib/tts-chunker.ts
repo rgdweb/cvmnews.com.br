@@ -223,13 +223,18 @@ function splitAtBreakPoints(text: string, breakPoints: BreakPoint[]): TextChunk[
     const isLast = i === breakPoints.length - 1
     
     if (textBefore) {
-      // Manter vírgulas e pontuação fraca no texto
-      // Remover apenas a pontuação forte do final se tiver
-      let cleanText = textBefore
-      if (/[.!?;:]$/.test(cleanText) && !/\.{3}$/.test(cleanText)) {
-        cleanText = cleanText.slice(0, -1).trim()
+      // MANTER pontuação — o TTS precisa dela para produzir finalização natural.
+      // Sem pontuação, o TTS produz final "morto" e o postprocess corta a última sílaba.
+      // Para chunks intermediários: trocar pontuação forte por vírgula (pausa curta + prosódia conectada).
+      // Para último chunk: manter pontuação original (frase final soa completa).
+      let cleanText = textBefore.trim()
+      if (!isLast && /[.!?]$/.test(cleanText)) {
+        // Chunk intermediário com ponto forte → trocar por vírgula
+        // Isso evita que o TTS faça pausa longa + frontend adicione outra pausa = duplo
+        cleanText = cleanText.slice(0, -1) + ','
       }
-      
+      // Manter ; : :? como estão (são pausas médias que o TTS respeita)
+
       chunks.push({
         text: cleanText || textBefore,
         pauseAfterMs: isLast ? 0 : (PAUSE_DURATION[bp.punctuation] || 400),
