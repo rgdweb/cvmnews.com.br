@@ -937,20 +937,31 @@ export default function VozProClient() {
             if (audioResults.length > 0) {
               console.log(`[VozPro] Concatenando ${audioResults.length} áudios (${failedCount} falhas)...`)
               const audioCtx = new AudioContext({ sampleRate: 44100 })
-              const offlineCtx = new OfflineAudioContext(1, 44100 * 600, 44100) // max 10 min
 
-              let currentTime = 0
+              // Passo 1: Decodificar todos os buffers e calcular duração total real
+              const decodedChunks: { audioBuffer: AudioBuffer; pauseMs: number }[] = []
+              let totalDuration = 0
               for (const { buffer, pauseMs } of audioResults) {
                 try {
                   const audioBuffer = await audioCtx.decodeAudioData(buffer.slice(0))
-                  const source = offlineCtx.createBufferSource()
-                  source.buffer = audioBuffer
-                  source.connect(offlineCtx.destination)
-                  source.start(currentTime)
-                  currentTime += audioBuffer.duration + (pauseMs / 1000)
+                  decodedChunks.push({ audioBuffer, pauseMs })
+                  totalDuration += audioBuffer.duration + (pauseMs / 1000)
                 } catch {
                   console.warn('[VozPro Chunk] Falha ao decodificar áudio')
                 }
+              }
+
+              // Passo 2: Criar OfflineAudioContext com duração EXATA + 0.5s margem
+              const totalSamples = Math.ceil(44100 * (totalDuration + 0.5))
+              const offlineCtx = new OfflineAudioContext(1, totalSamples, 44100)
+
+              let currentTime = 0
+              for (const { audioBuffer, pauseMs } of decodedChunks) {
+                const source = offlineCtx.createBufferSource()
+                source.buffer = audioBuffer
+                source.connect(offlineCtx.destination)
+                source.start(currentTime)
+                currentTime += audioBuffer.duration + (pauseMs / 1000)
               }
 
               const renderedBuffer = await offlineCtx.startRendering()

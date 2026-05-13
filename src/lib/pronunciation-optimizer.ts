@@ -1023,7 +1023,7 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'Firebase': 'Faíberbeise',
   'Heroku': 'Herócue',
   'DigitalOcean': 'Digital Océan',
-  'AWS': 'a dabliu és',
+  'AWS': 'a dâbliu és',
   'GCP': 'gê cê pê',
   'Azure': 'ézurre',
 
@@ -2022,7 +2022,8 @@ export async function optimizePronunciation(text: string): Promise<string> {
   }
 
   // ---- 12. URLs ----
-  result = result.replace(/(https?:\/\/)([^\s]+)/gi, (match, protocol, domain) => {
+  // Regex não captura pontuação final (. , ; : ! ? ) ) — evita falar "ponto" sobrando
+  result = result.replace(/(https?:\/\/)([^\s.,;:!?\)]+(?:\.[^\s.,;:!?\)]+)*)/gi, (match, protocol, domain) => {
     const spelled = domain.split('').map(c => {
       if (c === '.') return ' ponto '
       if (c === '/') return ' barra '
@@ -2036,18 +2037,20 @@ export async function optimizePronunciation(text: string): Promise<string> {
     return `[${protocol.replace('https', 'agá tê tê pê és').replace('http', 'agá tê tê pê').replace('://', ' dois pontos barra barra')} ${spelled}]`
   })
 
-  result = result.replace(/www\.([^\s]+)/gi, (match, domain) => {
+  // www.domínio.com — não captura pontuação final
+  result = result.replace(/www\.([^\s.,;:!?\)]+(?:\.[^\s.,;:!?\)]+)*)/gi, (match, domain) => {
     const spelled = domain.split('').map(c => {
       if (c === '.') return ' ponto '
       if (c === '/') return ' barra '
       if (c === '-') return ' traço '
       return c
     }).join('')
-    return `[dabliu dabliu dabliu ponto ${spelled}]`
+    return `[dâbliu dâbliu dâbliu ponto ${spelled}]`
   })
 
   // ---- 13. EMAILS ----
-  result = result.replace(/(\S+)@(\S+\.\S+)/g, (match, user, domain) => {
+  // Regex não captura pontuação final — evita quebrar frase
+  result = result.replace(/(\S+)@([^\s.,;:!?\)]+(?:\.[^\s.,;:!?\)]+)*)/g, (match, user, domain) => {
     const domainSpelled = domain.split('').map(c => {
       if (c === '.') return ' ponto '
       return c

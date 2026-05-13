@@ -109,10 +109,18 @@ interface BreakPoint {
  */
 function findBreakPoints(text: string): BreakPoint[] {
   const breaks: BreakPoint[] = []
+  let bracketDepth = 0  // rastrear profundidade de [colchetes]
   
   let i = 0
   while (i < text.length) {
     const char = text[i]
+    
+    // Rastrear colchetes — NUNCA quebrar dentro de [pronúncia forçada]
+    if (char === '[') { bracketDepth++; i++; continue }
+    if (char === ']') { bracketDepth = Math.max(0, bracketDepth - 1); i++; continue }
+    
+    // Se estamos dentro de colchetes, pular tudo (não buscar pontos de quebra)
+    if (bracketDepth > 0) { i++; continue }
     
     // Reticências (... ou …)
     if (char === '.' && text[i + 1] === '.' && text[i + 2] === '.') {
