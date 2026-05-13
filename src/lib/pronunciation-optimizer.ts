@@ -2,6 +2,7 @@
  * Pronunciation Optimizer — Pipeline completo de pronúncia PT-BR para TTS
  *
  * Camada 1: Regex expandido (0ms de latência)
+ * Camada 1.5: G2P via espeak-ng (fallback para palavras desconhecidas, ~10ms)
  * Camada 2: Dicionário de palavras problemáticas (0ms)
  * Camada 3: LLM fallback (1-3s, só quando necessário)
  *
@@ -1671,7 +1672,7 @@ export function processControlTags(text: string, engine: TTSEngine = 'vozpro'): 
  * 14. Emails
  * 15. Pontuação dupla e limpeza
  */
-export function optimizePronunciation(text: string): string {
+export async function optimizePronunciation(text: string): Promise<string> {
   let result = text
 
   // ---- 0. PROCESSAR TAGS DE CONTROLE ANTES DE TUDO ----
@@ -1952,7 +1953,15 @@ export function optimizePronunciation(text: string): string {
     return `[${user} arroba ${domainSpelled}]`
   })
 
-  // ---- 14. LIMPEZA FINAL ----
+  // ---- 14. G2P FALLBACK — espeak-ng para palavras desconhecidas ----
+  // Usa espeak-ng para detectar palavras que provavelmente serão pronunciadas errado
+  // e que NÃO estão no dicionário. Aplica pronúncia fonética como fallback.
+  // Isso cobre nomes próprios, neologismos e termos de nicho que o dicionário não cobre.
+  // NOTA: G2P é executado via /api/g2p-phonemize (endpoint separado)
+  // Esta camada só atua se o G2P responder — não bloqueia o pipeline se falhar.
+  result = await applyG2PFallback(result)
+
+  // ---- 15. LIMPEZA FINAL ----
   // Remover colchetes duplos: "[[texto]]" → "[texto]"
   result = result.replace(/\[\[([^\]]+)\]\]/g, '[$1]')
 
@@ -1964,6 +1973,161 @@ export function optimizePronunciation(text: string): string {
   result = result.replace(/  +/g, ' ')
 
   return result
+}
+
+// ============================================================
+// G2P FALLBACK — espeak-ng para palavras desconhecidas
+// ============================================================
+
+/**
+ * Detecta padrões de palavras que o TTS provavelmente pronunciará errado.
+ * Mesma lógica do endpoint /api/g2p-phonemize mas executada client-side.
+ */
+function isLikelyMispronounced(word: string): boolean {
+  const w = word.replace(/[.,;:!?¿¡…"'()\[\]{}]/g, '')
+  if (!w || w.length < 3) return false
+  const lower = w.toLowerCase()
+
+  // Grupos consonantais problemáticos no início (PT-BR)
+  if (/^(gn|pn|mn|pt|ps|bn)/.test(lower)) return true
+
+  // Palavras com X no início (6 sons possíveis, TTS erra maioria)
+  if (/^x/i.test(lower)) return true
+
+  // Palavras com ge/gi que TTS pode ler como G duro
+  if (/[gG][eEéÉêÊiIíÍ]/.test(w) && !/^[gG]ui/.test(lower)) return true
+
+  // Palavras com padrões típicos de inglês em texto PT
+  if (/[aeiou]tion$/.test(lower)) return true
+  if (/^(?:the|this|that|with|from|have|will|would|should|could|been|were|what|when|where|which|their|there|they|them|these|those|your|about)$/.test(lower)) return true
+
+  // Palavras muito longas com padrões incomuns (neologismos, termos técnicos)
+  if (w.length > 12 && /(?:qu|gu|nh|lh|ch)/.test(lower)) return true
+
+  return false
+}
+
+/**
+ * Aplica G2P fallback usando espeak-ng para palavras que provavelmente
+ * serão pronunciadas errado e que NÃO estão cobertas pelo dicionário.
+ *
+ * Funciona de forma não-bloqueante: se o G2P não responder, retorna
+ * o texto sem modificações. Nunca falha o pipeline.
+ */
+async function applyG2PFallback(text: string): Promise<string> {
+  // Palavras já entre colchetes já têm pronúncia forçada — ignorar
+  const bracketed = new Set<string>()
+  text.replace(/\[([^\]]+)\]/g, (_, content) => {
+    // Extrair palavras dentro de colchetes
+    content.split(/\s+/).forEach(w => bracketed.add(w.toLowerCase()))
+    return ''
+  })
+
+  // Encontrar palavras candidatas ao G2P
+  const words = text.split(/\s+/)
+  const candidates: string[] = []
+  const candidateIndices: number[] = []
+
+  for (let i = 0; i < words.length; i++) {
+    const clean = words[i].replace(/[.,;:!?¿¡…"'()\[\]{}]/g, '')
+    if (!clean || clean.length < 3) continue
+
+    const lower = clean.toLowerCase()
+
+    // Pular se já está entre colchetes, é número, ou está no dicionário
+    if (bracketed.has(lower)) continue
+    if (/^\d+$/.test(clean)) continue
+    if (PRONUNCIATION_DICTIONARY[clean] || PRONUNCIATION_DICTIONARY[words[i]]) continue
+    if (STRESS_DICTIONARY[lower]) continue
+
+    // Verificar se provavelmente será pronunciada errado
+    if (isLikelyMispronounced(clean)) {
+      candidates.push(clean)
+      candidateIndices.push(i)
+    }
+  }
+
+  if (candidates.length === 0) return text
+
+  try {
+    // Chamar endpoint G2P (não-bloqueante com timeout curto)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000) // 3s max
+
+    const res = await fetch('/api/g2p-phonemize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: candidates.join(' '), voice: 'pt-br', mode: 'words' }),
+      signal: controller.signal,
+    }).catch(() => null)
+
+    clearTimeout(timeoutId)
+
+    if (!res || !res.ok) return text
+
+    const data = await res.json()
+    if (!data.words || !Array.isArray(data.words)) return text
+
+    // Construir mapa de pronúncias IPA
+    const pronunciationMap = new Map<string, string>()
+    for (const item of data.words) {
+      if (item.word && item.ipa && item.ipa !== item.word) {
+        pronunciationMap.set(item.word.toLowerCase(), item.ipa)
+      }
+    }
+
+    // Aplicar pronúncias ao texto
+    let result = text
+    let offset = 0
+    for (let i = 0; i < candidateIndices.length; i++) {
+      const wordIdx = candidateIndices[i]
+      const originalWord = candidates[i]
+      const ipa = pronunciationMap.get(originalWord.toLowerCase())
+
+      if (ipa) {
+        // Substituir a palavra pela versão fonética entre colchetes
+        // Converter IPA para representação legível pelo TTS
+        const ttsPronunciation = ipaToTTS(ipa)
+        const replacement = `[${ttsPronunciation}]`
+
+        // Encontrar a posição da palavra no texto
+        const regex = new RegExp(`\\b${originalWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+        result = result.replace(regex, replacement)
+      }
+    }
+
+    return result
+  } catch {
+    // G2P falhou — retornar texto sem modificações
+    return text
+  }
+}
+
+/**
+ * Converte IPA para representação que o TTS consegue ler.
+ * Simplifica símbolos IPA complexos para grafemas PT-BR aproximados.
+ */
+function ipaToTTS(ipa: string): string {
+  return ipa
+    // Remover símbolos que o TTS não lê
+    .replace(/[ˈˌː̃ˑ.]/g, '')
+    // Vogais com acento IPA → vogais PT-BR simples
+    .replace(/ɛ/g, 'e')
+    .replace(/ɔ/g, 'o')
+    .replace(/ɑ/g, 'a')
+    .replace(/ɪ/g, 'i')
+    .replace(/ʊ/g, 'u')
+    .replace(/ʒ/g, 'j')
+    .replace(/ʃ/g, 'x')
+    .replace(/ɲ/g, 'nh')
+    .replace(/ʎ/g, 'lh')
+    .replace(/ʁ/g, 'r')
+    .replace(/ɐ/g, 'a')
+    .replace(/ø/g, 'e')
+    .replace(/y/g, 'u')
+    // Limpar duplicados
+    .replace(/(.)\1+/g, '$1')
+    .trim()
 }
 
 // ============================================================

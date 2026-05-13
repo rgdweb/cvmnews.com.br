@@ -40,7 +40,7 @@ export interface ConcatenationConfig {
 }
 
 const DEFAULT_CONFIG: ConcatenationConfig = {
-  crossfadeMs: 0,       // DESATIVADO — crossfade corta vogais finais
+  crossfadeMs: 50,       // 50ms — transição suave entre chunks sem cortar vogais
   trimSilenceMs: 80,     // só corta silêncio do INÍCIO (não do final)
   normalizeVolume: true,
   fadeOutMs: 150,        // fade-out final suave (150ms)

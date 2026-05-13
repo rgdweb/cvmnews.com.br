@@ -21,6 +21,7 @@ import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
 import VoicePreviewButton from '@/components/voice-preview-button'
 import { optimizePronunciation, processControlTags, containsSSML, type TTSEngine } from '@/lib/pronunciation-optimizer'
+import { parseSSML } from '@/lib/ssml-parser'
 import { preprocessTTS } from '@/lib/tts-text-preprocessor'
 import { chunkText, type TextChunk } from '@/lib/tts-chunker'
 
@@ -694,29 +695,23 @@ export default function VozProClient() {
     // ===== OTIMIZAÇÃO DE PRONÚNCIA (pipeline completo) =====
     let textToSend = text.trim()
 
-    // Se contém SSML, remover todas as tags (abandonado — apenas strip limpo)
-    if (containsSSML(textToSend)) {
-      textToSend = textToSend.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
-      console.log('[Pipeline] SSML removido, texto limpo enviado ao TTS')
-    }
-
     // Pipeline normal (sem SSML)
     const engine: TTSEngine = ttsModel === 'omnivoice' ? 'vozpro' : 'f5tts'
+
+    // Se contém SSML, converter para formato nativo do TTS engine
+    // parseSSML converte tags para notação VozPro/F5-TTS (brackets, pausas, ênfase)
+    if (containsSSML(textToSend)) {
+      textToSend = parseSSML(textToSend, engine)
+      console.log('[Pipeline] SSML convertido para formato nativo do', engine)
+    }
 
     // 1. Control tags (sempre ativo)
     textToSend = processControlTags(textToSend, engine)
 
-    // 1b. H MUDO — remover ANTES de qualquer preprocessamento
-    // Palavras problemáticas que o TTS reinventa H mesmo após remoção
-    // Usamos [pronúncia] que o VozPro interpreta como pronúncia forçada
-    if (pronunciationOptimization) {
-      textToSend = textToSend.replace(/\b[Hh]oje\b/gi, '[oje]')
-      textToSend = textToSend.replace(/\b[Hh]ora\b/gi, '[ora]')
-      textToSend = textToSend.replace(/\b[Hh]omem\b/gi, '[omem]')
-      textToSend = textToSend.replace(/\b[Hh]onesto\b/gi, '[onesto]')
-      // H mudo geral — remove H de todas as outras palavras
-      textToSend = textToSend.replace(/\b[Hh]([aeiouáàãâéèêíïóôõúü])/g, (_, v) => v)
-    }
+    // 1b. H MUDO — REMOVIDO DAQUI! O pronunciation-optimizer.ts (step 1d) já trata H mudo
+    // com proteção completa via H_DICT_WORDS. Palavras em inglês como "Hello", "Hear", etc.
+    // são protegidas automaticamente. Remover H aqui ANTES do dicionário corrompia palavras em inglês.
+    // O optimizePronunciation() na linha 728 faz todo o trabalho corretamente.
 
     // 2. Text preprocessor (pontuação, spacing)
     if (pronunciationOptimization) {
@@ -725,7 +720,7 @@ export default function VozProClient() {
 
     // 3. Regex + dictionary pipeline
     if (pronunciationOptimization) {
-      textToSend = optimizePronunciation(textToSend)
+      textToSend = await optimizePronunciation(textToSend)
     }
 
     // 4. LLM pre-processor (opcional, só quando toggle ativo)
