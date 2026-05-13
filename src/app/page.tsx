@@ -933,7 +933,9 @@ export default function VozProClient() {
             // Ordenar resultados pelo índice original (paralelo pode desordenar)
             audioResults.sort((a, b) => a.index - b.index)
 
-            // Concatenar áudios com silêncio entre chunks + crossfade para emenda suave
+            // Concatenar áudios com silêncio entre chunks
+            // O chunker agora mantém pontuação no texto → TTS produz finais limpos
+            // Basta colar chunks com silêncio (pausa configurada) entre eles.
             if (audioResults.length > 0) {
               console.log(`[VozPro] Concatenando ${audioResults.length} áudios (${failedCount} falhas)...`)
               const audioCtx = new AudioContext({ sampleRate: 44100 })
@@ -952,82 +954,45 @@ export default function VozProClient() {
               if (decodedChunks.length === 0) {
                 console.warn('[VozPro] Nenhum chunk decodificado')
               } else {
-                // Passo 2: Crossfade manual sample-by-sample para emenda suave
-                // O VozPro corta silêncio do início/fim (po=true), o que pode cortar
-                // sílabas. O crossfade suaviza a transição entre chunks.
+                // Passo 2: Concatenação simples com silêncio entre chunks
+                // O TTS agora recebe pontuação → produz finais naturais → sem corte de sílabas
                 const SAMPLE_RATE = 44100
-                const CROSSFADE_SAMPLES = Math.floor(SAMPLE_RATE * 0.05) // 50ms crossfade
 
-                // Calcular duração total (incluindo pausas entre chunks)
+                // Calcular duração total
                 let totalSamples = 0
                 for (let i = 0; i < decodedChunks.length; i++) {
-                  const chunk = decodedChunks[i]
-                  const pauseSamples = Math.floor((chunk.pauseMs / 1000) * SAMPLE_RATE)
-                  totalSamples += chunk.audioBuffer.length + pauseSamples
+                  totalSamples += decodedChunks[i].audioBuffer.length
+                  if (i < decodedChunks.length - 1) {
+                    totalSamples += Math.floor((decodedChunks[i].pauseMs / 1000) * SAMPLE_RATE)
+                  }
                 }
                 // Margem de segurança
                 totalSamples += Math.floor(SAMPLE_RATE * 0.5)
 
                 // Criar buffer final
-                const offlineCtx = new OfflineAudioContext(1, totalSamples, SAMPLE_RATE)
-                const output = offlineCtx.createBuffer(1, totalSamples, SAMPLE_RATE)
+                const output = new AudioContext({ sampleRate: SAMPLE_RATE }).createBuffer(1, totalSamples, SAMPLE_RATE)
                 const outputData = output.getChannelData(0)
 
                 let writePos = 0
                 for (let i = 0; i < decodedChunks.length; i++) {
                   const { audioBuffer, pauseMs } = decodedChunks[i]
                   const data = audioBuffer.getChannelData(0)
-                  const chunkLen = data.length
 
-                  if (i === 0) {
-                    // Primeiro chunk: copiar integralmente
-                    for (let s = 0; s < chunkLen && writePos < outputData.length; s++) {
-                      outputData[writePos++] = data[s]
-                    }
-                  } else {
-                    // Chunks subsequentes: crossfade com o final do chunk anterior
+                  // Copiar dados do chunk
+                  for (let s = 0; s < data.length && writePos < outputData.length; s++) {
+                    outputData[writePos++] = data[s]
+                  }
+
+                  // Adicionar silêncio entre chunks (exceto após o último)
+                  if (i < decodedChunks.length - 1) {
                     const pauseSamples = Math.floor((pauseMs / 1000) * SAMPLE_RATE)
-
-                    // Se há pausa suficiente, preencher silêncio + crossfade curto
-                    if (pauseSamples > CROSSFADE_SAMPLES) {
-                      // Preencher silêncio (menos o crossfade overlap)
-                      const silenceLen = pauseSamples - CROSSFADE_SAMPLES
-                      // Fade OUT do final do chunk anterior (já escrito)
-                      const fadeOutStart = Math.max(0, writePos - CROSSFADE_SAMPLES)
-                      for (let s = fadeOutStart; s < writePos; s++) {
-                        const t = (s - fadeOutStart) / CROSSFADE_SAMPLES // 0→1
-                        outputData[s] *= (1 - t * t) // fade out quadrático
-                      }
-                      // Silêncio
-                      writePos += silenceLen
-                      // Fade IN do início do novo chunk
-                      for (let s = 0; s < chunkLen && writePos < outputData.length; s++) {
-                        const fadeFactor = s < CROSSFADE_SAMPLES ? (s / CROSSFADE_SAMPLES) * (s / CROSSFADE_SAMPLES) : 1
-                        outputData[writePos++] = data[s] * fadeFactor
-                      }
-                    } else {
-                      // Pausa curta ou zero: crossfade direto entre chunks
-                      // O crossfade sobrepõe o final do chunk anterior com o início do novo
-                      const overlapSamples = Math.min(CROSSFADE_SAMPLES, chunkLen)
-                      // Voltar writePos para cobrir o overlap
-                      const overlapStart = Math.max(0, writePos - overlapSamples)
-                      // Aplicar crossfade
-                      for (let s = 0; s < overlapSamples && writePos < outputData.length; s++) {
-                        const t = s / overlapSamples // 0→1
-                        const prevSample = outputData[overlapStart + s] * (1 - t * t) // fade out
-                        const newSample = s < chunkLen ? data[s] * (t * t) : 0 // fade in
-                        outputData[overlapStart + s] = prevSample + newSample
-                      }
-                      // Continuar copiando o resto do chunk
-                      writePos = overlapStart + overlapSamples
-                      for (let s = overlapSamples; s < chunkLen && writePos < outputData.length; s++) {
-                        outputData[writePos++] = data[s]
-                      }
-                    }
+                    // Preencher com silêncio (zeros)
+                    // writePos já está nos zeros (não precisa escrever explicitamente)
+                    writePos += pauseSamples
                   }
                 }
 
-                // Passo 3: Converter para WAV via OfflineAudioContext
+                // Passo 3: Converter para WAV
                 const finalBuffer = new AudioContext({ sampleRate: SAMPLE_RATE }).createBuffer(1, writePos, SAMPLE_RATE)
                 const finalData = finalBuffer.getChannelData(0)
                 for (let i = 0; i < writePos; i++) finalData[i] = outputData[i]
