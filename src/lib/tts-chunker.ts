@@ -381,3 +381,53 @@ export function formatChunkSummary(chunks: TextChunk[]): string {
 export function estimateTotalPauseMs(chunks: TextChunk[]): number {
   return chunks.reduce((sum, c) => sum + c.pauseAfterMs, 0)
 }
+
+// ============================================================
+// DURATION PREDICTOR — Estima duração de cada chunk
+// ============================================================
+
+/**
+ * Estima a duração de fala de um texto em milissegundos.
+ * Baseado em contagem de sílabas + complexidade fonética.
+ * Usado para ajustar velocidade e pausas proporcionalmente.
+ *
+ * PT-BR médio: ~5.5 sílabas por segundo = ~182ms por sílaba
+ * Palavras longas = mais tempo por sílaba (articulação mais lenta)
+ * Pontuação final alonga a última sílaba
+ */
+export function estimateChunkDurationMs(chunk: string, speed = 1.0): number {
+  const words = chunk.split(/\s+/).filter(w => w.length > 0)
+  let totalMs = 0
+
+  for (const word of words) {
+    const clean = word.replace(/[.,;:!?¿¡…"'()\[\]{}]/g, '')
+    if (!clean) continue
+
+    // Contar sílabas (aproximação: grupos de vogais)
+    const syllableCount = Math.max(1, (clean.match(/[aeiouáàãâéèêíïóôõúü]/gi) || []).length)
+
+    // Base: ~180ms por sílaba em velocidade normal
+    const baseMsPerSyllable = 180
+
+    // Ajuste por comprimento da palavra (palavras longas = articulação mais lenta)
+    const lengthFactor = clean.length > 8 ? 1.15 : clean.length > 5 ? 1.05 : 1.0
+
+    // Ajuste por posição (última palavra antes de pontuação forte = alongada)
+    const isLastWord = word === words[words.length - 1]
+    const endFactor = isLastWord ? 1.2 : 1.0
+
+    totalMs += syllableCount * baseMsPerSyllable * lengthFactor * endFactor
+  }
+
+  // Ajustar por velocidade
+  return Math.round(totalMs / speed)
+}
+
+/**
+ * Retorna duração estimada total de todos os chunks (em segundos)
+ */
+export function estimateTotalDurationSec(chunks: TextChunk[], speed = 1.0): number {
+  const totalSpeechMs = chunks.reduce((sum, c) => sum + estimateChunkDurationMs(c.text, speed), 0)
+  const totalPauseMs = estimateTotalPauseMs(chunks)
+  return Math.round((totalSpeechMs + totalPauseMs) / 100) / 10 // arredondar para 1 casa
+}

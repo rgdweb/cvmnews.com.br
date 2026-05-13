@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { stripSSMLForTTS } from '@/lib/ssml-parser'
+import { stripSSMLForTTS, parseSSML, containsSSML } from '@/lib/ssml-parser'
 
 // POST /api/omnivoice-generate - Proxy para VozPro (k2-fsa) via tunnel
 // Usa API Gradio nativa do VozPro com parametros corretos
@@ -241,8 +241,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Texto e obrigatorio' }, { status: 400 })
     }
 
-    // PASSO 1: Remover SSML se presente
-    let cleanText = stripSSMLForTTS(text)
+    // PASSO 1: Converter SSML para formato nativo VozPro (se presente)
+    // parseSSML converte tags SSML em notação VozPro (brackets, pausas, ênfase)
+    // stripSSMLForTTS apenas removia tudo — perdia <break>, <emphasis>, <prosody>, <phoneme>
+    let cleanText = containsSSML(text) ? parseSSML(text, 'vozpro') : text
 
     // PASSO 2: Limpar URLs, emails e caracteres especiais
     cleanText = cleanText
@@ -253,7 +255,7 @@ export async function POST(request: NextRequest) {
     // Preservar: vírgula (,) ponto-e-vírgula (;) dois pontos (:) exclamação (!) interrogação (?)
     // Preservar: colchetes [] para pronúncia forçada suportada pelo VozPro
     // O GPT-SoVITS respeita vírgulas naturalmente — isso garante pausas corretas
-    cleanText = cleanText.replace(/[^\w\s\u00C0-\u024F,;:!?.\[\]]/g, ' ')
+    cleanText = cleanText.replace(/[^\w\s\u00C0-\u024F,;:!?.\[\]'\-\/%°ªº&@]/g, ' ')
 
     // PASSO 4: PRESERVAR colchetes de pronúncia forçada [palavra]
     // O VozPro suporta [pronúncia] nativamente — NÃO remover!

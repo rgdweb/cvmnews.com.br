@@ -468,7 +468,7 @@ $gradioData = [
         'mime_type' => (pathinfo($refAudioName, PATHINFO_EXTENSION) === 'mp3') ? 'audio/mpeg' : 'audio/wav',
         'meta' => ['_type' => 'gradio.FileData']
     ],
-    '',        // refText: vazio (interface do VozPro envia vazio!)
+    $refText ?? '',  // refText: usa texto de referência do admin (vazio = Whisper auto)
     null,      // instruct: null (interface do VozPro envia null!)
     (int)$numStep,
     (float)$guidanceScale,
