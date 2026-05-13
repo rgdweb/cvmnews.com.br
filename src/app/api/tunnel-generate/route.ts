@@ -3,6 +3,7 @@ import { chunkText, formatChunkSummary, type TextChunk } from '@/lib/tts-chunker
 import { concatenateAudioBuffers, applyFadeOut, type AudioChunk } from '@/lib/audio-concatenator'
 import { validateGeneratedAudio, shouldRetry, formatValidationLog } from '@/lib/asr-validator'
 import { stripSSMLForTTS } from '@/lib/ssml-parser'
+import { trimAudioBuffer } from '@/lib/audio-trimmer'
 
 // POST /api/tunnel-generate - Geracao direta via tunnel cloudflared
 // Pipeline completo com prosódia:
@@ -398,6 +399,15 @@ export async function POST(req: NextRequest) {
         debug.log('Ref Audio', 'ok', `Download: ${(audioBuffer.byteLength / 1024).toFixed(1)}KB`)
       } else {
         return NextResponse.json({ error: 'Audio de referencia obrigatório no modo clone', debug: debug.result() }, { status: 400 })
+      }
+
+      // Auto-trim: limitar a 12s para evitar CUDA OOM e melhorar qualidade
+      if (audioBuffer) {
+        const trimResult = trimAudioBuffer(audioBuffer, fileName, 12)
+        if (trimResult.trimmed) {
+          audioBuffer = trimResult.buffer
+          debug.log('Ref Audio', 'info', `Trimado: ${trimResult.originalDurationSec.toFixed(1)}s → ${trimResult.resultDurationSec.toFixed(1)}s (${trimResult.format})`)
+        }
       }
 
       fileName = referenceAudioName || 'reference.wav'
