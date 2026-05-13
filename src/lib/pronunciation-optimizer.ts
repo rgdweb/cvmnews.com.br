@@ -1925,14 +1925,25 @@ export async function optimizePronunciation(text: string): Promise<string> {
 
   // ---- 3e-0e. PLACAS DE VEÍCULOS ----
   // Formato antigo: ABC-1234, Mercosul: ABC1D23
+  // Nomes fonéticos das letras em PT-BR (alfabeto completo)
+  const LETTER_NAMES: Record<string, string> = {
+    'A': 'á', 'B': 'bê', 'C': 'cê', 'D': 'dê', 'E': 'é',
+    'F': 'éfe', 'G': 'gê', 'H': 'agá', 'I': 'í', 'J': 'jota',
+    'K': 'cá', 'L': 'éle', 'M': 'ême', 'N': 'ène', 'O': 'ó',
+    'P': 'pê', 'Q': 'quê', 'R': 'érre', 'S': 'ésse', 'T': 'tê',
+    'U': 'ú', 'V': 'vê', 'W': 'dâbliu', 'X': 'xís', 'Y': 'ípsilon', 'Z': 'zê'
+  }
+  const spellLetter = (l: string) => LETTER_NAMES[l] || l
+
   result = result.replace(/\b([A-Z]{3})-(\d{4})\b/g, (match, letters, digits) => {
-    const spellLetters = letters.split('').map(l => l === 'A' ? 'á' : l === 'E' ? 'é' : l === 'I' ? 'í' : l === 'O' ? 'ó' : l === 'U' ? 'ú' : l).join(' ')
+    const spellLetters = letters.split('').map(spellLetter).join(' ')
     const spellDigits = digits.split('').map(d => numberToWords(parseInt(d))).join(' ')
     return `[${spellLetters}] [${spellDigits}]`
   })
   result = result.replace(/\b([A-Z]{3})(\d)([A-Z])(\d{2})\b/g, (match, l1, d1, l2, d2) => {
-    const spellL1 = l1.split('').map(l => l === 'A' ? 'á' : l === 'E' ? 'é' : l === 'I' ? 'í' : l === 'O' ? 'ó' : l === 'U' ? 'ú' : l).join(' ')
-    return `[${spellL1}] [${numberToWords(parseInt(d1))}] [${l2.toLowerCase() === 'a' ? 'á' : l2.toLowerCase() === 'e' ? 'é' : l2.toLowerCase() === 'i' ? 'í' : l2.toLowerCase() === 'o' ? 'ó' : l2.toLowerCase()}] [${d2.split('').map(d => numberToWords(parseInt(d))).join(' ')}]`
+    const spellL1 = l1.split('').map(spellLetter).join(' ')
+    const spellL2 = spellLetter(l2)
+    return `[${spellL1}] [${numberToWords(parseInt(d1))}] [${spellL2}] [${d2.split('').map(d => numberToWords(parseInt(d))).join(' ')}]`
   })
 
   // ---- 3e-0f. APROXIMAÇÃO (~N) ----
