@@ -1031,7 +1031,7 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'Firebase': 'Faíberbeise',
   'Heroku': 'Herócue',
   'DigitalOcean': 'Digital Océan',
-  'AWS': 'a dâbliu és',
+  'AWS': 'a dábliu és',
   'GCP': 'gê cê pê',
   'Azure': 'ézurre',
 
@@ -1931,7 +1931,7 @@ export async function optimizePronunciation(text: string): Promise<string> {
     'F': 'éfe', 'G': 'gê', 'H': 'agá', 'I': 'í', 'J': 'jota',
     'K': 'cá', 'L': 'éle', 'M': 'ême', 'N': 'ène', 'O': 'ó',
     'P': 'pê', 'Q': 'quê', 'R': 'érre', 'S': 'ésse', 'T': 'tê',
-    'U': 'ú', 'V': 'vê', 'W': 'dâbliu', 'X': 'xís', 'Y': 'ípsilon', 'Z': 'zê'
+    'U': 'ú', 'V': 'vê', 'W': 'dábliu', 'X': 'xís', 'Y': 'ípsilon', 'Z': 'zê'
   }
   const spellLetter = (l: string) => LETTER_NAMES[l] || l
 
@@ -2143,7 +2143,7 @@ export async function optimizePronunciation(text: string): Promise<string> {
       if (c === '-') return ' traço '
       return c
     }).join('')
-    return `[dâbliu dâbliu dâbliu ponto ${spelled}]`
+    return `[dábliu dábliu dábliu ponto ${spelled}]`
   })
 
   // ---- 13. EMAILS ----

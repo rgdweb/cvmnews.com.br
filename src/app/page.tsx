@@ -933,52 +933,122 @@ export default function VozProClient() {
             // Ordenar resultados pelo índice original (paralelo pode desordenar)
             audioResults.sort((a, b) => a.index - b.index)
 
-            // Concatenar áudios com silêncio entre chunks
+            // Concatenar áudios com silêncio entre chunks + crossfade para emenda suave
             if (audioResults.length > 0) {
               console.log(`[VozPro] Concatenando ${audioResults.length} áudios (${failedCount} falhas)...`)
               const audioCtx = new AudioContext({ sampleRate: 44100 })
 
-              // Passo 1: Decodificar todos os buffers e calcular duração total real
+              // Passo 1: Decodificar todos os buffers
               const decodedChunks: { audioBuffer: AudioBuffer; pauseMs: number }[] = []
-              let totalDuration = 0
               for (const { buffer, pauseMs } of audioResults) {
                 try {
                   const audioBuffer = await audioCtx.decodeAudioData(buffer.slice(0))
                   decodedChunks.push({ audioBuffer, pauseMs })
-                  totalDuration += audioBuffer.duration + (pauseMs / 1000)
                 } catch {
                   console.warn('[VozPro Chunk] Falha ao decodificar áudio')
                 }
               }
 
-              // Passo 2: Criar OfflineAudioContext com duração EXATA + 0.5s margem
-              const totalSamples = Math.ceil(44100 * (totalDuration + 0.5))
-              const offlineCtx = new OfflineAudioContext(1, totalSamples, 44100)
-
-              let currentTime = 0
-              for (const { audioBuffer, pauseMs } of decodedChunks) {
-                const source = offlineCtx.createBufferSource()
-                source.buffer = audioBuffer
-                source.connect(offlineCtx.destination)
-                source.start(currentTime)
-                currentTime += audioBuffer.duration + (pauseMs / 1000)
-              }
-
-              const renderedBuffer = await offlineCtx.startRendering()
-              const wavBlob = audioBufferToWavBlob(renderedBuffer)
-              const finalUrl = URL.createObjectURL(wavBlob)
-
-              setAudioUrl(finalUrl)
-              setIsGenerating(false)
-              clearInterval(timerInterval)
-              setGeneratingTime(Math.floor((Date.now() - genStartTime) / 1000))
-
-              if (audioResults.length === chunks.length) {
-                toast.success(`${audioResults.length} frases geradas com sucesso!`)
+              if (decodedChunks.length === 0) {
+                console.warn('[VozPro] Nenhum chunk decodificado')
               } else {
-                toast.warning(`${audioResults.length}/${chunks.length} frases geradas${failedCount > 0 ? ` (${failedCount} falha(s))` : ''}`)
-              }
-              return
+                // Passo 2: Crossfade manual sample-by-sample para emenda suave
+                // O VozPro corta silêncio do início/fim (po=true), o que pode cortar
+                // sílabas. O crossfade suaviza a transição entre chunks.
+                const SAMPLE_RATE = 44100
+                const CROSSFADE_SAMPLES = Math.floor(SAMPLE_RATE * 0.05) // 50ms crossfade
+
+                // Calcular duração total (incluindo pausas entre chunks)
+                let totalSamples = 0
+                for (let i = 0; i < decodedChunks.length; i++) {
+                  const chunk = decodedChunks[i]
+                  const pauseSamples = Math.floor((chunk.pauseMs / 1000) * SAMPLE_RATE)
+                  totalSamples += chunk.audioBuffer.length + pauseSamples
+                }
+                // Margem de segurança
+                totalSamples += Math.floor(SAMPLE_RATE * 0.5)
+
+                // Criar buffer final
+                const offlineCtx = new OfflineAudioContext(1, totalSamples, SAMPLE_RATE)
+                const output = offlineCtx.createBuffer(1, totalSamples, SAMPLE_RATE)
+                const outputData = output.getChannelData(0)
+
+                let writePos = 0
+                for (let i = 0; i < decodedChunks.length; i++) {
+                  const { audioBuffer, pauseMs } = decodedChunks[i]
+                  const data = audioBuffer.getChannelData(0)
+                  const chunkLen = data.length
+
+                  if (i === 0) {
+                    // Primeiro chunk: copiar integralmente
+                    for (let s = 0; s < chunkLen && writePos < outputData.length; s++) {
+                      outputData[writePos++] = data[s]
+                    }
+                  } else {
+                    // Chunks subsequentes: crossfade com o final do chunk anterior
+                    const pauseSamples = Math.floor((pauseMs / 1000) * SAMPLE_RATE)
+
+                    // Se há pausa suficiente, preencher silêncio + crossfade curto
+                    if (pauseSamples > CROSSFADE_SAMPLES) {
+                      // Preencher silêncio (menos o crossfade overlap)
+                      const silenceLen = pauseSamples - CROSSFADE_SAMPLES
+                      // Fade OUT do final do chunk anterior (já escrito)
+                      const fadeOutStart = Math.max(0, writePos - CROSSFADE_SAMPLES)
+                      for (let s = fadeOutStart; s < writePos; s++) {
+                        const t = (s - fadeOutStart) / CROSSFADE_SAMPLES // 0→1
+                        outputData[s] *= (1 - t * t) // fade out quadrático
+                      }
+                      // Silêncio
+                      writePos += silenceLen
+                      // Fade IN do início do novo chunk
+                      for (let s = 0; s < chunkLen && writePos < outputData.length; s++) {
+                        const fadeFactor = s < CROSSFADE_SAMPLES ? (s / CROSSFADE_SAMPLES) * (s / CROSSFADE_SAMPLES) : 1
+                        outputData[writePos++] = data[s] * fadeFactor
+                      }
+                    } else {
+                      // Pausa curta ou zero: crossfade direto entre chunks
+                      // O crossfade sobrepõe o final do chunk anterior com o início do novo
+                      const overlapSamples = Math.min(CROSSFADE_SAMPLES, chunkLen)
+                      // Voltar writePos para cobrir o overlap
+                      const overlapStart = Math.max(0, writePos - overlapSamples)
+                      // Aplicar crossfade
+                      for (let s = 0; s < overlapSamples && writePos < outputData.length; s++) {
+                        const t = s / overlapSamples // 0→1
+                        const prevSample = outputData[overlapStart + s] * (1 - t * t) // fade out
+                        const newSample = s < chunkLen ? data[s] * (t * t) : 0 // fade in
+                        outputData[overlapStart + s] = prevSample + newSample
+                      }
+                      // Continuar copiando o resto do chunk
+                      writePos = overlapStart + overlapSamples
+                      for (let s = overlapSamples; s < chunkLen && writePos < outputData.length; s++) {
+                        outputData[writePos++] = data[s]
+                      }
+                    }
+                  }
+                }
+
+                // Passo 3: Converter para WAV via OfflineAudioContext
+                const finalBuffer = new AudioContext({ sampleRate: SAMPLE_RATE }).createBuffer(1, writePos, SAMPLE_RATE)
+                const finalData = finalBuffer.getChannelData(0)
+                for (let i = 0; i < writePos; i++) finalData[i] = outputData[i]
+
+                const wavBlob = audioBufferToWavBlob(finalBuffer)
+                const finalUrl = URL.createObjectURL(wavBlob)
+
+                setAudioUrl(finalUrl)
+                setIsGenerating(false)
+                clearInterval(timerInterval)
+                setGeneratingTime(Math.floor((Date.now() - genStartTime) / 1000))
+
+                if (audioResults.length === chunks.length) {
+                  toast.success(`${audioResults.length} frases geradas com sucesso!`)
+                } else {
+                  toast.warning(`${audioResults.length}/${chunks.length} frases geradas${failedCount > 0 ? ` (${failedCount} falha(s))` : ''}`)
+                }
+                return
+              } // fim else (decodedChunks.length > 0)
+              // Se nenhum chunk decodificou, cai pro fluxo normal
+              console.warn('[VozPro] Nenhum chunk decodificado, tentando single-shot...')
             }
             // Se todos falharam, cai pro fluxo normal (single-shot)
             console.warn('[VozPro] Todos os chunks falharam, tentando single-shot...')
