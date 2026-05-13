@@ -1749,7 +1749,7 @@ export async function optimizePronunciation(text: string): Promise<string> {
     'cm²': 'centímetros quadrados', 'ha': 'hectares',
     'l': 'litros', 'ml': 'mililitros', 'dl': 'decilitros',
     'w': 'watts', 'kw': 'quilowatts', 'mw': 'megawatts',
-    'kwh': 'quilowatts-hora', 'kwh': 'quilowatts-hora',
+    'kwh': 'quilowatts-hora', 'kWh': 'quilowatts-hora',
     'hpa': 'hectopascais', 'pa': 'pascais', 'atm': 'atmosferas',
     '°c': 'graus celsius', '°f': 'graus fahrenheit', '°k': 'graus kelvin',
     'kb': 'quilobytes', 'mb': 'megabytes', 'gb': 'gigabytes', 'tb': 'terabytes',
@@ -1879,23 +1879,87 @@ export async function optimizePronunciation(text: string): Promise<string> {
   })
 
   // ---- 3f. ORDINAIS ----
+  // Cobrir 1-20 + dezenas até 100 + centenas (PT-BR)
   const ORDINALS_MASC: Record<string, string> = {
     '1': 'primeiro', '2': 'segundo', '3': 'terceiro', '4': 'quarto',
     '5': 'quinto', '6': 'sexto', '7': 'sétimo', '8': 'oitavo',
-    '9': 'nono', '10': 'décimo',
+    '9': 'nono', '10': 'décimo', '11': 'décimo primeiro', '12': 'décimo segundo',
+    '13': 'décimo terceiro', '14': 'décimo quarto', '15': 'décimo quinto',
+    '16': 'décimo sexto', '17': 'décimo sétimo', '18': 'décimo oitavo',
+    '19': 'décimo nono', '20': 'vigésimo', '30': 'trigésimo', '40': 'quadragésimo',
+    '50': 'quinquagésimo', '60': 'sexagésimo', '70': 'setuagésimo',
+    '80': 'octogésimo', '90': 'nonagésimo', '100': 'centésimo',
+    '200': 'ducentésimo', '300': 'trecentésimo', '400': 'quadringentésimo',
+    '500': 'quingentésimo', '600': 'seiscentésimo', '700': 'septingentésimo',
+    '800': 'octingentésimo', '900': 'nongentésimo', '1000': 'milésimo',
   }
   const ORDINALS_FEM: Record<string, string> = {
     '1': 'primeira', '2': 'segunda', '3': 'terceira', '4': 'quarta',
     '5': 'quinta', '6': 'sexta', '7': 'sétima', '8': 'oitava',
-    '9': 'nona', '10': 'décima',
+    '9': 'nona', '10': 'décima', '11': 'décima primeira', '12': 'décima segunda',
+    '13': 'décima terceira', '14': 'décima quarta', '15': 'décima quinta',
+    '16': 'décima sexta', '17': 'décima sétima', '18': 'décima oitava',
+    '19': 'décima nona', '20': 'vigésima', '30': 'trigésima', '40': 'quadragésima',
+    '50': 'quinquagésima', '60': 'sexagésima', '70': 'setuagésima',
+    '80': 'octogésima', '90': 'nonagésima', '100': 'centésima',
+    '200': 'ducentésima', '300': 'trecentésima', '400': 'quadringentésima',
+    '500': 'quingentésima', '600': 'seiscentésima', '700': 'septingentésima',
+    '800': 'octingentésima', '900': 'nongentésima', '1000': 'milésima',
   }
-  result = result.replace(/(\d+)º/g, (match, num) => {
-    if (ORDINALS_MASC[num]) return `[${ORDINALS_MASC[num]}]`
-    return `[${numberToWords(parseInt(num))}ésimo]`
+
+  // Padrão 1: º/ª (Unicode ordinal indicators) + lookahead para evitar falso positivo
+  // Ex: "1º lugar", "3ª feira", "50º aniversário"
+  result = result.replace(/(\d+)[ºª](?=\s|$|[,;.!?\)\]])/g, (match, num, suffix) => {
+    const isFem = match.includes('ª')
+    const dict = isFem ? ORDINALS_FEM : ORDINALS_MASC
+    if (dict[num]) return `[${dict[num]}]`
+    // Fallback para números > 1000: número cardinal + "ésimo/ésima"
+    const n = parseInt(num)
+    if (n > 0) return `[${numberToWords(n)}${isFem ? 'ésima' : 'ésimo'}]`
+    return match
   })
-  result = result.replace(/(\d+)ª/g, (match, num) => {
+
+  // Padrão 2: o/a minúsculos e maiúsculos APÓS número (sem º/ª Unicode)
+  // Ex: "1o lugar", "2a via", "3O andar" (keyboard sem º)
+  // IMPORTANTE: usar lookahead negativo para não capturar dentro de palavras
+  result = result.replace(/(\d+)([oO])(?=\s|$|[,;.!?\)\]])/g, (match, num) => {
+    if (ORDINALS_MASC[num]) return `[${ORDINALS_MASC[num]}]`
+    const n = parseInt(num)
+    if (n > 0) return `[${numberToWords(n)}ésimo]`
+    return match
+  })
+  result = result.replace(/(\d+)([aA])(?=\s|$|[,;.!?\)\]])/g, (match, num) => {
     if (ORDINALS_FEM[num]) return `[${ORDINALS_FEM[num]}]`
-    return `[${numberToWords(parseInt(num))}ésima]`
+    const n = parseInt(num)
+    if (n > 0) return `[${numberToWords(n)}ésima]`
+    return match
+  })
+
+  // ---- 3f2. FRAÇÕES COMUNS ----
+  // Ex: "1/2" → "um meio", "3/4" → "três quartos", "1/3" → "um terço"
+  const FRACTIONS: Record<string, string> = {
+    '2': 'meio', '3': 'terço', '4': 'quarto', '5': 'quinto',
+    '6': 'sexto', '7': 'sétimo', '8': 'oitavo', '9': 'nono', '10': 'décimo',
+    '100': 'centésimo', '1000': 'milésimo',
+  }
+  result = result.replace(/(\d+)\/(\d+)(?=\s|$|[,;.!?\)\]])/g, (match, numStr, denStr) => {
+    const num = parseInt(numStr)
+    const den = parseInt(denStr)
+    if (num <= 0 || den <= 0 || num > 999 || den > 1000) return match
+    if (num === 1) {
+      // "1/2" → "um meio", "1/3" → "um terço"
+      const fracName = FRACTIONS[denStr]
+      if (fracName) return `[um ${fracName}]`
+      return `[um ${numberToWords(den)}avos]`
+    }
+    // "3/4" → "três quartos", "2/3" → "dois terços"
+    const fracName = FRACTIONS[denStr]
+    if (fracName) {
+      // Pluralizar: "meio" → "meios", "terço" → "terços"
+      const plural = fracName.endsWith('o') ? fracName.slice(0, -1) + 'os' : fracName + 's'
+      return `[${numberToWords(num)} ${plural}]`
+    }
+    return `[${numberToWords(num)} ${numberToWords(den)}avos]`
   })
 
   // ============================================================
@@ -1922,10 +1986,10 @@ export async function optimizePronunciation(text: string): Promise<string> {
     }
     return match
   })
-  // Números isolados pequenos (1-999) — ABSOLUTAMENTE POR ÚLTIMO
+  // Números isolados pequenos (0-999) — ABSOLUTAMENTE POR ÚLTIMO
   result = result.replace(/\b(\d{1,3})\b/g, (match, numStr) => {
     const n = parseInt(numStr)
-    if (n > 0 && n <= 999) {
+    if (n >= 0 && n <= 999) {
       const before = result.substring(Math.max(0, result.indexOf(match) - 1), result.indexOf(match))
       if (before === '[') return match
       return `[${numberToWords(n)}]`
