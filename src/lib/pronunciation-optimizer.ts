@@ -2280,14 +2280,32 @@ export async function optimizePronunciation(text: string): Promise<string> {
     return `[${protocol.replace('https', 'agá tê tê pê és').replace('http', 'agá tê tê pê').replace('://', ' dois pontos barra barra')} ${spelled}]`
   })
 
+  // Função auxiliar: soletrar parte de domínio em português
+  // Se a parte está no dicionário fonético → usa pronúncia
+  // Se não → soletra letra por letra com nomes PT-BR (a, bê, cê, dê, efe...)
+  function soletrarParteDominio(part: string): string {
+    const lookup = DOMAIN_PHONETICS[part.toLowerCase()]
+    if (lookup) return lookup
+    // Soletrar letra por letra em português
+    const nomesLetras: Record<string, string> = {
+      a: 'a', b: 'bê', c: 'cê', d: 'dê', e: 'e', f: 'efe', g: 'gê',
+      h: 'agá', i: 'i', j: 'jota', k: 'cá', l: 'ele', m: 'ême',
+      n: 'ene', o: 'o', p: 'pê', q: 'quê', r: 'erre', s: 'esse',
+      t: 'tê', u: 'u', v: 'vê', w: 'dábliu', x: 'xis', y: 'ípsilon', z: 'zê',
+      '0': 'zero', '1': 'um', '2': 'dois', '3': 'três', '4': 'quatro',
+      '5': 'cinco', '6': 'seis', '7': 'sete', '8': 'oito', '9': 'nove',
+    }
+    return part.split('').map(c => {
+      const lower = c.toLowerCase()
+      if (nomesLetras[lower]) return nomesLetras[lower]
+      return c // fallback: char original
+    }).join(' ')
+  }
+
   // www.domínio.com — não captura pontuação final
   result = result.replace(/www\.([^\s.,;:!?\)]+(?:\.[^\s.,;:!?\)]+)*)/gi, (match, domain) => {
-    const spelled = domain.split('').map(c => {
-      if (c === '.') return ' ponto '
-      if (c === '/') return ' barra '
-      if (c === '-') return ' traço '
-      return c
-    }).join('')
+    const parts = domain.split('.')
+    const spelled = parts.map(part => soletrarParteDominio(part)).join(' ponto ')
     return `[dábliu dábliu dábliu ponto ${spelled}]`
   })
 
@@ -2364,10 +2382,6 @@ export async function optimizePronunciation(text: string): Promise<string> {
   }
 
   result = result.replace(/(\S+)@([^\s.,;:!?\)]+(?:\.[^\s.,;:!?\)]+)*)/g, (match, user, domain) => {
-    const domainSpelled = domain.split('').map(c => {
-      if (c === '.') return ' ponto '
-      return c
-    }).join('')
     // Verificar se o domínio inteiro tem pronúncia fonética
     const domainLower = domain.toLowerCase()
     const phonetic = DOMAIN_PHONETICS[domainLower]
@@ -2375,8 +2389,9 @@ export async function optimizePronunciation(text: string): Promise<string> {
       return `[${user} arroba ${phonetic}]`
     }
     // Tentar pronunciar cada parte do domínio separadamente
+    // Se a parte não está no dicionário → soletra letra por letra em PT-BR
     const parts = domainLower.split('.')
-    const partsPhonetic = parts.map(part => DOMAIN_PHONETICS[part] || part).join(' ponto ')
+    const partsPhonetic = parts.map(part => soletrarParteDominio(part)).join(' ponto ')
     return `[${user} arroba ${partsPhonetic}]`
   })
 
