@@ -46,7 +46,8 @@ const PAUSE_DURATION: Record<string, number> = {
 }
 
 const MIN_CHUNK_CHARS = 3     // mínimo de caracteres por chunk
-const MAX_CHUNK_WORDS = 30    // máximo de palavras antes de forçar quebra (aumentado)
+const MAX_CHUNK_WORDS = 100   // máximo de palavras antes de forçar quebra (aumentado)
+const MAX_CHUNKS = 3          // número máximo de chunks — junta adjacentes se ultrapassar
 
 // ============================================================
 // CHUNKING PRINCIPAL
@@ -89,8 +90,11 @@ export function chunkText(text: string): TextChunk[] {
   // Passo 4: Quebrar chunks muito longos
   const split = splitLongChunks(merged)
 
-  // Passo 5: Limpar chunks vazios e muito curtos
-  return split.filter(c => c.text.length >= MIN_CHUNK_CHARS)
+  // Passo 5: Limitar ao número máximo de chunks (agrupa adjacentes)
+  const limited = limitChunkCount(split)
+
+  // Passo 6: Limpar chunks vazios e muito curtos
+  return limited.filter(c => c.text.length >= MIN_CHUNK_CHARS)
 }
 
 // ============================================================
@@ -430,6 +434,58 @@ function chunkByNewlines(text: string): TextChunk[] {
 // ============================================================
 // HELPERS
 // ============================================================
+
+// ============================================================
+// PASSO 5: LIMITAR NÚMERO DE CHUNKS
+// ============================================================
+
+/**
+ * Agrupa chunks adjacentes até que o número total não ultrapasse MAX_CHUNKS.
+ * Isso reduz drasticamente os pontos de junção (onde podem ocorrer cortes de áudio).
+ * Estratégia: junta do fim para o início (preserva o primeiro chunk mais curto).
+ */
+function limitChunkCount(chunks: TextChunk[]): TextChunk[] {
+  if (chunks.length <= MAX_CHUNKS) return chunks
+
+  const result: TextChunk[] = [chunks[0]] // preservar primeiro chunk
+
+  // Calcular quantos chunks sobram para agrupar
+  const remaining = chunks.slice(1)
+  const targetMergeSize = Math.ceil(remaining.length / (MAX_CHUNKS - 1))
+
+  // Agrupar chunks adjacentes em lotes
+  for (let i = 0; i < remaining.length; i += targetMergeSize) {
+    const group = remaining.slice(i, i + targetMergeSize)
+    const mergedText = group.map((c, idx) => {
+      // Primeiro do grupo: texto normal
+      if (idx === 0) return c.text
+      // Demais: adicionar com vírgula antes para o TTS fazer pausa natural
+      return c.text.replace(/^[,.!?;:\s]+/, '') // limpar pontuação duplicada no início
+    }).join(', ')
+
+    const isLastGroup = (i + targetMergeSize) >= remaining.length
+    const lastInGroup = group[group.length - 1]
+
+    result.push({
+      text: mergedText,
+      pauseAfterMs: isLastGroup ? lastInGroup.pauseAfterMs : 250,
+      punctuation: isLastGroup ? lastInGroup.punctuation : ',',
+      index: result.length,
+    })
+  }
+
+  // Garantir que o último chunk tem pontuação forte (não vírgula)
+  if (result.length > 1) {
+    const last = result[result.length - 1]
+    if (last.punctuation === ',') {
+      last.text = last.text.replace(/[,]$/, '.')
+      last.punctuation = '.'
+      last.pauseAfterMs = 0
+    }
+  }
+
+  return result
+}
 
 /** Resumo dos chunks para debug */
 export function formatChunkSummary(chunks: TextChunk[]): string {
