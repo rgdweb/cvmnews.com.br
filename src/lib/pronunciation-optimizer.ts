@@ -1065,7 +1065,7 @@ const PRONUNCIATION_DICTIONARY: Record<string, string> = {
   'Vercel': 'Versel',
   'Supabase': 'Supabeise',
   'Firebase': 'Faíberbeise',
-  'Heroku': 'Herôcue',
+  'Heroku': '[Hérôcu]',
   'DigitalOcean': 'Digital Océan',
   'AWS': 'a dábliu és',
   'GCP': 'gê cê pê',
@@ -1195,6 +1195,8 @@ const STRESS_DICTIONARY: Record<string, string> = {
   'facil': 'fácil',
   'possivel': 'possível',
   'ifen': 'ífen',     // H mudo já rodou antes — key é pos-H-mudo
+  'otel': 'ôtel',    // hotel → H mudo → otel — acento força o-TÉL
+  'oras': 'óras',    // horas → H mudo → oras — acento força Ó-ras
   'artico': 'ártico',
   'polen': 'pólen',
   'indice': 'índice',
@@ -1899,33 +1901,70 @@ export async function optimizePronunciation(text: string): Promise<string> {
   // ============================================================
 
   // ---- 3a. VALORES MONETÁRIOS ----
-  result = result.replace(/R\$\s*([\d.,]+)\s*(mil|milh[oõ]es|bilh[oõ]es|trilh[oõ]es)?/gi, (match, val, mult) => {
-    const words = currencyToWords(val)
+  // FIX: Regex alternativa longa PRIMEIRO (milhões antes de mil)
+  // Antes: '(mil|milhões)' → 'mil' casava nos 3 primeiros chars de 'milhões' → '[dois dólares mil]ões'
+  result = result.replace(/R\$\s*([\d.,]+)\s*(trilh[oõ]es|bilh[oõ]es|milh[oõ]es|mil)?/gi, (match, val, mult) => {
+    const cleanVal = val.replace(/\./g, '').replace(',', '.')
+    const n = parseFloat(cleanVal)
+    if (isNaN(n)) return match
+    let totalN = n
     if (mult) {
-      const multClean = mult.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      return `[${words} ${mult}]`
+      const multLower = mult.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      if (multLower.startsWith('trilh')) totalN = n * 1e12
+      else if (multLower.startsWith('bilh')) totalN = n * 1e9
+      else if (multLower.startsWith('milh')) totalN = n * 1e6
+      else if (multLower === 'mil') totalN = n * 1e3
     }
-    return `[${words}]`
+    const totalInt = Math.floor(totalN)
+    const cents = Math.round((totalN - totalInt) * 100)
+    let result = ''
+    if (totalInt === 0 && cents === 0) { result = 'zero reais' }
+    else if (totalInt === 1) { result = 'um real' }
+    else if (totalInt > 1 && totalInt <= 999999999) { result = numberToWords(totalInt) + ' reais' }
+    else if (totalInt > 999999999) { result = totalN.toLocaleString('pt-BR') + ' reais' }
+    else { result = totalN.toLocaleString('pt-BR') + ' reais' }
+    if (cents > 0) {
+      result += cents === 1 ? ' e um centavo' : ` e ${numberToWords(cents)} centavos`
+    }
+    return `[${result}]`
   })
-  result = result.replace(/(?:US\$|\$)\s*([\d.,]+)\s*(mil|milh[oõ]es|bilh[oõ]es|trilh[oõ]es)?/gi, (match, val, mult) => {
+  result = result.replace(/(?:US\$|\$)\s*([\d.,]+)\s*(trilh[oõ]es|bilh[oõ]es|milh[oõ]es|mil)?/gi, (match, val, mult) => {
     const clean = val.replace(/\./g, '').replace(',', '.')
     const n = parseFloat(clean)
     if (isNaN(n)) return match
-    let dollarWord = n === 1 ? 'um dólar' : numberToWords(Math.floor(n)) + ' dólares'
+    let totalN = n
     if (mult) {
-      dollarWord += ' ' + mult
+      const multLower = mult.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      if (multLower.startsWith('trilh')) totalN = n * 1e12
+      else if (multLower.startsWith('bilh')) totalN = n * 1e9
+      else if (multLower.startsWith('milh')) totalN = n * 1e6
+      else if (multLower === 'mil') totalN = n * 1e3
     }
-    return `[${dollarWord}]`
+    const totalInt = Math.floor(totalN)
+    let result: string
+    if (totalInt === 1) { result = 'um dólar' }
+    else if (totalInt > 1 && totalInt <= 999999999) { result = numberToWords(totalInt) + ' dólares' }
+    else { result = totalN.toLocaleString('pt-BR') + ' dólares' }
+    return `[${result}]`
   })
 
-  // ---- 3b. PORCENTAGENS ----
+  // ---- 3b. PORCENTAGENS (inteiros E decimais) ----
+  // FIX: Antes só convertia inteiros. 89,3% ficava como '[oitenta e nove vírgula três]%'
   result = result.replace(/(\d+(?:[,.]\d+)?)(?:\s*%|\s*por cento)/gi, (match, numStr) => {
     const clean = numStr.replace(',', '.')
     const n = parseFloat(clean)
     if (isNaN(n)) return match
     const nInt = Math.floor(n)
+    const nFrac = Math.round((n - nInt) * 100)
     if (n === nInt && nInt <= 999999999) {
+      // Inteiro: '65%' → '[sessenta e cinco por cento]'
       return `[${numberToWords(nInt)} por cento]`
+    }
+    if (nFrac > 0 && nInt <= 999999999) {
+      // Decimal: '89,3%' → '[oitenta e nove vírgula três por cento]'
+      const intPart = nInt > 0 ? numberToWords(nInt) : 'zero'
+      const fracPart = numberToWords(nFrac)
+      return `[${intPart} vírgula ${fracPart} por cento]`
     }
     return match
   })
