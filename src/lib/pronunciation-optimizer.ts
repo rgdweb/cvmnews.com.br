@@ -2306,10 +2306,9 @@ export async function optimizePronunciation(text: string): Promise<string> {
 
   // ---- 12. DOMÍNIOS / EMAILS ----
   // Dicionário de pronúncia fonética para partes de domínios
-  // v2.1: xtech=xistek, tech=téc, stech=ésseték
+  // Estilo locução/rádio: xtech=équis téqui (soletrado), tech=téc
   const DOMAIN_PHONETICS: Record<string, string> = {
-    'xtech': 'xisték',
-    'stech': 'ésseték',
+    'xtech': 'équis téqui',
     'xanxere': 'xanxere',
     'tech': 'téc',
     'dev': 'dêve',
@@ -2439,28 +2438,30 @@ export async function optimizePronunciation(text: string): Promise<string> {
     return `[dábliu dábliu dábliu] ponto ${spelled}`
   })
 
-  // Emails: user@domínio.com — não captura pontuação final
-  // ESTRATÉGIA: colchetes SÓ nas partes que precisam de fonética (diferente do original).
-  // Isso evita um colchete enorme que confunde o VozPro/GPT-SoVITS.
-  // Antes: [info arroba xisték ponto com ponto bê érre] (um colchete gigante)
-  // Depois: info arroba [xisték] ponto com ponto [bê érre] (colchetes curtos + fala natural)
+  // Emails: user@domínio.com — estilo locução/rádio com pausas claras
+  // Estratégia: colchetes curtos só onde precisa fonética + vírgulas entre partes
+  // Ex: info@xtech.com.br → [ínfo], arroba, [équis téqui], ponto com, ponto [bê érre]
+  // Isso ajuda o ouvinte a entender e anotar o email
   result = result.replace(/(\S+)@([^\s.,;:!?\)]+(?:\.[^\s.,;:!?\)]+)*)/g, (match, user, domain) => {
+    // Verificar se o user precisa de fonética (ex: info → ínfo)
+    const userLower = user.toLowerCase()
+    const userPhonetic = DOMAIN_PHONETICS[userLower]
+    const userPart = userPhonetic && userPhonetic !== userLower ? `[${userPhonetic}]` : user
+
     // Verificar se o domínio inteiro tem pronúncia fonética
     const domainLower = domain.toLowerCase()
     const phonetic = DOMAIN_PHONETICS[domainLower]
     if (phonetic) {
-      return `${user} arroba [${phonetic}]`
+      return `${userPart}, arroba, [${phonetic}]`
     }
     // Tentar pronunciar cada parte do domínio separadamente
     const parts = domainLower.split('.')
     const partsPhonetic = parts.map(part => {
       const ph = pronunciarParteDominio(part)
-      // Só coloca colchetes se a pronúncia for DIFERENTE do original
-      // (precisa de correção fonética ou soletração)
       if (ph !== part) return `[${ph}]`
-      return part // palavra pronunciável → fala natural, sem colchetes
-    }).join(' ponto ')
-    return `${user} arroba ${partsPhonetic}`
+      return part
+    }).join(', ponto ')
+    return `${userPart}, arroba, ${partsPhonetic}`
   })
 
   // ---- 14. G2P FALLBACK — espeak-ng para palavras desconhecidas ----
