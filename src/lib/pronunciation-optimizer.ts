@@ -2446,7 +2446,6 @@ export async function optimizePronunciation(text: string): Promise<string> {
     // Tentar pronunciar cada parte do domínio separadamente
     // Se a parte não está no dicionário → soletra letra por letra em PT-BR
     const parts = domainLower.split('.')
-    console.log(`[PronDict] Email partes: ${parts.map(p => `${p}→${DOMAIN_PHONETICS[p] || '(natural)'}`).join(', ')}`)
     const partsPhonetic = parts.map(part => pronunciarParteDominio(part)).join(' ponto ')
     return `[${user} arroba ${partsPhonetic}]`
   })

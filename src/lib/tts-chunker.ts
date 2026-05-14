@@ -47,7 +47,20 @@ const PAUSE_DURATION: Record<string, number> = {
 
 const MIN_CHUNK_CHARS = 3     // mínimo de caracteres por chunk
 const MAX_CHUNK_WORDS = 100   // máximo de palavras antes de forçar quebra (aumentado)
-const MAX_CHUNKS = 3          // número máximo de chunks — junta adjacentes se ultrapassar
+
+/**
+ * Número máximo de chunks — dinâmico baseado no tamanho do texto.
+ * - Texto curto/médio: 2 chunks (mínimo de pontos de junção)
+ * - Texto longo (>150 palavras ou >1000 chars): até 3 chunks
+ * - Texto muito longo (>300 palavras): até 4 chunks
+ * Isso evita cortes em textos normais, mas não estoura o limite da API em textos gigantes.
+ */
+function getMaxChunks(text: string): number {
+  const words = text.split(/\s+/).filter(w => w.length > 0).length
+  if (words > 300) return 4
+  if (words > 150 || text.length > 1000) return 3
+  return 2
+}
 
 // ============================================================
 // CHUNKING PRINCIPAL
@@ -91,7 +104,9 @@ export function chunkText(text: string): TextChunk[] {
   const split = splitLongChunks(merged)
 
   // Passo 5: Limitar ao número máximo de chunks (agrupa adjacentes)
-  const limited = limitChunkCount(split)
+  // Número dinâmico: 2 para textos normais, mais para textos longos
+  const maxChunks = getMaxChunks(normalized)
+  const limited = limitChunkCount(split, maxChunks)
 
   // Passo 6: Limpar chunks vazios e muito curtos
   return limited.filter(c => c.text.length >= MIN_CHUNK_CHARS)
@@ -440,18 +455,18 @@ function chunkByNewlines(text: string): TextChunk[] {
 // ============================================================
 
 /**
- * Agrupa chunks adjacentes até que o número total não ultrapasse MAX_CHUNKS.
+ * Agrupa chunks adjacentes até que o número total não ultrapasse maxChunks.
  * Isso reduz drasticamente os pontos de junção (onde podem ocorrer cortes de áudio).
  * Estratégia: junta do fim para o início (preserva o primeiro chunk mais curto).
  */
-function limitChunkCount(chunks: TextChunk[]): TextChunk[] {
-  if (chunks.length <= MAX_CHUNKS) return chunks
+function limitChunkCount(chunks: TextChunk[], maxChunks: number): TextChunk[] {
+  if (chunks.length <= maxChunks) return chunks
 
   const result: TextChunk[] = [chunks[0]] // preservar primeiro chunk
 
   // Calcular quantos chunks sobram para agrupar
   const remaining = chunks.slice(1)
-  const targetMergeSize = Math.ceil(remaining.length / (MAX_CHUNKS - 1))
+  const targetMergeSize = Math.ceil(remaining.length / (maxChunks - 1))
 
   // Agrupar chunks adjacentes em lotes
   for (let i = 0; i < remaining.length; i += targetMergeSize) {
