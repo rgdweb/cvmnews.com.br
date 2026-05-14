@@ -1036,17 +1036,20 @@ export default function VozProClient() {
               if (decodedChunks.length === 0) {
                 console.warn('[VozPro] Nenhum chunk decodificado')
               } else {
-                // Passo 2: Concatenação PURA — sem fade-out, sem crossfade
-                // O TTS gera áudio com cauda natural. Fade-out e crossfade cortavam a última sílaba.
-                // Apenas colamos chunks com silêncio entre eles (pausa da pontuação).
+                // Passo 2: Concatenação com crossfade suave (5ms) para evitar cliques secos
+                // O TTS gera áudio com cauda natural. Usamos crossfade MÍNIMO (5ms)
+                // apenas para suavizar a transição, sem cortar sílabas.
                 const SAMPLE_RATE = 44100
+                const CROSSFADE_MS = 5  // crossfade mínimo — só para evitar clique seco
+                const crossfadeSamples = Math.floor((CROSSFADE_MS / 1000) * SAMPLE_RATE)
 
-                // Calcular duração total
+                // Calcular duração total (crossfade superpõe 2 chunks, reduzindo total)
                 let totalSamples = 0
                 for (let i = 0; i < decodedChunks.length; i++) {
                   totalSamples += decodedChunks[i].audioBuffer.length
                   if (i < decodedChunks.length - 1) {
                     totalSamples += Math.floor((decodedChunks[i].pauseMs / 1000) * SAMPLE_RATE)
+                    totalSamples -= crossfadeSamples  // crossfade superpõe o final com o início do próximo
                   }
                 }
 
@@ -1059,16 +1062,39 @@ export default function VozProClient() {
                   const { audioBuffer, pauseMs } = decodedChunks[i]
                   const data = audioBuffer.getChannelData(0)
 
-                  // Copiar chunk inteiro (sem alterações)
-                  for (let s = 0; s < data.length && writePos < outputData.length; s++) {
-                    outputData[writePos++] = data[s]
-                  }
+                  if (i === 0) {
+                    // Primeiro chunk: copiar inteiro (menos os últimos crossfadeSamples)
+                    const copyLen = decodedChunks.length > 1 ? data.length - crossfadeSamples : data.length
+                    for (let s = 0; s < copyLen && writePos < outputData.length; s++) {
+                      outputData[writePos++] = data[s]
+                    }
+                  } else {
+                    // Chunks subsequentes: silêncio (pausa) + crossfade + restante
+                    const prevData = decodedChunks[i - 1].audioBuffer.getChannelData(0)
+                    const prevEnd = prevData.slice(prevData.length - crossfadeSamples)
 
-                  // Adicionar silêncio entre chunks (pausa de pontuação)
-                  if (i < decodedChunks.length - 1) {
+                    // Silêncio da pausa (reduzido do crossfade que já cobre parte)
                     const pauseSamples = Math.floor((pauseMs / 1000) * SAMPLE_RATE)
                     for (let s = 0; s < pauseSamples && writePos < outputData.length; s++) {
                       outputData[writePos++] = 0
+                    }
+
+                    // Crossfade: misturar final do chunk anterior com início do atual
+                    const isLast = i === decodedChunks.length - 1
+                    const cfLen = Math.min(crossfadeSamples, data.length)
+                    for (let s = 0; s < cfLen && writePos < outputData.length; s++) {
+                      const t = s / cfLen  // 0.0 → 1.0
+                      // Fade-out suave do final do chunk anterior (cosseno para transição natural)
+                      const fadeOut = 0.5 * (1 + Math.cos(Math.PI * t))
+                      // Fade-in suave do início do chunk atual
+                      const fadeIn = 0.5 * (1 - Math.cos(Math.PI * t))
+                      outputData[writePos++] = prevEnd[s] * fadeOut + data[s] * fadeIn
+                    }
+
+                    // Copiar restante do chunk (após crossfade)
+                    const startAfterCf = cfLen
+                    for (let s = startAfterCf; s < data.length && writePos < outputData.length; s++) {
+                      outputData[writePos++] = data[s]
                     }
                   }
                 }
