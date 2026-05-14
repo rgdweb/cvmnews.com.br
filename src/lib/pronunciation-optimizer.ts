@@ -2295,7 +2295,7 @@ export async function optimizePronunciation(text: string): Promise<string> {
   // Regex não captura pontuação final — evita quebrar frase
   // Dicionário de pronúncia fonética para partes de domínios
   const DOMAIN_PHONETICS: Record<string, string> = {
-    'stech': 'xisték',
+    'stech': 'ésseték',
     'xanxere': 'xanxere',          // já fala correto
     'tech': 'têque',
     'dev': 'dêve',
