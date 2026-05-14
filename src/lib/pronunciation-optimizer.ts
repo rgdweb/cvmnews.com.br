@@ -1679,6 +1679,12 @@ function preprocessX(text: string): string {
     protectedParts.push(match)
     return `__PROTECTED_${protectedParts.length - 1}__`
   })
+  // Proteger nomes de marca que começam com X maiúsculo (XTech, Xbox, Xiaomi, etc.)
+  // Sem isso, preprocessX converte XTech → SThech antes do handler de domínios
+  result = result.replace(/\bX[A-Za-z]+\b/g, (match) => {
+    protectedParts.push(match)
+    return `__PROTECTED_${protectedParts.length - 1}__`
+  })
 
   // 2. X restantes: regra geral contextual
   // X antes de consoante = S (ex: "extensão" → já coberto pelo dicionário, mas fallback)
@@ -2462,6 +2468,18 @@ export async function optimizePronunciation(text: string): Promise<string> {
       return part
     }).join(', ponto ')
     return `${userPart}, arroba, ${partsPhonetic}`
+  })
+
+  // ---- 12b. MARCAS COM X (não dentro de email/URL) ----
+  // preprocessX protege X maiúsculo de virar S, mas o VozPro precisa de pronúncia fonética.
+  // Ex: "à XTech" → "à [équis téqui]" (não "à SThech")
+  result = result.replace(/\b(X[A-Za-z0-9]+)\b/g, (match, word) => {
+    const lower = word.toLowerCase()
+    const phonetic = DOMAIN_PHONETICS[lower]
+    if (phonetic) {
+      return `[${phonetic}]`
+    }
+    return match
   })
 
   // ---- 14. G2P FALLBACK — espeak-ng para palavras desconhecidas ----
