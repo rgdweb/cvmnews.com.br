@@ -2280,13 +2280,42 @@ export async function optimizePronunciation(text: string): Promise<string> {
     return `[${protocol.replace('https', 'agá tê tê pê és').replace('http', 'agá tê tê pê').replace('://', ' dois pontos barra barra')} ${spelled}]`
   })
 
-  // Função auxiliar: soletrar parte de domínio em português
-  // Se a parte está no dicionário fonético → usa pronúncia
-  // Se não → soletra letra por letra com nomes PT-BR (a, bê, cê, dê, efe...)
-  function soletrarParteDominio(part: string): string {
+  // Função auxiliar: verificar se uma string parece pronunciável em PT-BR
+  // Palavras com muitas vogais e clusters consonantais válidos → o TTS lê naturalmente
+  // Strings com poucas vogais e clusters inválidos → soletrar letra por letra
+  function isPronounceable(part: string): boolean {
+    const alpha = part.replace(/[^a-zàáâãäéèêëíìîïóòôõöúùûü]/gi, '')
+    if (alpha.length === 0) return false
+
+    // Contar vogais
+    const vowels = (alpha.match(/[aeiouàáâãäéèêëíìîïóòôõöúùûü]/gi) || []).length
+    const ratio = vowels / alpha.length
+
+    // Menos de 30% vogais → provavelmente abreviação ou string aleatória
+    if (ratio < 0.3) return false
+
+    // 4+ consoantes consecutivas → provavelmente string aleatória (ex: ggxph)
+    if (/[bcdfghjklmnpqrstvwxyz]{4,}/i.test(alpha)) return false
+
+    // 3 consoantes consecutivas seguidas de vogal e depois 3+ consoantes → padrão aleatório
+    if (/[bcdfghjklmnpqrstvwxyz]{3}[aeiouàáâãäéèêëíìîïóòôõöúùûü][bcdfghjklmnpqrstvwxyz]{3,}/i.test(alpha)) return false
+
+    return true
+  }
+
+  // Função auxiliar: pronunciar parte de domínio
+  // 1) No dicionário fonético → pronúncia fonética
+  // 2) Parece palavra pronunciável → deixa o TTS ler naturalmente (entre colchetes)
+  // 3) String aleatória → soletra letra por letra em PT-BR
+  function pronunciarParteDominio(part: string): string {
+    // 1. Dicionário fonético
     const lookup = DOMAIN_PHONETICS[part.toLowerCase()]
     if (lookup) return lookup
-    // Soletrar letra por letra em português
+
+    // 2. Parece pronunciável → TTS lê naturalmente
+    if (isPronounceable(part)) return part
+
+    // 3. String aleatória → soletrar letra por letra
     const nomesLetras: Record<string, string> = {
       a: 'a', b: 'bê', c: 'cê', d: 'dê', e: 'e', f: 'efe', g: 'gê',
       h: 'agá', i: 'i', j: 'jota', k: 'cá', l: 'ele', m: 'ême',
@@ -2305,7 +2334,7 @@ export async function optimizePronunciation(text: string): Promise<string> {
   // www.domínio.com — não captura pontuação final
   result = result.replace(/www\.([^\s.,;:!?\)]+(?:\.[^\s.,;:!?\)]+)*)/gi, (match, domain) => {
     const parts = domain.split('.')
-    const spelled = parts.map(part => soletrarParteDominio(part)).join(' ponto ')
+    const spelled = parts.map(part => pronunciarParteDominio(part)).join(' ponto ')
     return `[dábliu dábliu dábliu ponto ${spelled}]`
   })
 
@@ -2391,7 +2420,7 @@ export async function optimizePronunciation(text: string): Promise<string> {
     // Tentar pronunciar cada parte do domínio separadamente
     // Se a parte não está no dicionário → soletra letra por letra em PT-BR
     const parts = domainLower.split('.')
-    const partsPhonetic = parts.map(part => soletrarParteDominio(part)).join(' ponto ')
+    const partsPhonetic = parts.map(part => pronunciarParteDominio(part)).join(' ponto ')
     return `[${user} arroba ${partsPhonetic}]`
   })
 
