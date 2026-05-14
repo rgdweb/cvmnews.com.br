@@ -347,7 +347,7 @@ export async function POST(request: NextRequest) {
         safeSpeed,                   // sp (speed) - clamped
         null,                        // du (duration, null = auto)
         true,                        // pp (preprocess prompt)
-        true,                        // po (postprocess output)
+        false,                       // po (postprocess OFF — client-side trimming evita corte de sílabas)
       ]
 
       debug.log('Params', 'info', `lang:${language} steps:${numStep} speed:${safeSpeed}`)
@@ -408,7 +408,7 @@ export async function POST(request: NextRequest) {
         safeSpeed,                      // sp (speed) - clamped
         null,                           // du (duration, null = auto)
         true,                           // pp (preprocess prompt)
-        true,                           // po (postprocess output)
+        false,                          // po (postprocess OFF — client-side trimming evita corte de sílabas)
         gender || 'Auto',               // gender
         age || 'Auto',                  // age
         pitch || 'Auto',                // pitch

@@ -454,6 +454,56 @@ function writeString(view: DataView, offset: number, str: string) {
   }
 }
 
+/**
+ * Converte AudioBuffer multi-channel para mono (média dos canais).
+ */
+function toMono(audioBuffer: AudioBuffer): AudioBuffer {
+  if (audioBuffer.numberOfChannels === 1) return audioBuffer
+  const ctx = new AudioContext({ sampleRate: audioBuffer.sampleRate })
+  const mono = ctx.createBuffer(1, audioBuffer.length, audioBuffer.sampleRate)
+  const monoData = mono.getChannelData(0)
+  const ch0 = audioBuffer.getChannelData(0)
+  const ch1 = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : ch0
+  for (let i = 0; i < audioBuffer.length; i++) {
+    monoData[i] = (ch0[i] + ch1[i]) / 2
+  }
+  ctx.close()
+  return mono
+}
+
+/**
+ * Trim de silêncio client-side — substitui o postprocess do VozPro (po=true).
+ * O po=true do VozPro corta silêncio de forma agressiva e pode cortar a última sílaba.
+ * Este trim usa threshold conservador (0.015) com buffer de 60ms para proteger consoantes.
+ */
+function trimSilence(audioBuffer: AudioBuffer, threshold = 0.015, keepBufferMs = 60): AudioBuffer {
+  const data = audioBuffer.getChannelData(0)
+  const sampleRate = audioBuffer.sampleRate
+  const bufferSamples = Math.floor(sampleRate * (keepBufferMs / 1000))
+
+  let start = 0
+  for (let i = 0; i < data.length; i++) {
+    if (Math.abs(data[i]) >= threshold) { start = Math.max(0, i - bufferSamples); break }
+  }
+
+  let end = data.length - 1
+  for (let i = data.length - 1; i >= 0; i--) {
+    if (Math.abs(data[i]) >= threshold) { end = Math.min(data.length - 1, i + bufferSamples); break }
+  }
+
+  if (start >= end) return audioBuffer
+
+  const trimmedLength = end - start + 1
+  const ctx = new AudioContext({ sampleRate })
+  const trimmed = ctx.createBuffer(1, trimmedLength, sampleRate)
+  const trimmedData = trimmed.getChannelData(0)
+  for (let i = 0; i < trimmedLength; i++) {
+    trimmedData[i] = data[start + i]
+  }
+  ctx.close()
+  return trimmed
+}
+
 function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
   const numChannels = buffer.numberOfChannels
   const sampleRate = buffer.sampleRate
@@ -823,7 +873,7 @@ export default function VozProClient() {
                 referenceAudioUrl: uploadedVoiceUrl || selectedVariation?.refAudioServerUrl || '',
                 referenceAudioName: uploadedVoiceFile?.name || selectedVariation?.refAudioName || 'ref_audio.wav',
                 refText: selectedVariation?.refText || '',
-                numStep: 32,
+                numStep: 20, // 20 = ótimo balanço velocidade/qualidade (era 32)
                 speed,
                 language,
                 gender: isAutoMode ? 'Auto' : (isDesignMode ? designParams.gender : 'Auto'),
@@ -940,12 +990,17 @@ export default function VozProClient() {
               console.log(`[VozPro] Concatenando ${audioResults.length} áudios (${failedCount} falhas)...`)
               const audioCtx = new AudioContext({ sampleRate: 44100 })
 
-              // Passo 1: Decodificar todos os buffers
+              // Passo 1: Decodificar todos os buffers + trim de silêncio client-side
+              // O postprocess do VozPro (po) foi desativado para não cortar sílabas.
+              // Agora fazemos trim controlado no cliente com buffer de segurança (60ms).
               const decodedChunks: { audioBuffer: AudioBuffer; pauseMs: number }[] = []
               for (const { buffer, pauseMs } of audioResults) {
                 try {
-                  const audioBuffer = await audioCtx.decodeAudioData(buffer.slice(0))
+                  const raw = await audioCtx.decodeAudioData(buffer.slice(0))
+                  const mono = raw.numberOfChannels > 1 ? toMono(raw) : raw
+                  const audioBuffer = trimSilence(mono)
                   decodedChunks.push({ audioBuffer, pauseMs })
+                  console.log(`[VozPro Chunk] Decodificado: ${(buffer.byteLength / 1024).toFixed(0)}KB → ${(audioBuffer.duration * 1000).toFixed(0)}ms (após trim)`)
                 } catch {
                   console.warn('[VozPro Chunk] Falha ao decodificar áudio')
                 }
@@ -1027,7 +1082,7 @@ export default function VozProClient() {
           referenceAudioUrl: voiceMode === 'clone' ? (uploadedVoiceUrl || selectedVariation?.refAudioServerUrl || '') : '',
           referenceAudioName: voiceMode === 'clone' ? (uploadedVoiceFile?.name || selectedVariation?.refAudioName || 'ref_audio.wav') : '',
           refText: selectedVariation?.refText || '',
-          numStep: 32, // VozPro: 32 = qualidade (padrao), 16 = rapido mas pode errar palavras
+          numStep: 20, // VozPro: 20 = ótimo balanço velocidade/qualidade (era 32)
           speed,
           language: language, // usa o idioma selecionado pelo usuario (Portuguese, Auto, etc)
           // Voice Design params (usados pelo _design_fn endpoint)
