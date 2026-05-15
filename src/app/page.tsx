@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator'
 import {
   AudioWaveform, Sparkles, Loader2, Download, Play, Pause, Square,
   Volume2, Music, Mic, ChevronRight, Settings2, Globe, Bug, Copy, ChevronDown,
-  Upload, CheckCircle2, Zap, FolderOpen, ChevronLeft, Folder
+  Upload, CheckCircle2, Zap, FolderOpen, ChevronLeft, Folder, AlertTriangle
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
@@ -708,9 +708,7 @@ export default function VozProClient() {
             variations: v.variations.filter((varr: VoiceVariation) => varr.refAudioPath),
           })).filter((v: Voice) => v.variations.length > 0)
           setVoices(filteredVoices)
-          if (filteredVoices.length > 0) {
-            setSelectedVoiceId(filteredVoices[0].id)
-          }
+          // NAO auto-selecionar voz — usuario deve escolher explicitamente
         }
         if (tracksRes.ok) {
           const tracksData = await tracksRes.json()
@@ -771,13 +769,12 @@ export default function VozProClient() {
     }
 
     // Validar baseado no modo de voz
-    if (voiceMode === 'clone' && !selectedVariationId && !uploadedVoiceUrl) {
-      toast.error('Selecione uma voz ou faça upload de um áudio de referência')
+    if (voiceMode === 'clone' && !selectedVoiceId && !uploadedVoiceUrl) {
+      toast.error('Selecione uma voz para gerar o audio')
       return
     }
-    // Avisar se esta usando voz padrao sem selecao explicita
-    if (voiceMode === 'clone' && !selectedVoiceId && !uploadedVoiceUrl) {
-      toast.warning('Nenhuma voz selecionada. Selecione uma voz ou faça upload de um áudio de referência.')
+    if (voiceMode === 'clone' && !selectedVariationId && !uploadedVoiceUrl) {
+      toast.error('Selecione um estilo / emocao para a voz')
       return
     }
     // Verificar se a variação selecionada realmente existe na voz selecionada
@@ -1807,6 +1804,13 @@ export default function VozProClient() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Aviso: nenhuma voz selecionada no modo clone */}
+                {voiceMode === 'clone' && !selectedVoiceId && !uploadedVoiceUrl && voices.length > 0 && (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                    <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                    <p className="text-amber-300 text-sm">Selecione uma voz abaixo para gerar o audio.</p>
+                  </div>
+                )}
                 {voices.length === 0 ? (
                   <p className="text-slate-400 text-center py-6">Nenhuma voz disponível no momento</p>
                 ) : selectedVoiceCategory ? (
@@ -2578,7 +2582,7 @@ export default function VozProClient() {
             {/* Generate Button */}
             <Button
               onClick={handleGenerate}
-              disabled={isGenerating || !text.trim() || (!selectedVariationId && !uploadedVoiceUrl)}
+              disabled={isGenerating || !text.trim() || (!selectedVoiceId && !uploadedVoiceUrl) || (!selectedVariationId && !uploadedVoiceUrl)}
               className="w-full h-14 text-lg font-bold bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50"
             >
               {isGenerating ? (
