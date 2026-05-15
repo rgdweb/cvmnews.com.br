@@ -16,9 +16,12 @@
 // CORRECOES (15/05/2026 v2):
 // - CRITICO: Adicionado trim do audio de referencia para 12s (evita CUDA OOM na RTX 3060 12GB)
 //   Sem trim, audio de ref longo causava corte no final, travadas e audio corrompido
-// - Adicionado normalizePronunciation() com dicionario fonetico PT-BR
-// - Adicionado splitTextIntoChunks() para textos longos (evita corte de audio)
-// - Adicionado preservacao de pontuacao (virgulas, pontos, exclamacoes)
+// - Adicionado normalizePronunciation() com dicionario fonetico PT-BR (150+ palavras)
+// - Adicionado CHUNKING completo: textos longos sao divididos em pedacos (max 400 chars)
+//   Cada chunk e gerado separadamente pelo TTS, depois os audios sao concatenados
+//   Resolve: audio cortado no final, pontuacao ignorada, textos longos truncados
+// - Adicionado concatenateWavFiles() para juntar audios WAV sem depender de ffmpeg
+// - Upload de audio de referencia feito 1 vez e reusado em todos os chunks
 
 set_time_limit(0);
 ini_set('max_input_time', 0);
@@ -368,15 +371,16 @@ function normalizePronunciation($text) {
 }
 
 // ===================== SPLIT DE TEXTO LONGO =====================
-// Divide texto em chunks para evitar que TTS corte audio no final.
+// Divide texto em chunks por pontuacao para evitar que TTS corte audio no final.
 // TTS com texto muito longo pode gerar audio truncado por limite de tokens.
-function splitTextIntoChunks($text, $maxChars = 500) {
+function splitTextIntoChunks($text, $maxChars = 400) {
     if (mb_strlen($text) <= $maxChars) {
         return [$text];
     }
 
     $chunks = [];
-    $sentences = preg_split('/(?<=[.!?])\s+/', $text);
+    // Dividir por pontuacao forte (., !, ?, ...) mantendo a pontuacao no chunk
+    $sentences = preg_split('/(?<=[.!?…])\s+/', $text);
     $current = '';
 
     foreach ($sentences as $sentence) {
@@ -392,7 +396,25 @@ function splitTextIntoChunks($text, $maxChars = 500) {
         $chunks[] = trim($current);
     }
 
-    // Fallback: se nao dividiu, cortar por maxChars
+    // Fallback: se nao dividiu por pontuacao (texto sem pontuacao), cortar por virgula
+    if (count($chunks) <= 1 && mb_strlen($text) > $maxChars) {
+        $chunks = [];
+        $phrases = preg_split('/(?<=,|;|:)\s+/', $text);
+        $current = '';
+        foreach ($phrases as $phrase) {
+            if (mb_strlen($current . ' ' . $phrase) > $maxChars && !empty($current)) {
+                $chunks[] = trim($current);
+                $current = $phrase;
+            } else {
+                $current = ($current ? $current . ' ' : '') . $phrase;
+            }
+        }
+        if (!empty(trim($current))) {
+            $chunks[] = trim($current);
+        }
+    }
+
+    // Ultimo fallback: cortar por palavras
     if (count($chunks) <= 1 && mb_strlen($text) > $maxChars) {
         $chunks = [];
         $words = explode(' ', $text);
@@ -411,6 +433,84 @@ function splitTextIntoChunks($text, $maxChars = 500) {
     }
 
     return $chunks;
+}
+
+// ===================== CONCATENAR AUDIO =====================
+// Junta multiplos arquivos WAV em um so (sem ffmpeg, puro PHP)
+function concatenateWavFiles($wavFiles) {
+    if (count($wavFiles) === 0) return null;
+    if (count($wavFiles) === 1) return $wavFiles[0];
+
+    // Ler primeiro arquivo para extrair header WAV
+    $firstData = file_get_contents($wavFiles[0]);
+
+    // Verificar se e WAV valido (deve comecar com RIFF)
+    if (substr($firstData, 0, 4) !== 'RIFF') {
+        return null;
+    }
+
+    // Extrair parametros do header WAV (44 bytes para PCM padrão)
+    $numChannels = unpack('v', substr($firstData, 22, 2))[1];
+    $sampleRate = unpack('V', substr($firstData, 24, 4))[1];
+    $bitsPerSample = unpack('v', substr($firstData, 34, 2))[1];
+    $byteRate = unpack('V', substr($firstData, 28, 4))[1];
+    $blockAlign = unpack('v', substr($firstData, 32, 2))[1];
+
+    // Extrair dados PCM do primeiro arquivo (pular header de 44 bytes)
+    $pcmData = substr($firstData, 44);
+
+    // Adicionar dados PCM dos demais arquivos
+    for ($i = 1; $i < count($wavFiles); $i++) {
+        $data = file_get_contents($wavFiles[$i]);
+        if (strlen($data) > 44 && substr($data, 0, 4) === 'RIFF') {
+            $pcmData .= substr($data, 44);
+        }
+    }
+
+    // Montar novo WAV com header atualizado
+    $dataSize = strlen($pcmData);
+    $fileSize = 36 + $dataSize;
+    $newHeader = pack('A4VA4A4VvvVVvvA4V',
+        'RIFF', $fileSize, 'WAVE', 'fmt ', 16,
+        1, // PCM
+        $numChannels, $sampleRate, $byteRate,
+        $blockAlign, $bitsPerSample, 'data', $dataSize
+    );
+
+    $outputFile = tempnam(sys_get_temp_dir(), 'vp_concat_') . '.wav';
+    file_put_contents($outputFile, $newHeader . $pcmData);
+
+    return $outputFile;
+}
+
+// ===================== BAIXAR AUDIO GERADO =====================
+function downloadGeneratedAudio($audioUrl) {
+    debugLog('Download chunk audio', 'info', 'baixando...');
+    $tempFile = tempnam(sys_get_temp_dir(), 'vp_ov_chunk_');
+    $ext = strtolower(pathinfo($audioUrl, PATHINFO_EXTENSION));
+    if ($ext) $tempFile .= '.' . $ext;
+
+    $ch = curl_init($audioUrl);
+    $fp = fopen($tempFile, 'w');
+    curl_setopt_array($ch, [
+        CURLOPT_FILE => $fp,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 180,
+        CURLOPT_ENCODING => '',
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $dlOk = curl_exec($ch);
+    $dlCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    fclose($fp);
+
+    if (!$dlOk || $dlCode != 200 || filesize($tempFile) == 0) {
+        if (file_exists($tempFile)) unlink($tempFile);
+        return null;
+    }
+
+    debugLog('Download chunk audio', 'ok', round(filesize($tempFile) / 1024) . 'KB');
+    return $tempFile;
 }
 
 // ===================== LER INPUT JSON =====================
@@ -792,132 +892,165 @@ if ($mode === 'clone') {
 
 debugLog('Modo', 'info', "endpoint: $endpoint | gender: $gender | pitch: $pitch");
 
-// ===================== FLUXO COM RETRY =====================
+// ===================== CHUNKING: DIVIDIR TEXTO LONGO =====================
+// Textos longos sao divididos para evitar que o TTS corte o audio no final.
+// Cada chunk e gerado separadamente e os audios sao concatenados depois.
 
-$audioUrl = null;
-$maxRetries = 3;
-$lastError = '';
+$chunks = splitTextIntoChunks($texto, 400);
+$chunkCount = count($chunks);
 
-for ($attempt = 0; $attempt < $maxRetries && !$audioUrl; $attempt++) {
-    if ($attempt > 0) {
-        $waitSec = 3 * $attempt;
-        debugLog('Retry', 'warn', "Tentativa " . ($attempt + 1) . "/$maxRetries - aguardando ${waitSec}s...");
-        sleep($waitSec);
-    } else {
-        debugLog('Geracao', 'info', "Iniciando OmniVoice via PHP DIRECT ($endpoint)...");
+if ($chunkCount > 1) {
+    debugLog('Chunking', 'info', "Texto dividido em $chunkCount partes (" . mb_strlen($texto) . " chars total)");
+    for ($ci = 0; $ci < $chunkCount; $ci++) {
+        debugLog('Chunk ' . ($ci + 1), 'info', mb_strlen($chunks[$ci]) . " chars: " . mb_substr($chunks[$ci], 0, 60) . "...");
     }
+} else {
+    debugLog('Chunking', 'ok', 'Texto curto, sem necessidade de dividir (' . mb_strlen($texto) . ' chars)');
+}
 
-    // Upload audio de referencia (clone mode only)
-    $refPath = null;
-    if ($mode === 'clone' && $tempRefFile && file_exists($tempRefFile)) {
-        $refPath = uploadToGradio($tempRefFile, $refAudioName, $tunnelUrl);
-        if (!$refPath) {
-            debugLog('Upload', 'error', 'Falha no upload, tentando novamente...');
-            $lastError = 'Falha no upload do audio';
+// ===================== UPLOAD AUDIO DE REFERENCIA (1 vez) =====================
+$refPath = null;
+if ($mode === 'clone' && $tempRefFile && file_exists($tempRefFile)) {
+    $refPath = uploadToGradio($tempRefFile, $refAudioName, $tunnelUrl);
+    if (!$refPath) {
+        returnError('Falha no upload do audio de referencia', 400);
+    }
+    $gradioData[2]['path'] = $refPath;
+    $gradioData[2]['url'] = $tunnelUrl . '/gradio_api/file=' . $refPath;
+    $gradioData[2]['size'] = filesize($tempRefFile);
+    debugLog('Upload ref audio', 'ok', 'Enviado para Gradio (reuso em todos os chunks)');
+}
+
+// ===================== GERAR AUDIO PARA CADA CHUNK =====================
+$chunkAudioFiles = [];
+$generationFailed = false;
+
+for ($ci = 0; $ci < $chunkCount; $ci++) {
+    $chunkLabel = ($chunkCount > 1) ? " [chunk " . ($ci + 1) . "/$chunkCount]" : '';
+    $chunkText = $chunks[$ci];
+
+    debugLog('Geracao' . $chunkLabel, 'info', "Gerando " . mb_strlen($chunkText) . " chars...");
+
+    // Atualizar texto no gradioData para este chunk
+    $chunkGradioData = $gradioData;
+    $chunkGradioData[0] = $chunkText;
+
+    // Tentar gerar com retry (ate 3 tentativas por chunk)
+    $chunkAudioUrl = null;
+    $maxChunkRetries = 3;
+
+    for ($attempt = 0; $attempt < $maxChunkRetries && !$chunkAudioUrl; $attempt++) {
+        if ($attempt > 0) {
+            $waitSec = 3 * $attempt;
+            debugLog('Retry' . $chunkLabel, 'warn', "Tentativa " . ($attempt + 1) . "/$maxChunkRetries (${waitSec}s)...");
+            sleep($waitSec);
+        }
+
+        // Submit job
+        $eventId = null;
+        for ($s = 0; $s < 3 && !$eventId; $s++) {
+            if ($s > 0) {
+                sleep(2);
+            }
+            $eventId = submitJob($tunnelUrl, $endpoint, $chunkGradioData);
+        }
+
+        if (!$eventId) {
             continue;
         }
-        $gradioData[2]['path'] = $refPath;
-        $gradioData[2]['url'] = $tunnelUrl . '/gradio_api/file=' . $refPath;
-        $gradioData[2]['size'] = filesize($tempRefFile);
-    }
 
-    // Submit job
-    $eventId = null;
-    for ($s = 0; $s < 3 && !$eventId; $s++) {
-        if ($s > 0) {
-            debugLog('Submit retry', 'warn', "Tentativa " . ($s + 1) . "/3");
-            sleep(2);
+        // Stream resultado
+        $result = streamResult($tunnelUrl, $endpoint, $eventId, 600);
+
+        if ($result['audioUrl']) {
+            $chunkAudioUrl = $result['audioUrl'];
+            if ($attempt > 0) {
+                debugLog('Retry' . $chunkLabel, 'ok', "Sucesso na tentativa " . ($attempt + 1));
+            }
         }
-        $eventId = submitJob($tunnelUrl, $endpoint, $gradioData);
     }
 
-    if (!$eventId) {
-        $lastError = 'Falha ao submeter job ao OmniVoice';
-        continue;
-    }
-
-    // Stream resultado (timeout 600s para textos longos)
-    $result = streamResult($tunnelUrl, $endpoint, $eventId, 600);
-
-    if ($result['audioUrl']) {
-        $audioUrl = $result['audioUrl'];
-        if ($attempt > 0) {
-            debugLog('Retry', 'ok', "Sucesso na tentativa " . ($attempt + 1) . "!");
-        }
+    if (!$chunkAudioUrl) {
+        debugLog('Geracao' . $chunkLabel, 'error', 'Falhou apos todas as tentativas');
+        $generationFailed = true;
         break;
     }
 
-    $lastError = $result['error'] ?? 'unknown';
-
-    $retryable = ['null', '404', 'timeout', 'connection_lost', 'stream_ended'];
-    $shouldRetry = false;
-    foreach ($retryable as $re) {
-        if (stripos($lastError, $re) !== false) {
-            $shouldRetry = true;
-            break;
-        }
-    }
-
-    if (!$shouldRetry) {
-        debugLog('Retry', 'error', "Erro nao-retriable: $lastError");
+    // Baixar audio gerado deste chunk
+    $chunkFile = downloadGeneratedAudio($chunkAudioUrl);
+    if (!$chunkFile) {
+        debugLog('Download' . $chunkLabel, 'error', 'Falha ao baixar audio');
+        $generationFailed = true;
         break;
     }
+
+    $chunkAudioFiles[] = $chunkFile;
+    debugLog('Chunk ' . ($ci + 1) . ' OK', 'ok', round(filesize($chunkFile) / 1024) . 'KB');
 }
 
-// Limpar temp
+// Limpar audio de referencia temporario
 if ($tempRefFile && file_exists($tempRefFile)) unlink($tempRefFile);
 
-if (!$audioUrl) {
-    $userMsg = 'OmniVoice falhou: ' . $lastError;
-    if ($lastError === 'null') {
-        $userMsg = 'OmniVoice instavel. Tente novamente em instantes.';
-    } elseif ($lastError === '404') {
-        $userMsg = 'OmniVoice reiniciou. Tente novamente.';
-    } elseif ($lastError === 'timeout') {
-        $userMsg = 'OmniVoice demorou demais. Tente um texto mais curto.';
+// Verificar se todos os chunks foram gerados
+if ($generationFailed || count($chunkAudioFiles) === 0) {
+    // Limpar arquivos parciais
+    foreach ($chunkAudioFiles as $f) {
+        if (file_exists($f)) unlink($f);
     }
-    returnError($userMsg, 504);
+    returnError('OmniVoice falhou ao gerar o audio. Tente novamente.', 504);
 }
 
-// ===================== BAIXAR AUDIO E RETORNAR =====================
-debugLog('Download audio', 'info', 'baixando audio gerado...');
-$tempAudioFile = tempnam(sys_get_temp_dir(), 'vp_ov_gen_') . '.wav';
+// ===================== CONCATENAR CHUNKS (se necessario) =====================
+if ($chunkCount > 1) {
+    debugLog('Concatenar', 'info', "Juntando $chunkCount pedacos de audio...");
 
-$ch = curl_init($audioUrl);
-$fp = fopen($tempAudioFile, 'w');
-curl_setopt_array($ch, [
-    CURLOPT_FILE => $fp,
-    CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_TIMEOUT => 180,
-    CURLOPT_ENCODING => '',
-    CURLOPT_SSL_VERIFYPEER => false,
-]);
-$dlOk = curl_exec($ch);
-$dlCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-fclose($fp);
+    // Detectar formato (WAV ou outro) pelo primeiro arquivo
+    $isWav = (substr(file_get_contents($chunkAudioFiles[0], false, null, 0, 4)) === 'RIFF');
 
-if (!$dlOk || $dlCode != 200 || filesize($tempAudioFile) == 0) {
-    if (file_exists($tempAudioFile)) unlink($tempAudioFile);
-    returnError("Falha ao baixar audio gerado (HTTP $dlCode)");
+    if ($isWav) {
+        $finalAudioFile = concatenateWavFiles($chunkAudioFiles);
+    } else {
+        // Para MP3 ou outros formatos, concatenacao simples
+        $finalAudioFile = tempnam(sys_get_temp_dir(), 'vp_concat_') . '.wav';
+        $fp = fopen($finalAudioFile, 'wb');
+        foreach ($chunkAudioFiles as $f) {
+            fwrite($fp, file_get_contents($f));
+        }
+        fclose($fp);
+    }
+
+    if (!$finalAudioFile || !file_exists($finalAudioFile)) {
+        foreach ($chunkAudioFiles as $f) {
+            if (file_exists($f)) unlink($f);
+        }
+        returnError('Falha ao juntar os pedacos de audio', 500);
+    }
+
+    debugLog('Concatenar', 'ok', "Audio final: " . round(filesize($finalAudioFile) / 1024) . 'KB (de ' . $chunkCount . ' chunks)');
+
+    // Limpar arquivos de chunk
+    foreach ($chunkAudioFiles as $f) {
+        if (file_exists($f)) unlink($f);
+    }
+} else {
+    // Apenas 1 chunk, usar diretamente
+    $finalAudioFile = $chunkAudioFiles[0];
 }
 
-debugLog('Download audio', 'ok', round(filesize($tempAudioFile) / 1024) . 'KB');
-
-// Base64
-$audioBase64 = base64_encode(file_get_contents($tempAudioFile));
-$ext = strtolower(pathinfo($audioUrl, PATHINFO_EXTENSION));
-$mimeType = ($ext === 'mp3') ? 'audio/mpeg' : 'audio/wav';
+// ===================== RETORNAR AUDIO COMO BASE64 =====================
+$audioBase64 = base64_encode(file_get_contents($finalAudioFile));
+$mimeType = 'audio/wav';
 $dataUri = 'data:' . $mimeType . ';base64,' . $audioBase64;
 
-if ($tempAudioFile && file_exists($tempAudioFile)) unlink($tempAudioFile);
+if ($finalAudioFile && file_exists($finalAudioFile)) unlink($finalAudioFile);
 
-debugLog('FINAL', 'ok', 'OmniVoice via PHP DIRECT - zero Vercel');
+debugLog('FINAL', 'ok', 'OmniVoice via PHP DIRECT' . ($chunkCount > 1 ? " ($chunkCount chunks concatenados)" : '') . ' - zero Vercel');
 
 echo json_encode([
     'audioUrl' => $dataUri,
     'model' => 'omnivoice',
     'mode' => $mode,
+    'chunks' => $chunkCount,
     'viaDirectPhp' => true,
     'debug' => debugResult()
 ]);
