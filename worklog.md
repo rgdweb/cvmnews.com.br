@@ -1,22 +1,25 @@
 ---
 Task ID: 1
 Agent: Main Agent
-Task: Investigar e corrigir bugs persistentes do OmniVoice (corte de audio, pontuacao, pronuncia)
+Task: Adicionar botão de download de áudio de referência no painel admin
 
 Work Log:
-- Investigacao completa do codigo: PHP server, Next.js API routes, frontend
-- Encontrado que generate-omnivoice.php (producao) NAO truncava audio de referencia
-- Outros arquivos truncavam: generate.php (10s), Next.js routes (12s)
-- Sem trim, audio de ref longo causa CUDA OOM na RTX 3060 12GB -> audio cortado
-- Adicionado trimAudioToMaxSeconds() usando trim_audio.py existente (max 12s)
-- Adicionado normalizePronunciation() com dicionario fonetico PT-BR (150+ palavras)
-- Adicionado splitTextIntoChunks() para textos longos (max 500 chars)
-- Pipeline de normalizacao: stripSSML -> cleanText -> normalizePronunciation
-- Commit ff8e864 pushed para GitHub
-- Arquivo atualizado no Hostgator via cPanel (925 linhas)
+- Explorou a estrutura completa do projeto (Next.js 16 + Prisma + PHP backend)
+- Leu o arquivo `src/app/admin/page.tsx` (~2500+ linhas) para entender a exibição de vozes e variações
+- Identificou 4 locais onde botões de download precisavam ser adicionados:
+  1. Variações de voz na view detalhada (categoria selecionada, linhas ~2143)
+  2. Vozes compactas na folder view sem categoria (linhas ~2198)
+  3. Trilhas na view detalhada (linhas ~2651)
+  4. Trilhas compactas na folder view sem categoria (linhas ~2700)
+- Adicionou `Download` do lucide-react nos imports
+- Implementou tags `<a>` com atributo `download` para forçar download em vez de abrir no navegador
+- Estilização azul para diferenciar dos outros botões de ação
+- Build Next.js passou sem erros novos
+- Commit `0c1de58`, push `cbfdfed` para GitHub
 
 Stage Summary:
-- CORRECAO CRITICA: Audio de referencia agora e truncado para 12s antes de enviar ao TTS
-- 150+ palavras PT-BR adicionadas ao dicionario fonetico (acessar, processar, etc.)
-- Textos longos agora sao divididos em chunks para evitar corte de audio
-- Arquivos atualizados: GitHub (ff8e864) + Hostgator cPanel
+- Botão de download adicionado com sucesso em todas as views de vozes e trilhas
+- Ícone azul (Download) aparece ao lado de Play/Pause, Upload, Edit, Switch e Delete
+- Para vozes compactas (folder view), faz download da primeira variação ativa com áudio
+- Para trilhas, usa o `track.audioPath` como URL de download
+- Build OK, push OK
