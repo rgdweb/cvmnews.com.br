@@ -133,6 +133,79 @@ async function processTrackFile(file: File): Promise<{ blob: Blob; name: string;
   return { blob: mp3Blob, name, info }
 }
 
+// ===================== VOICE AUDIO TRIMMER =====================
+// Corta audio de referencia com waveform visual: auto-trim (detecta voz) ou manual (slider).
+
+const VOICE_AUTO_TRIM_SECONDS = 10 // target de duracao apos auto-trim
+const SILENCE_THRESHOLD = 0.015 // RMS para detectar silencio
+
+function detectVoiceRange(audioBuffer: AudioBuffer): { start: number; end: number } {
+  const data = audioBuffer.getChannelData(0)
+  const sr = audioBuffer.sampleRate
+  const winMs = 150
+  const winSamples = Math.floor(sr * winMs / 1000)
+  const rmsArr: number[] = []
+  for (let i = 0; i < data.length; i += winSamples) {
+    let sum = 0; const end = Math.min(i + winSamples, data.length)
+    for (let j = i; j < end; j++) sum += data[j] * data[j]
+    rmsArr.push(Math.sqrt(sum / (end - i)))
+  }
+  let first = 0, last = rmsArr.length - 1
+  for (let i = 0; i < rmsArr.length; i++) { if (rmsArr[i] > SILENCE_THRESHOLD) { first = i; break } }
+  for (let i = rmsArr.length - 1; i >= 0; i--) { if (rmsArr[i] > SILENCE_THRESHOLD) { last = i; break } }
+  let s = Math.max(0, (first * winMs / 1000) - 0.15)
+  let e = Math.min(audioBuffer.duration, ((last + 1) * winMs / 1000) + 0.15)
+  if (e - s > VOICE_AUTO_TRIM_SECONDS) {
+    const c = (s + e) / 2; s = Math.max(0, c - VOICE_AUTO_TRIM_SECONDS / 2); e = s + VOICE_AUTO_TRIM_SECONDS
+    if (e > audioBuffer.duration) { e = audioBuffer.duration; s = Math.max(0, e - VOICE_AUTO_TRIM_SECONDS) }
+  }
+  return { start: s, end: e }
+}
+
+function extractAudioRange(buf: AudioBuffer, s: number, e: number): AudioBuffer {
+  const sr = buf.sampleRate, s0 = Math.floor(s * sr), s1 = Math.min(Math.floor(e * sr), buf.length), len = s1 - s0, ch = buf.numberOfChannels
+  const nb = new AudioBuffer({ numberOfChannels: ch, length: len, sampleRate: sr })
+  for (let c = 0; c < ch; c++) { const src = buf.getChannelData(c), dst = nb.getChannelData(c); for (let i = 0; i < len; i++) dst[i] = src[s0 + i] }
+  return nb
+}
+
+function audioBufferToWav(buffer: AudioBuffer): Blob {
+  const numCh = buffer.numberOfChannels, sr = buffer.sampleRate, bps = 16
+  const dataBytes = buffer.length * numCh * (bps / 8)
+  const ab = new ArrayBuffer(44 + dataBytes), v = new DataView(ab)
+  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)) }
+  w(0, 'RIFF'); v.setUint32(4, 36 + dataBytes, true); w(8, 'WAVE')
+  w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true)
+  v.setUint16(22, numCh, true); v.setUint32(24, sr, true)
+  v.setUint32(28, sr * numCh * bps / 8, true); v.setUint16(32, numCh * bps / 8, true); v.setUint16(34, bps, true)
+  w(36, 'data'); v.setUint32(40, dataBytes, true)
+  const pcm = new Int16Array(dataBytes / 2)
+  for (let c = 0; c < numCh; c++) { const d = buffer.getChannelData(c); for (let i = 0; i < buffer.length; i++) pcm[i * numCh + c] = Math.max(-32768, Math.min(32767, Math.round(d[i] * 32767))) }
+  return new Blob([ab, pcm.buffer], { type: 'audio/wav' })
+}
+
+function drawVoiceWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, rs: number, re: number) {
+  const ctx = canvas.getContext('2d'); if (!ctx) return
+  const W = canvas.width, H = canvas.height, dur = buffer.duration, data = buffer.getChannelData(0), step = Math.max(1, Math.floor(data.length / W))
+  ctx.clearRect(0, 0, W, H); ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, W, H)
+  // Full waveform dimmed
+  ctx.fillStyle = '#475569'
+  for (let x = 0; x < W; x++) { let m = 0; for (let j = 0; j < step; j++) { const idx = x * step + j; if (idx < data.length) m = Math.max(m, Math.abs(data[idx])) } const h = m * H * 0.85; ctx.fillRect(x, (H - h) / 2, 1, h) }
+  // Selected range highlighted
+  const x1 = Math.floor((rs / dur) * W), x2 = Math.ceil((re / dur) * W)
+  ctx.fillStyle = '#8b5cf6'
+  for (let x = x1; x < x2; x++) { let m = 0; for (let j = 0; j < step; j++) { const idx = x * step + j; if (idx < data.length) m = Math.max(m, Math.abs(data[idx])) } const h = m * H * 0.85; ctx.fillRect(x, (H - h) / 2, 1, h) }
+  // Dim outside
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  if (x1 > 0) ctx.fillRect(0, 0, x1, H)
+  if (x2 < W) ctx.fillRect(x2, 0, W - x2, H)
+  // Range borders
+  ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x1, 0); ctx.lineTo(x1, H); ctx.moveTo(x2, 0); ctx.lineTo(x2, H); ctx.stroke()
+  // Time labels
+  ctx.fillStyle = '#e2e8f0'; ctx.font = '11px sans-serif'
+  ctx.fillText(`${rs.toFixed(1)}s`, 4, 14); ctx.fillText(`${re.toFixed(1)}s`, W - 35, 14)
+}
+
 interface VoiceVariation {
   id: string
   label: string
@@ -501,7 +574,11 @@ export default function AdminDashboard() {
   const [uploadingRef, setUploadingRef] = useState(false)
 
   // Pending files (not uploaded yet, waiting for save)
-  const [pendingVoiceFile, setPendingVoiceFile] = useState<File | null>(null)
+  const [pendingVoiceFile, setPendingVoiceFile] = useState<{ blob: Blob; name: string; info: string } | null>(null)
+  const [voiceTrimState, setVoiceTrimState] = useState<{ buffer: AudioBuffer; duration: number; rangeStart: number; rangeEnd: number; fileName: string } | null>(null)
+  const waveCanvasRef = useRef<HTMLCanvasElement>(null)
+  const voicePreviewRef = useRef<HTMLAudioElement | null>(null)
+  const [voicePreviewing, setVoicePreviewing] = useState(false)
 
   // Track form state
   const [trackForm, setTrackForm] = useState({ name: '', description: '', emoji: '', category: '' })
@@ -833,12 +910,77 @@ export default function AdminDashboard() {
   }
 
   // --- VARIATION CRUD ---
-  // Select voice file (NO upload — just store in state for later upload on save)
-  const handleSelectVoiceFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Select voice file → decode, show waveform, auto-detect voice range
+  const handleSelectVoiceFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setPendingVoiceFile(file)
-    toast.success(`Arquivo pronto: ${file.name} (${(file.size / 1024).toFixed(0)}KB)`)
+    try {
+      toast.info('Analisando áudio...')
+      const actx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+      const ab = await file.arrayBuffer()
+      const audioBuf = await actx.decodeAudioData(ab)
+      await actx.close()
+      const range = detectVoiceRange(audioBuf)
+      setVoiceTrimState({ buffer: audioBuf, duration: audioBuf.duration, rangeStart: range.start, rangeEnd: range.end, fileName: file.name })
+      setPendingVoiceFile(null) // reset applied trim
+      toast.success(`Áudio: ${audioBuf.duration.toFixed(1)}s — voz detectada: ${(range.end - range.start).toFixed(1)}s`)
+    } catch (err) {
+      toast.error('Erro ao processar áudio. Tente outro formato.')
+      console.error('[VoiceTrim]', err)
+    }
+  }
+
+  // Draw waveform whenever trim state changes
+  useEffect(() => {
+    if (voiceTrimState && waveCanvasRef.current) {
+      const canvas = waveCanvasRef.current
+      const rect = canvas.getBoundingClientRect()
+      canvas.width = rect.width * 2
+      canvas.height = rect.height * 2
+      drawVoiceWaveform(canvas, voiceTrimState.buffer, voiceTrimState.rangeStart, voiceTrimState.rangeEnd)
+    }
+  }, [voiceTrimState])
+
+  // Apply trim → create WAV blob for upload
+  const handleApplyVoiceTrim = () => {
+    if (!voiceTrimState) return
+    const { buffer, rangeStart, rangeEnd, fileName } = voiceTrimState
+    const trimmed = extractAudioRange(buffer, rangeStart, rangeEnd)
+    const wavBlob = audioBufferToWav(trimmed)
+    const baseName = fileName.replace(/\.[^.]+$/, '')
+    const dur = (rangeEnd - rangeStart).toFixed(1)
+    setPendingVoiceFile({ blob: wavBlob, name: `${baseName}.wav`, info: `${dur}s de ${buffer.duration.toFixed(1)}s — ${(wavBlob.size / 1024).toFixed(0)}KB WAV` })
+    toast.success(`Corte aplicado: ${dur}s`) // ✅
+  }
+
+  // Preview trimmed audio
+  const handlePreviewVoiceTrim = () => {
+    if (!voiceTrimState) return
+    const { buffer, rangeStart, rangeEnd } = voiceTrimState
+    const trimmed = extractAudioRange(buffer, rangeStart, rangeEnd)
+    const wavBlob = audioBufferToWav(trimmed)
+    const url = URL.createObjectURL(wavBlob)
+    if (voicePreviewRef.current) { voicePreviewRef.current.pause(); URL.revokeObjectURL(voicePreviewRef.current.src) }
+    const audio = new Audio(url)
+    voicePreviewRef.current = audio
+    setVoicePreviewing(true)
+    audio.play()
+    audio.onended = () => setVoicePreviewing(false)
+  }
+
+  // Reset trim to full audio
+  const handleResetVoiceTrim = () => {
+    if (!voiceTrimState) return
+    setVoiceTrimState(prev => prev ? { ...prev, rangeStart: 0, rangeEnd: prev.duration } : null)
+    setPendingVoiceFile(null)
+  }
+
+  // Auto-detect voice range again
+  const handleAutoVoiceTrim = () => {
+    if (!voiceTrimState) return
+    const range = detectVoiceRange(voiceTrimState.buffer)
+    setVoiceTrimState(prev => prev ? { ...prev, rangeStart: range.start, rangeEnd: range.end } : null)
+    setPendingVoiceFile(null)
   }
 
   const handleSaveVariation = async () => {
@@ -856,7 +998,7 @@ export default function AdminDashboard() {
         toast.info('Enviando arquivo de áudio...')
 
         const formData = new FormData()
-        formData.append('file', pendingVoiceFile)
+        formData.append('file', pendingVoiceFile.blob, pendingVoiceFile.name)
 
         const res = await fetch('/api/upload-voice', {
           method: 'POST',
@@ -933,6 +1075,9 @@ export default function AdminDashboard() {
       setAddingVariationTo(null)
       setVariationForm({ label: '', emoji: '', refAudioPath: '', serverUrl: '', filename: '', refAudioName: '', refText: '', instruct: 'none' })
       setPendingVoiceFile(null)
+      setVoiceTrimState(null)
+      if (voicePreviewRef.current) { voicePreviewRef.current.pause(); voicePreviewRef.current = null }
+      setVoicePreviewing(false)
       loadData()
     } catch {
       toast.error('Erro ao salvar variação')
@@ -2236,6 +2381,9 @@ export default function AdminDashboard() {
               setEditingVariationId(null)
               setAddingVariationTo(null)
               setPendingVoiceFile(null)
+              setVoiceTrimState(null)
+              if (voicePreviewRef.current) { voicePreviewRef.current.pause(); voicePreviewRef.current = null }
+              setVoicePreviewing(false)
             }
           }}>
             <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-lg">
@@ -2275,10 +2423,11 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Select reference audio (upload happens on save) */}
+                {/* Select reference audio with waveform trimmer */}
                 <div className="space-y-2">
                   <Label className="text-slate-300">
-                    Áudio de Referência {editingVariationId ? '' : '*'} (3-10s)
+                    Áudio de Referência {editingVariationId ? '' : '*'}
+                    <span className="text-slate-500 ml-1">(ideal: 3-12s de voz clara)</span>
                   </Label>
                   {editingVariationId && editingVariation?.refAudioPath && (
                     <p className="text-xs text-slate-500">
@@ -2302,27 +2451,107 @@ export default function AdminDashboard() {
                       {pendingVoiceFile ? (
                         <>
                           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          <span className="text-emerald-400">
-                            {pendingVoiceFile.name} ({(pendingVoiceFile.size / 1024).toFixed(0)}KB)
-                          </span>
+                          <span className="text-emerald-400">{pendingVoiceFile.name}</span>
                         </>
                       ) : (
                         <>
                           <Upload className="w-4 h-4" />
-                          {editingVariationId
-                            ? 'Enviar novo áudio (opcional)'
-                            : 'Selecionar arquivo de áudio'
-                          }
+                          {editingVariationId ? 'Enviar novo áudio (opcional)' : 'Selecionar arquivo de áudio'}
                         </>
                       )}
                     </Button>
                   </div>
-                  {pendingVoiceFile && (
+                </div>
+
+                {/* Waveform Trimmer — shows after file selection */}
+                {voiceTrimState && (
+                  <div className="space-y-3 rounded-lg bg-slate-900/60 p-3 border border-slate-700">
+                    {/* Waveform canvas */}
+                    <canvas
+                      ref={waveCanvasRef}
+                      className="w-full h-16 rounded cursor-crosshair"
+                      style={{ imageRendering: 'pixelated' }}
+                    />
+
+                    {/* Duration info */}
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>Original: {voiceTrimState.duration.toFixed(1)}s</span>
+                      <span className="text-violet-400 font-medium">
+                        Selecionado: {(voiceTrimState.rangeEnd - voiceTrimState.rangeStart).toFixed(1)}s
+                      </span>
+                    </div>
+
+                    {/* Start / End sliders */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-slate-400">Início: {voiceTrimState.rangeStart.toFixed(2)}s</Label>
+                        <input
+                          type="range"
+                          min={0}
+                          max={voiceTrimState.duration}
+                          step={0.05}
+                          value={voiceTrimState.rangeStart}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value)
+                            setVoiceTrimState(prev => prev && v < prev.rangeEnd ? { ...prev, rangeStart: v } : prev)
+                            setPendingVoiceFile(null)
+                          }}
+                          className="w-full accent-violet-500 h-2"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-slate-400">Fim: {voiceTrimState.rangeEnd.toFixed(2)}s</Label>
+                        <input
+                          type="range"
+                          min={0}
+                          max={voiceTrimState.duration}
+                          step={0.05}
+                          value={voiceTrimState.rangeEnd}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value)
+                            setVoiceTrimState(prev => prev && v > prev.rangeStart ? { ...prev, rangeEnd: v } : prev)
+                            setPendingVoiceFile(null)
+                          }}
+                          className="w-full accent-amber-400 h-2"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={handlePreviewVoiceTrim}
+                        className="border-slate-600 text-slate-300 hover:bg-slate-700 gap-1 text-xs">
+                        {voicePreviewing ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                        {voicePreviewing ? 'Pausar' : 'Ouvir corte'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleAutoVoiceTrim}
+                        className="border-violet-600 text-violet-400 hover:bg-violet-900/30 gap-1 text-xs">
+                        <AudioWaveform className="w-3 h-3" />
+                        Auto-trim voz
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleResetVoiceTrim}
+                        className="border-slate-600 text-slate-300 hover:bg-slate-700 gap-1 text-xs">
+                        <RefreshCw className="w-3 h-3" />
+                        Usar tudo
+                      </Button>
+                      <Button size="sm" onClick={handleApplyVoiceTrim} disabled={!!pendingVoiceFile}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs ml-auto">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Aplicar corte
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ready badge */}
+                {pendingVoiceFile && (
+                  <div className="flex items-center gap-2">
                     <Badge variant="outline" className="bg-emerald-900/30 border-emerald-700 text-emerald-400">
                       Pronto para enviar ao salvar
                     </Badge>
-                  )}
-                </div>
+                    <span className="text-xs text-slate-500">{pendingVoiceFile.info}</span>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label className="text-slate-300">Texto da Referência <span className="text-slate-500">(opcional)</span></Label>
@@ -2353,7 +2582,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="ghost" onClick={() => { setVariationDialogOpen(false); setEditingVariationId(null); setAddingVariationTo(null); setPendingVoiceFile(null) }} className="text-slate-400">Cancelar</Button>
+                <Button variant="ghost" onClick={() => { setVariationDialogOpen(false); setEditingVariationId(null); setAddingVariationTo(null); setPendingVoiceFile(null); setVoiceTrimState(null); if (voicePreviewRef.current) { voicePreviewRef.current.pause(); voicePreviewRef.current = null } setVoicePreviewing(false) }} className="text-slate-400">Cancelar</Button>
                 <Button onClick={handleSaveVariation} disabled={uploadingRef} className="bg-violet-600 hover:bg-violet-700 text-white">
                   {uploadingRef ? (
                     <>
