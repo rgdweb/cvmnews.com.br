@@ -1,12 +1,47 @@
 <?php
-// generate-omnivoice.php - Geracao de voz TTS via VozPro (PHP direto do browser)
+// generate-omnivoice.php - Geracao de voz TTS via OmniVoice (PHP direto do browser)
 // Suporta 3 modos: clone (_clone_fn), design (_design_fn), auto (_design_fn com Auto)
 // Usa o mesmo padrao HMAC do generate.php
 // Bypassa o Vercel completamente - zero gasto de serverless
+//
+// CORRECOES (15/05/2026):
+// - Adicionada cleanText() para remover caracteres de controle invisiveis
+// - memory_limit 256M -> 512M (base64 de audio longo precisa mais memoria)
+// - SSE timeout 300s -> 600s (textos longos nao estouram)
+// - po (postprocess) mantido true (limpa artefatos/estalos do audio gerado)
+// - CURLOPT_ENCODING => '' adicionado no fetch da tunnel URL
+// - Timeout submit job 60s -> 90s
+// - Timeout download audio 120s -> 180s
+//
+// CORRECOES (15/05/2026 v2):
+// - CRITICO: Adicionado trim do audio de referencia para 12s (evita CUDA OOM na RTX 3060 12GB)
+//   Sem trim, audio de ref longo causava corte no final, travadas e audio corrompido
+// - Adicionado normalizePronunciation() com dicionario fonetico PT-BR (150+ palavras)
+// - Adicionado CHUNKING completo: textos longos sao divididos em pedacos (max 400 chars)
+//   Cada chunk e gerado separadamente pelo TTS, depois os audios sao concatenados
+//   Resolve: audio cortado no final, pontuacao ignorada, textos longos truncados
+// - Adicionado concatenateWavFiles() para juntar audios WAV sem depender de ffmpeg
+// - Upload de audio de referencia feito 1 vez e reusado em todos os chunks
+
+// ===== CAPTURA DE ERROS FATAIS =====
+// Se PHP crashar (fatal error, out of memory, etc), retorna JSON ao inves de pagina em branco 500
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR])) {
+        http_response_code(500);
+        echo json_encode([
+            'erro' => 'Erro fatal do PHP: ' . $error['message'],
+            'file' => basename($error['file']),
+            'line' => $error['line'],
+            'php_fatal' => true
+        ]);
+        exit;
+    }
+});
 
 set_time_limit(0);
 ini_set('max_input_time', 0);
-ini_set('memory_limit', '256M');
+ini_set('memory_limit', '512M');
 
 require_once __DIR__ . '/config.php';
 
@@ -99,6 +134,407 @@ function returnError($msg, $code = 500) {
     exit;
 }
 
+// ===================== STRIP SSML (defesa) =====================
+// Se o frontend enviar SSML, remove tudo. TTS nao entende tags.
+function stripSSML($text) {
+    if (!is_string($text)) return '';
+    if (!preg_match('/<[a-z][^>]*>/i', $text)) return $text;
+    $r = preg_replace('/<[^>]+>/', '', $text);
+    $r = html_entity_decode($r, ENT_QUOTES | ENT_XML1, 'UTF-8');
+    return trim(preg_replace('/\s+/', ' ', $r));
+}
+
+// ===================== LIMPAR TEXTO (defesa extra) =====================
+// Remove caracteres de controle invisiveis que podem causar garbling
+function cleanText($text) {
+    if (!is_string($text)) return '';
+    $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
+    $text = str_replace(["\r\n", "\r"], "\n", $text);
+    $text = preg_replace('/\n{3,}/', "\n\n", $text);
+    return trim($text);
+}
+
+// ===================== TRIMAR AUDIO DE REFERENCIA =====================
+// CRITICO: Limitar audio de ref para evitar CUDA OOM na RTX 3060 12GB.
+// Sem este trim, audio de referencia longo (>12s) pode causar:
+// - Audio cortado no final da geracao
+// - Travadas e silencios no meio do audio
+// - Audio corrompido com artefatos
+// Usa trim_audio.py existente (sem depender de ffmpeg)
+define('MAX_REF_AUDIO_SECONDS', 12);
+
+function trimAudioToMaxSeconds($filePath, $maxSeconds = 12) {
+    $trimScript = __DIR__ . '/trim_audio.py';
+    if (!file_exists($trimScript)) {
+        debugLog('Trim ref audio', 'warn', 'trim_audio.py nao encontrado, usando original');
+        return false;
+    }
+    // Verificar se shell_exec esta disponivel (Hostgator pode desabilitar)
+    if (!function_exists('shell_exec') || in_array('shell_exec', array_map('trim', explode(',', ini_get('disable_functions'))))) {
+        debugLog('Trim ref audio', 'warn', 'shell_exec desabilitado, usando original');
+        return false;
+    }
+    $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+    $trimmedFile = tempnam(sys_get_temp_dir(), 'vp_trim_') . '.' . $ext;
+
+    $cmd = 'python3 ' . escapeshellarg($trimScript) . ' '
+         . escapeshellarg($filePath) . ' '
+         . escapeshellarg($trimmedFile) . ' '
+         . escapeshellarg((string)$maxSeconds) . ' 2>&1';
+
+    $output = @shell_exec($cmd);
+    $trimOk = (trim($output ?? '') === 'OK');
+
+    if ($trimOk && file_exists($trimmedFile) && filesize($trimmedFile) > 0) {
+        return $trimmedFile;
+    }
+    // Falha no trim, apagar arquivo temporario e retornar false
+    if (file_exists($trimmedFile)) unlink($trimmedFile);
+    return false;
+}
+
+// ===================== NORMALIZACAO FONETICA PT-BR =====================
+// Corrige palavras que o TTS pronuncia errado
+function normalizePronunciation($text) {
+    if (!is_string($text) || empty($text)) return $text;
+
+    // Dicionario de correcoes foneticas para PT-BR
+    // Formato: palavra_errada => palavra_correta
+    // Foco: terminacoes -SAR, -SOR, -SEL, -TIL e palavras comuns
+    static $dict = [
+        // Terminacoes que o TTS confunde S com Z
+        'acessar' => 'aceSSar',
+        'processar' => 'proceSSar',
+        'acessador' => 'aceSSador',
+        'processador' => 'proceSSador',
+        'comecar' => 'comecar',
+        'começar' => 'começar',
+        'pesquisador' => 'pesquiSador',
+        'assinador' => 'aSSinador',
+        'acessório' => 'aceSSório',
+        'acessorio' => 'aceSSório',
+        'acessórios' => 'aceSSórios',
+        'acessorios' => 'aceSSórios',
+        'acessível' => 'aceSSível',
+        'acessivel' => 'aceSSível',
+        'inacessível' => 'inaceSSível',
+        'inacessivel' => 'inaceSSível',
+        'excessivo' => 'eceSSivo',
+        'excessão' => 'eceSSão',
+        'excessao' => 'eceSSão',
+        'massagem' => 'maSSagem',
+        'mensagens' => 'menSagens',
+        'mensagem' => 'menSagem',
+        'passageiro' => 'paSSageiro',
+        'passageiros' => 'paSSageiros',
+        'possível' => 'poSSível',
+        'possivel' => 'poSSível',
+        'impossível' => 'impoSSível',
+        'impossivel' => 'impoSSível',
+        'possibilidade' => 'poSSibilidade',
+        'assunto' => 'aSSunto',
+        'assuntos' => 'aSSuntos',
+        'assinar' => 'aSSinar',
+        'assinatura' => 'aSSinatura',
+        'assenso' => 'aSSenSo',
+        'assessor' => 'aSSeSSor',
+        'assessores' => 'aSSeSSores',
+        'assessoria' => 'aSSeSSoria',
+        'cassino' => 'caSSino',
+        'pássaro' => 'páSSaro',
+        'passaro' => 'paSSaro',
+        'pássaros' => 'páSSaros',
+        'passaros' => 'paSSaros',
+        'ossada' => 'oSSada',
+        'ossos' => 'oSSos',
+        'osso' => 'oSSo',
+        'piscina' => 'piScina',
+        'discussão' => 'diScuSSão',
+        'discussao' => 'diScuSSão',
+        'discutir' => 'diScutir',
+        'profissional' => 'profeSSional',
+        'profissionais' => 'profeSSionais',
+        'sessão' => 'SeSSão',
+        'sessao' => 'SeSSão',
+        'sessões' => 'SeSSões',
+        'secoes' => 'SeSSões',
+        'concessão' => ' conceSSão',
+        'concessao' => ' conceSSão',
+        'admissão' => 'admiSSão',
+        'admissao' => 'admiSSão',
+        'recessão' => 'receSSão',
+        'recessao' => 'receSSão',
+        'progressão' => 'progreSSão',
+        'progressao' => 'progreSSão',
+        'expressão' => 'expreSSão',
+        'expressao' => 'expreSSão',
+        'impressionante' => 'impreSSionante',
+        'pressionar' => 'preSSionar',
+        'depressão' => 'depreSSão',
+        'depressao' => 'depreSSão',
+        'compressão' => 'compreSSão',
+        'compressao' => 'compreSSão',
+        'agressivo' => 'agreSSivo',
+        'agressão' => 'agreSSão',
+        'agressao' => 'agreSSão',
+        'opressão' => 'opreSSão',
+        'opressao' => 'opreSSão',
+        'transmissão' => 'tranSmiSSão',
+        'transmissao' => 'tranSmiSSão',
+        'missão' => 'miSSão',
+        'missao' => 'miSSão',
+        'missões' => 'miSSões',
+        'missoes' => 'miSSões',
+        'necessário' => 'neceSSário',
+        'necessario' => 'neceSSário',
+        'necessidade' => 'neceSSidade',
+        'essencial' => 'eSSencial',
+        'essenciais' => 'eSSenciais',
+        'sucesso' => 'suceSSo',
+        'sucessos' => 'suceSSos',
+        'insucesso' => 'insuceSSo',
+        'acesso' => 'aceSSo',
+        'acessos' => 'aceSSos',
+        'sensível' => 'SenSível',
+        'sensivel' => 'SenSível',
+        'sensibilidade' => 'SenSibilidade',
+        'consensual' => 'conSenSual',
+        'censura' => 'cenSura',
+        'censurado' => 'cenSurado',
+        'pensar' => 'penSar',
+        'pensamento' => 'penSamento',
+        'pensamentos' => 'penSamentos',
+        'insensato' => 'inSenSato',
+        'resentimento' => 'reSentimento',
+        'representar' => 'repreSentar',
+        'representante' => 'repreSentante',
+        'representação' => 'repreSentação',
+        'representacao' => 'repreSentação',
+        'presente' => 'preSente',
+        'presenteamento' => 'preSenteamento',
+        'ausência' => 'auSência',
+        'ausencia' => 'auSência',
+        'ausências' => 'auSências',
+        'ausencias' => 'auSências',
+        'essência' => 'eSSência',
+        'essencia' => 'eSSência',
+        'resenha' => 'reSenha',
+        'desenho' => 'deSenho',
+        'desenhos' => 'deSenhos',
+        'ensenhar' => 'enSenhar',
+        'sensação' => 'SenSação',
+        'sensacao' => 'SenSação',
+        'conserto' => 'conSerto',
+        'concerto' => 'conCerto',
+        'obesidade' => 'obeSidade',
+        'crescimento' => 'creScimento',
+        'crescer' => 'creScer',
+        'despertar' => 'deSpertar',
+        'despertador' => 'deSpertador',
+        'aspersão' => 'aSperSão',
+        'aspersao' => 'aSperSão',
+        'dispersão' => 'diSperSão',
+        'dispersao' => 'diSperSão',
+        'imersão' => 'imerSão',
+        'imersao' => 'imerSão',
+        'submersão' => 'submerSão',
+        'submersao' => 'submerSão',
+        'diversão' => 'diverSão',
+        'diversao' => 'diverSão',
+        'diverso' => 'diverSo',
+        'diversos' => 'diverSos',
+        'reversão' => 'reverSão',
+        'reversao' => 'reverSão',
+        'inversão' => 'inverSão',
+        'inversao' => 'inverSão',
+        'aversão' => 'averSão',
+        'aversao' => 'averSão',
+        'conversão' => 'converSão',
+        'conversao' => 'converSão',
+        'conversar' => 'converSar',
+        'conversa' => 'converSa',
+        'conversas' => 'converSas',
+        'universidade' => 'univerSidade',
+        'universo' => 'univerSo',
+        'diversidade' => 'diverSidade',
+        'urso' => 'urSo',
+        'ursos' => 'urSos',
+        'curso' => 'curSo',
+        'cursos' => 'curSos',
+        'recurso' => 'recurSo',
+        'recursos' => 'recurSos',
+        'difusão' => 'difuSão',
+        'difusao' => 'difuSão',
+        'fusão' => 'fuSão',
+        'fusao' => 'fuSão',
+        'confusão' => 'confuSão',
+        'confusao' => 'confuSão',
+        'usurpar' => 'uSurpar',
+        'usurpador' => 'uSurpador',
+        'justificativa' => 'juStificativa',
+        'justificar' => 'juStificar',
+        'gostoso' => 'goStoSo',
+        'gostosa' => 'goStoSa',
+        'sustentável' => 'SuStentável',
+        'sustentavel' => 'SuStentável',
+        'sustentar' => 'SuStentar',
+        'trabalhoso' => 'trabalhoSo',
+        'horizonte' => 'horizonte',
+        'curitibanos' => 'curitibânos',
+    ];
+
+    // Aplicar correcoes (case-insensitive)
+    foreach ($dict as $wrong => $correct) {
+        // Match exato case-sensitive primeiro
+        $text = str_replace($wrong, $correct, $text);
+    }
+
+    return $text;
+}
+
+// ===================== SPLIT DE TEXTO LONGO =====================
+// Divide texto em chunks por pontuacao para evitar que TTS corte audio no final.
+// TTS com texto muito longo pode gerar audio truncado por limite de tokens.
+function splitTextIntoChunks($text, $maxChars = 400) {
+    if (mb_strlen($text) <= $maxChars) {
+        return [$text];
+    }
+
+    $chunks = [];
+    // Dividir por pontuacao forte (., !, ?, ...) mantendo a pontuacao no chunk
+    $sentences = preg_split('/(?<=[.!?…])\s+/', $text);
+    $current = '';
+
+    foreach ($sentences as $sentence) {
+        if (mb_strlen($current . ' ' . $sentence) > $maxChars && !empty($current)) {
+            $chunks[] = trim($current);
+            $current = $sentence;
+        } else {
+            $current = ($current ? $current . ' ' : '') . $sentence;
+        }
+    }
+
+    if (!empty(trim($current))) {
+        $chunks[] = trim($current);
+    }
+
+    // Fallback: se nao dividiu por pontuacao (texto sem pontuacao), cortar por virgula
+    if (count($chunks) <= 1 && mb_strlen($text) > $maxChars) {
+        $chunks = [];
+        $phrases = preg_split('/(?<=,|;|:)\s+/', $text);
+        $current = '';
+        foreach ($phrases as $phrase) {
+            if (mb_strlen($current . ' ' . $phrase) > $maxChars && !empty($current)) {
+                $chunks[] = trim($current);
+                $current = $phrase;
+            } else {
+                $current = ($current ? $current . ' ' : '') . $phrase;
+            }
+        }
+        if (!empty(trim($current))) {
+            $chunks[] = trim($current);
+        }
+    }
+
+    // Ultimo fallback: cortar por palavras
+    if (count($chunks) <= 1 && mb_strlen($text) > $maxChars) {
+        $chunks = [];
+        $words = explode(' ', $text);
+        $current = '';
+        foreach ($words as $word) {
+            if (mb_strlen($current . ' ' . $word) > $maxChars && !empty($current)) {
+                $chunks[] = trim($current);
+                $current = $word;
+            } else {
+                $current = ($current ? $current . ' ' : '') . $word;
+            }
+        }
+        if (!empty(trim($current))) {
+            $chunks[] = trim($current);
+        }
+    }
+
+    return $chunks;
+}
+
+// ===================== CONCATENAR AUDIO =====================
+// Junta multiplos arquivos WAV em um so (sem ffmpeg, puro PHP)
+function concatenateWavFiles($wavFiles) {
+    if (count($wavFiles) === 0) return null;
+    if (count($wavFiles) === 1) return $wavFiles[0];
+
+    // Ler primeiro arquivo para extrair header WAV
+    $firstData = file_get_contents($wavFiles[0]);
+
+    // Verificar se e WAV valido (deve comecar com RIFF)
+    if (substr($firstData, 0, 4) !== 'RIFF') {
+        return null;
+    }
+
+    // Extrair parametros do header WAV (44 bytes para PCM padrão)
+    $numChannels = unpack('v', substr($firstData, 22, 2))[1];
+    $sampleRate = unpack('V', substr($firstData, 24, 4))[1];
+    $bitsPerSample = unpack('v', substr($firstData, 34, 2))[1];
+    $byteRate = unpack('V', substr($firstData, 28, 4))[1];
+    $blockAlign = unpack('v', substr($firstData, 32, 2))[1];
+
+    // Extrair dados PCM do primeiro arquivo (pular header de 44 bytes)
+    $pcmData = substr($firstData, 44);
+
+    // Adicionar dados PCM dos demais arquivos
+    for ($i = 1; $i < count($wavFiles); $i++) {
+        $data = file_get_contents($wavFiles[$i]);
+        if (strlen($data) > 44 && substr($data, 0, 4) === 'RIFF') {
+            $pcmData .= substr($data, 44);
+        }
+    }
+
+    // Montar novo WAV com header atualizado
+    $dataSize = strlen($pcmData);
+    $fileSize = 36 + $dataSize;
+    $newHeader = pack('A4VA4A4VvvVVvvA4V',
+        'RIFF', $fileSize, 'WAVE', 'fmt ', 16,
+        1, // PCM
+        $numChannels, $sampleRate, $byteRate,
+        $blockAlign, $bitsPerSample, 'data', $dataSize
+    );
+
+    $outputFile = tempnam(sys_get_temp_dir(), 'vp_concat_') . '.wav';
+    file_put_contents($outputFile, $newHeader . $pcmData);
+
+    return $outputFile;
+}
+
+// ===================== BAIXAR AUDIO GERADO =====================
+function downloadGeneratedAudio($audioUrl) {
+    debugLog('Download chunk audio', 'info', 'baixando...');
+    $tempFile = tempnam(sys_get_temp_dir(), 'vp_ov_chunk_');
+    $ext = strtolower(pathinfo($audioUrl, PATHINFO_EXTENSION));
+    if ($ext) $tempFile .= '.' . $ext;
+
+    $ch = curl_init($audioUrl);
+    $fp = fopen($tempFile, 'w');
+    curl_setopt_array($ch, [
+        CURLOPT_FILE => $fp,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 180,
+        CURLOPT_ENCODING => '',
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $dlOk = curl_exec($ch);
+    $dlCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    fclose($fp);
+
+    if (!$dlOk || $dlCode != 200 || filesize($tempFile) == 0) {
+        if (file_exists($tempFile)) unlink($tempFile);
+        return null;
+    }
+
+    debugLog('Download chunk audio', 'ok', round(filesize($tempFile) / 1024) . 'KB');
+    return $tempFile;
+}
+
 // ===================== LER INPUT JSON =====================
 $rawInput = file_get_contents('php://input');
 $input = json_decode($rawInput, true);
@@ -115,10 +551,6 @@ $refAudioName = $input['referenceAudioName'] ?? 'ref_audio.wav';
 $instruct = $input['instruct'] ?? '';
 $speed = $input['speed'] ?? 1.0;
 $numStep = $input['numStep'] ?? 32;
-$guidanceScale = $input['guidanceScale'] ?? 2.0;
-$denoise = isset($input['denoise']) ? ($input['denoise'] === true || $input['denoise'] === 'true' || $input['denoise'] === 1) : true;
-$preprocess = isset($input['preprocess']) ? ($input['preprocess'] === true || $input['preprocess'] === 'true' || $input['preprocess'] === 1) : true;
-$postprocess = isset($input['postprocess']) ? ($input['postprocess'] === true || $input['postprocess'] === 'true' || $input['postprocess'] === 1) : true;
 
 // Voice Design params (usados no _design_fn)
 $gender = $input['gender'] ?? 'Auto';
@@ -127,7 +559,14 @@ $pitch = $input['pitch'] ?? 'Auto';
 $style = $input['style'] ?? 'Auto';
 $accent = $input['accent'] ?? 'Auto';
 
-debugLog('Input', 'info', "modo: $mode | texto: " . mb_substr($texto, 0, 50) . " | lang: $idioma | steps: $numStep | cfg: $guidanceScale | dn: " . ($denoise ? '1' : '0') . " | pp: " . ($preprocess ? '1' : '0') . " | po: " . ($postprocess ? '1' : '0'));
+// ===================== DEFESA: STRIP SSML + CLEAN + NORMALIZE =====================
+// Se o frontend enviou tags SSML sem processar, remove aqui antes de enviar ao TTS.
+// O TTS NAO entende SSML — tags seriam lidas como texto literal.
+$texto = stripSSML($texto);
+$texto = cleanText($texto);
+$texto = normalizePronunciation($texto);
+
+debugLog('Input', 'info', "modo: $mode | texto: " . mb_substr($texto, 0, 50) . " | lang: $idioma | steps: $numStep");
 
 if (empty(trim($texto))) {
     returnError('Texto e obrigatorio', 400);
@@ -141,31 +580,39 @@ if ($mode === 'clone' && empty($refAudioUrl)) {
 debugLog('Tunnel', 'info', 'Descobrindo URL do tunnel...');
 
 $tunnelUrl = null;
-$tunnelCh = curl_init(BASE_URL . '/get_tunnel.php');
-curl_setopt_array($tunnelCh, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT => 15,
-    CURLOPT_CONNECTTIMEOUT => 10,
-    CURLOPT_SSL_VERIFYPEER => false,
-]);
-$tunnelResp = curl_exec($tunnelCh);
-$tunnelCode = curl_getinfo($tunnelCh, CURLINFO_HTTP_CODE);
-curl_close($tunnelCh);
+// Primeiro tenta a constante TUNNEL_URL do config (atualizada pelo start_tunnel.ps1)
+if (defined('TUNNEL_URL') && !empty(TUNNEL_URL)) {
+    $tunnelUrl = TUNNEL_URL;
+    debugLog('Tunnel', 'info', 'Usando TUNNEL_URL do config');
+} else {
+    // Fallback: tenta via get_tunnel.php
+    $tunnelCh = curl_init(BASE_URL . '/get_tunnel.php');
+    curl_setopt_array($tunnelCh, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_ENCODING => '',
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $tunnelResp = curl_exec($tunnelCh);
+    $tunnelCode = curl_getinfo($tunnelCh, CURLINFO_HTTP_CODE);
+    curl_close($tunnelCh);
 
-if ($tunnelCode == 200 && $tunnelResp) {
-    $tunnelData = json_decode($tunnelResp, true);
-    if (($tunnelData['status'] ?? '') === 'online' && !empty($tunnelData['tunnelUrl'])) {
-        $tunnelUrl = $tunnelData['tunnelUrl'];
+    if ($tunnelCode == 200 && $tunnelResp) {
+        $tunnelData = json_decode($tunnelResp, true);
+        if (($tunnelData['status'] ?? '') === 'online' && !empty($tunnelData['tunnelUrl'])) {
+            $tunnelUrl = $tunnelData['tunnelUrl'];
+        }
     }
 }
 
 if (!$tunnelUrl) {
-    // Fallback para HF_SPACE_URL do config
+    // Fallback final para HF_SPACE_URL
     $tunnelUrl = defined('HF_SPACE_URL') ? HF_SPACE_URL : '';
 }
 
 if (empty($tunnelUrl)) {
-    returnError('Servidor VozPro offline - tunnel nao disponivel', 503);
+    returnError('Servidor OmniVoice offline - tunnel nao disponivel', 503);
 }
 
 debugLog('Tunnel', 'ok', mb_substr($tunnelUrl, 0, 60) . '...');
@@ -237,7 +684,7 @@ function submitJob($baseUrl, $endpoint, $gradioData) {
         CURLOPT_POSTFIELDS => json_encode(['data' => $gradioData]),
         CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 60,
+        CURLOPT_TIMEOUT => 90,
         CURLOPT_CONNECTTIMEOUT => 20,
         CURLOPT_ENCODING => '',
         CURLOPT_SSL_VERIFYPEER => false,
@@ -263,8 +710,8 @@ function submitJob($baseUrl, $endpoint, $gradioData) {
     return $eventId;
 }
 
-function streamResult($baseUrl, $endpoint, $eventId, $timeoutSec = 300) {
-    debugLog('SSE Stream', 'info', "Abrindo conexao para $eventId...");
+function streamResult($baseUrl, $endpoint, $eventId, $timeoutSec = 600) {
+    debugLog('SSE Stream', 'info', "Abrindo conexao para $eventId (timeout: {$timeoutSec}s)...");
 
     $audioUrl = null;
     $error = null;
@@ -394,6 +841,22 @@ if ($mode === 'clone') {
         if (!$tempRefFile) {
             returnError('Falha ao baixar audio de referencia', 400);
         }
+
+        // ===== TRIMAR AUDIO PARA EVITAR CUDA OOM =====
+        // CRITICO: Sem trim, audio de ref longo causa:
+        // - Audio cortado no final das frases
+        // - CUDA OOM na RTX 3060 12GB
+        // - Audio corrompido, travadas, silencios
+        $trimmedFile = trimAudioToMaxSeconds($tempRefFile, MAX_REF_AUDIO_SECONDS);
+        if ($trimmedFile && $trimmedFile !== $tempRefFile) {
+            if (file_exists($tempRefFile)) unlink($tempRefFile);
+            $tempRefFile = $trimmedFile;
+            debugLog('Trim ref audio', 'ok', round(filesize($tempRefFile) / 1024) . 'KB (max ' . MAX_REF_AUDIO_SECONDS . 's)');
+        } elseif ($trimmedFile === false) {
+            debugLog('Trim ref audio', 'warn', 'Falha no trim, usando original (pode causar OOM)');
+        } else {
+            debugLog('Trim ref audio', 'ok', 'Audio ja dentro do limite (' . MAX_REF_AUDIO_SECONDS . 's)');
+        }
     }
 
     $gradioData = [
@@ -409,12 +872,12 @@ if ($mode === 'clone') {
         '',                                // ref_text (vazio = auto Whisper)
         $instruct ?: null,                 // instruct
         (int)$numStep,                     // ns
-        (float)$guidanceScale,             // gs (CFG)
-        $denoise,                          // dn (denoise)
+        2.0,                               // gs (CFG)
+        true,                              // dn (denoise)
         (float)$speed,                     // sp (speed)
         null,                              // du (duration, null = auto)
-        $preprocess,                       // pp (preprocess)
-        $postprocess                       // po (postprocess)
+        true,                              // pp (preprocess)
+        true                               // po (postprocess) - limpa estalos/artefatos do audio
     ];
 
 } else {
@@ -434,12 +897,12 @@ if ($mode === 'clone') {
         $texto,                            // text
         $idioma,                           // lang
         (int)$numStep,                     // ns
-        (float)$guidanceScale,             // gs (CFG)
-        $denoise,                          // dn (denoise)
+        2.0,                               // gs (CFG)
+        true,                              // dn (denoise)
         (float)$speed,                     // sp (speed)
         null,                              // du (duration)
-        $preprocess,                       // pp (preprocess)
-        $postprocess,                      // po (postprocess)
+        true,                              // pp (preprocess)
+        true,                              // po (postprocess) - limpa estalos/artefatos
         $gender,                           // gender
         $age,                              // age
         $pitch,                            // pitch
@@ -451,132 +914,165 @@ if ($mode === 'clone') {
 
 debugLog('Modo', 'info', "endpoint: $endpoint | gender: $gender | pitch: $pitch");
 
-// ===================== FLUXO COM RETRY =====================
+// ===================== CHUNKING: DIVIDIR TEXTO LONGO =====================
+// Textos longos sao divididos para evitar que o TTS corte o audio no final.
+// Cada chunk e gerado separadamente e os audios sao concatenados depois.
 
-$audioUrl = null;
-$maxRetries = 3;
-$lastError = '';
+$chunks = splitTextIntoChunks($texto, 400);
+$chunkCount = count($chunks);
 
-for ($attempt = 0; $attempt < $maxRetries && !$audioUrl; $attempt++) {
-    if ($attempt > 0) {
-        $waitSec = 3 * $attempt;
-        debugLog('Retry', 'warn', "Tentativa " . ($attempt + 1) . "/$maxRetries - aguardando ${waitSec}s...");
-        sleep($waitSec);
-    } else {
-        debugLog('Geracao', 'info', "Iniciando VozPro via PHP DIRECT ($endpoint)...");
+if ($chunkCount > 1) {
+    debugLog('Chunking', 'info', "Texto dividido em $chunkCount partes (" . mb_strlen($texto) . " chars total)");
+    for ($ci = 0; $ci < $chunkCount; $ci++) {
+        debugLog('Chunk ' . ($ci + 1), 'info', mb_strlen($chunks[$ci]) . " chars: " . mb_substr($chunks[$ci], 0, 60) . "...");
     }
+} else {
+    debugLog('Chunking', 'ok', 'Texto curto, sem necessidade de dividir (' . mb_strlen($texto) . ' chars)');
+}
 
-    // Upload audio de referencia (clone mode only)
-    $refPath = null;
-    if ($mode === 'clone' && $tempRefFile && file_exists($tempRefFile)) {
-        $refPath = uploadToGradio($tempRefFile, $refAudioName, $tunnelUrl);
-        if (!$refPath) {
-            debugLog('Upload', 'error', 'Falha no upload, tentando novamente...');
-            $lastError = 'Falha no upload do audio';
+// ===================== UPLOAD AUDIO DE REFERENCIA (1 vez) =====================
+$refPath = null;
+if ($mode === 'clone' && $tempRefFile && file_exists($tempRefFile)) {
+    $refPath = uploadToGradio($tempRefFile, $refAudioName, $tunnelUrl);
+    if (!$refPath) {
+        returnError('Falha no upload do audio de referencia', 400);
+    }
+    $gradioData[2]['path'] = $refPath;
+    $gradioData[2]['url'] = $tunnelUrl . '/gradio_api/file=' . $refPath;
+    $gradioData[2]['size'] = filesize($tempRefFile);
+    debugLog('Upload ref audio', 'ok', 'Enviado para Gradio (reuso em todos os chunks)');
+}
+
+// ===================== GERAR AUDIO PARA CADA CHUNK =====================
+$chunkAudioFiles = [];
+$generationFailed = false;
+
+for ($ci = 0; $ci < $chunkCount; $ci++) {
+    $chunkLabel = ($chunkCount > 1) ? " [chunk " . ($ci + 1) . "/$chunkCount]" : '';
+    $chunkText = $chunks[$ci];
+
+    debugLog('Geracao' . $chunkLabel, 'info', "Gerando " . mb_strlen($chunkText) . " chars...");
+
+    // Atualizar texto no gradioData para este chunk
+    $chunkGradioData = $gradioData;
+    $chunkGradioData[0] = $chunkText;
+
+    // Tentar gerar com retry (ate 3 tentativas por chunk)
+    $chunkAudioUrl = null;
+    $maxChunkRetries = 3;
+
+    for ($attempt = 0; $attempt < $maxChunkRetries && !$chunkAudioUrl; $attempt++) {
+        if ($attempt > 0) {
+            $waitSec = 3 * $attempt;
+            debugLog('Retry' . $chunkLabel, 'warn', "Tentativa " . ($attempt + 1) . "/$maxChunkRetries (${waitSec}s)...");
+            sleep($waitSec);
+        }
+
+        // Submit job
+        $eventId = null;
+        for ($s = 0; $s < 3 && !$eventId; $s++) {
+            if ($s > 0) {
+                sleep(2);
+            }
+            $eventId = submitJob($tunnelUrl, $endpoint, $chunkGradioData);
+        }
+
+        if (!$eventId) {
             continue;
         }
-        $gradioData[2]['path'] = $refPath;
-        $gradioData[2]['url'] = $tunnelUrl . '/gradio_api/file=' . $refPath;
-        $gradioData[2]['size'] = filesize($tempRefFile);
-    }
 
-    // Submit job
-    $eventId = null;
-    for ($s = 0; $s < 3 && !$eventId; $s++) {
-        if ($s > 0) {
-            debugLog('Submit retry', 'warn', "Tentativa " . ($s + 1) . "/3");
-            sleep(2);
+        // Stream resultado
+        $result = streamResult($tunnelUrl, $endpoint, $eventId, 600);
+
+        if ($result['audioUrl']) {
+            $chunkAudioUrl = $result['audioUrl'];
+            if ($attempt > 0) {
+                debugLog('Retry' . $chunkLabel, 'ok', "Sucesso na tentativa " . ($attempt + 1));
+            }
         }
-        $eventId = submitJob($tunnelUrl, $endpoint, $gradioData);
     }
 
-    if (!$eventId) {
-        $lastError = 'Falha ao submeter job ao VozPro';
-        continue;
-    }
-
-    // Stream resultado
-    $result = streamResult($tunnelUrl, $endpoint, $eventId, 300);
-
-    if ($result['audioUrl']) {
-        $audioUrl = $result['audioUrl'];
-        if ($attempt > 0) {
-            debugLog('Retry', 'ok', "Sucesso na tentativa " . ($attempt + 1) . "!");
-        }
+    if (!$chunkAudioUrl) {
+        debugLog('Geracao' . $chunkLabel, 'error', 'Falhou apos todas as tentativas');
+        $generationFailed = true;
         break;
     }
 
-    $lastError = $result['error'] ?? 'unknown';
-
-    $retryable = ['null', '404', 'timeout', 'connection_lost', 'stream_ended'];
-    $shouldRetry = false;
-    foreach ($retryable as $re) {
-        if (stripos($lastError, $re) !== false) {
-            $shouldRetry = true;
-            break;
-        }
-    }
-
-    if (!$shouldRetry) {
-        debugLog('Retry', 'error', "Erro nao-retriable: $lastError");
+    // Baixar audio gerado deste chunk
+    $chunkFile = downloadGeneratedAudio($chunkAudioUrl);
+    if (!$chunkFile) {
+        debugLog('Download' . $chunkLabel, 'error', 'Falha ao baixar audio');
+        $generationFailed = true;
         break;
     }
+
+    $chunkAudioFiles[] = $chunkFile;
+    debugLog('Chunk ' . ($ci + 1) . ' OK', 'ok', round(filesize($chunkFile) / 1024) . 'KB');
 }
 
-// Limpar temp
+// Limpar audio de referencia temporario
 if ($tempRefFile && file_exists($tempRefFile)) unlink($tempRefFile);
 
-if (!$audioUrl) {
-    $userMsg = 'VozPro falhou: ' . $lastError;
-    if ($lastError === 'null') {
-        $userMsg = 'VozPro instavel. Tente novamente em instantes.';
-    } elseif ($lastError === '404') {
-        $userMsg = 'VozPro reiniciou. Tente novamente.';
-    } elseif ($lastError === 'timeout') {
-        $userMsg = 'VozPro demorou demais. Tente um texto mais curto.';
+// Verificar se todos os chunks foram gerados
+if ($generationFailed || count($chunkAudioFiles) === 0) {
+    // Limpar arquivos parciais
+    foreach ($chunkAudioFiles as $f) {
+        if (file_exists($f)) unlink($f);
     }
-    returnError($userMsg, 504);
+    returnError('OmniVoice falhou ao gerar o audio. Tente novamente.', 504);
 }
 
-// ===================== BAIXAR AUDIO E RETORNAR =====================
-debugLog('Download audio', 'info', 'baixando audio gerado...');
-$tempAudioFile = tempnam(sys_get_temp_dir(), 'vp_ov_gen_') . '.wav';
+// ===================== CONCATENAR CHUNKS (se necessario) =====================
+if ($chunkCount > 1) {
+    debugLog('Concatenar', 'info', "Juntando $chunkCount pedacos de audio...");
 
-$ch = curl_init($audioUrl);
-$fp = fopen($tempAudioFile, 'w');
-curl_setopt_array($ch, [
-    CURLOPT_FILE => $fp,
-    CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_TIMEOUT => 120,
-    CURLOPT_ENCODING => '',
-    CURLOPT_SSL_VERIFYPEER => false,
-]);
-$dlOk = curl_exec($ch);
-$dlCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-fclose($fp);
+    // Detectar formato (WAV ou outro) pelo primeiro arquivo
+    $isWav = (substr(file_get_contents($chunkAudioFiles[0], false, null, 0, 4)) === 'RIFF');
 
-if (!$dlOk || $dlCode != 200 || filesize($tempAudioFile) == 0) {
-    if (file_exists($tempAudioFile)) unlink($tempAudioFile);
-    returnError("Falha ao baixar audio gerado (HTTP $dlCode)");
+    if ($isWav) {
+        $finalAudioFile = concatenateWavFiles($chunkAudioFiles);
+    } else {
+        // Para MP3 ou outros formatos, concatenacao simples
+        $finalAudioFile = tempnam(sys_get_temp_dir(), 'vp_concat_') . '.wav';
+        $fp = fopen($finalAudioFile, 'wb');
+        foreach ($chunkAudioFiles as $f) {
+            fwrite($fp, file_get_contents($f));
+        }
+        fclose($fp);
+    }
+
+    if (!$finalAudioFile || !file_exists($finalAudioFile)) {
+        foreach ($chunkAudioFiles as $f) {
+            if (file_exists($f)) unlink($f);
+        }
+        returnError('Falha ao juntar os pedacos de audio', 500);
+    }
+
+    debugLog('Concatenar', 'ok', "Audio final: " . round(filesize($finalAudioFile) / 1024) . 'KB (de ' . $chunkCount . ' chunks)');
+
+    // Limpar arquivos de chunk
+    foreach ($chunkAudioFiles as $f) {
+        if (file_exists($f)) unlink($f);
+    }
+} else {
+    // Apenas 1 chunk, usar diretamente
+    $finalAudioFile = $chunkAudioFiles[0];
 }
 
-debugLog('Download audio', 'ok', round(filesize($tempAudioFile) / 1024) . 'KB');
-
-// Base64
-$audioBase64 = base64_encode(file_get_contents($tempAudioFile));
-$ext = strtolower(pathinfo($audioUrl, PATHINFO_EXTENSION));
-$mimeType = ($ext === 'mp3') ? 'audio/mpeg' : 'audio/wav';
+// ===================== RETORNAR AUDIO COMO BASE64 =====================
+$audioBase64 = base64_encode(file_get_contents($finalAudioFile));
+$mimeType = 'audio/wav';
 $dataUri = 'data:' . $mimeType . ';base64,' . $audioBase64;
 
-if ($tempAudioFile && file_exists($tempAudioFile)) unlink($tempAudioFile);
+if ($finalAudioFile && file_exists($finalAudioFile)) unlink($finalAudioFile);
 
-debugLog('FINAL', 'ok', 'VozPro via PHP DIRECT - zero Vercel');
+debugLog('FINAL', 'ok', 'OmniVoice via PHP DIRECT' . ($chunkCount > 1 ? " ($chunkCount chunks concatenados)" : '') . ' - zero Vercel');
 
 echo json_encode([
     'audioUrl' => $dataUri,
     'model' => 'omnivoice',
     'mode' => $mode,
+    'chunks' => $chunkCount,
     'viaDirectPhp' => true,
     'debug' => debugResult()
 ]);
