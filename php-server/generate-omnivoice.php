@@ -16,7 +16,8 @@
 // CORRECOES (15/05/2026 v2):
 // - CRITICO: Adicionado trim do audio de referencia para 12s (evita CUDA OOM na RTX 3060 12GB)
 //   Sem trim, audio de ref longo causava corte no final, travadas e audio corrompido
-// - Adicionado normalizePronunciation() com dicionario fonetico PT-BR (150+ palavras)
+// - REMOVIDO normalizePronunciation() — dicionario criava palavras inexistentes
+// - Adicionado mb_strtolower() para converter texto a minusculo antes do TTS
 // - Adicionado CHUNKING completo: textos longos sao divididos em pedacos (max 400 chars)
 //   Cada chunk e gerado separadamente pelo TTS, depois os audios sao concatenados
 //   Resolve: audio cortado no final, pontuacao ignorada, textos longos truncados
@@ -193,204 +194,12 @@ function trimAudioToMaxSeconds($filePath, $maxSeconds = 12) {
     return false;
 }
 
-// ===================== NORMALIZACAO FONETICA PT-BR =====================
-// Corrige palavras que o TTS pronuncia errado
-function normalizePronunciation($text) {
-    if (!is_string($text) || empty($text)) return $text;
-
-    // Dicionario de correcoes foneticas para PT-BR
-    // Formato: palavra_errada => palavra_correta
-    // Foco: terminacoes -SAR, -SOR, -SEL, -TIL e palavras comuns
-    static $dict = [
-        // Terminacoes que o TTS confunde S com Z
-        'acessar' => 'aceSSar',
-        'processar' => 'proceSSar',
-        'acessador' => 'aceSSador',
-        'processador' => 'proceSSador',
-        'comecar' => 'comecar',
-        'começar' => 'começar',
-        'pesquisador' => 'pesquiSador',
-        'assinador' => 'aSSinador',
-        'acessório' => 'aceSSório',
-        'acessorio' => 'aceSSório',
-        'acessórios' => 'aceSSórios',
-        'acessorios' => 'aceSSórios',
-        'acessível' => 'aceSSível',
-        'acessivel' => 'aceSSível',
-        'inacessível' => 'inaceSSível',
-        'inacessivel' => 'inaceSSível',
-        'excessivo' => 'eceSSivo',
-        'excessão' => 'eceSSão',
-        'excessao' => 'eceSSão',
-        'massagem' => 'maSSagem',
-        'mensagens' => 'menSagens',
-        'mensagem' => 'menSagem',
-        'passageiro' => 'paSSageiro',
-        'passageiros' => 'paSSageiros',
-        'possível' => 'poSSível',
-        'possivel' => 'poSSível',
-        'impossível' => 'impoSSível',
-        'impossivel' => 'impoSSível',
-        'possibilidade' => 'poSSibilidade',
-        'assunto' => 'aSSunto',
-        'assuntos' => 'aSSuntos',
-        'assinar' => 'aSSinar',
-        'assinatura' => 'aSSinatura',
-        'assenso' => 'aSSenSo',
-        'assessor' => 'aSSeSSor',
-        'assessores' => 'aSSeSSores',
-        'assessoria' => 'aSSeSSoria',
-        'cassino' => 'caSSino',
-        'pássaro' => 'páSSaro',
-        'passaro' => 'paSSaro',
-        'pássaros' => 'páSSaros',
-        'passaros' => 'paSSaros',
-        'ossada' => 'oSSada',
-        'ossos' => 'oSSos',
-        'osso' => 'oSSo',
-        'piscina' => 'piScina',
-        'discussão' => 'diScuSSão',
-        'discussao' => 'diScuSSão',
-        'discutir' => 'diScutir',
-        'profissional' => 'profeSSional',
-        'profissionais' => 'profeSSionais',
-        'sessão' => 'SeSSão',
-        'sessao' => 'SeSSão',
-        'sessões' => 'SeSSões',
-        'secoes' => 'SeSSões',
-        'concessão' => ' conceSSão',
-        'concessao' => ' conceSSão',
-        'admissão' => 'admiSSão',
-        'admissao' => 'admiSSão',
-        'recessão' => 'receSSão',
-        'recessao' => 'receSSão',
-        'progressão' => 'progreSSão',
-        'progressao' => 'progreSSão',
-        'expressão' => 'expreSSão',
-        'expressao' => 'expreSSão',
-        'impressionante' => 'impreSSionante',
-        'pressionar' => 'preSSionar',
-        'depressão' => 'depreSSão',
-        'depressao' => 'depreSSão',
-        'compressão' => 'compreSSão',
-        'compressao' => 'compreSSão',
-        'agressivo' => 'agreSSivo',
-        'agressão' => 'agreSSão',
-        'agressao' => 'agreSSão',
-        'opressão' => 'opreSSão',
-        'opressao' => 'opreSSão',
-        'transmissão' => 'tranSmiSSão',
-        'transmissao' => 'tranSmiSSão',
-        'missão' => 'miSSão',
-        'missao' => 'miSSão',
-        'missões' => 'miSSões',
-        'missoes' => 'miSSões',
-        'necessário' => 'neceSSário',
-        'necessario' => 'neceSSário',
-        'necessidade' => 'neceSSidade',
-        'essencial' => 'eSSencial',
-        'essenciais' => 'eSSenciais',
-        'sucesso' => 'suceSSo',
-        'sucessos' => 'suceSSos',
-        'insucesso' => 'insuceSSo',
-        'acesso' => 'aceSSo',
-        'acessos' => 'aceSSos',
-        'sensível' => 'SenSível',
-        'sensivel' => 'SenSível',
-        'sensibilidade' => 'SenSibilidade',
-        'consensual' => 'conSenSual',
-        'censura' => 'cenSura',
-        'censurado' => 'cenSurado',
-        'pensar' => 'penSar',
-        'pensamento' => 'penSamento',
-        'pensamentos' => 'penSamentos',
-        'insensato' => 'inSenSato',
-        'resentimento' => 'reSentimento',
-        'representar' => 'repreSentar',
-        'representante' => 'repreSentante',
-        'representação' => 'repreSentação',
-        'representacao' => 'repreSentação',
-        'presente' => 'preSente',
-        'presenteamento' => 'preSenteamento',
-        'ausência' => 'auSência',
-        'ausencia' => 'auSência',
-        'ausências' => 'auSências',
-        'ausencias' => 'auSências',
-        'essência' => 'eSSência',
-        'essencia' => 'eSSência',
-        'resenha' => 'reSenha',
-        'desenho' => 'deSenho',
-        'desenhos' => 'deSenhos',
-        'ensenhar' => 'enSenhar',
-        'sensação' => 'SenSação',
-        'sensacao' => 'SenSação',
-        'conserto' => 'conSerto',
-        'concerto' => 'conCerto',
-        'obesidade' => 'obeSidade',
-        'crescimento' => 'creScimento',
-        'crescer' => 'creScer',
-        'despertar' => 'deSpertar',
-        'despertador' => 'deSpertador',
-        'aspersão' => 'aSperSão',
-        'aspersao' => 'aSperSão',
-        'dispersão' => 'diSperSão',
-        'dispersao' => 'diSperSão',
-        'imersão' => 'imerSão',
-        'imersao' => 'imerSão',
-        'submersão' => 'submerSão',
-        'submersao' => 'submerSão',
-        'diversão' => 'diverSão',
-        'diversao' => 'diverSão',
-        'diverso' => 'diverSo',
-        'diversos' => 'diverSos',
-        'reversão' => 'reverSão',
-        'reversao' => 'reverSão',
-        'inversão' => 'inverSão',
-        'inversao' => 'inverSão',
-        'aversão' => 'averSão',
-        'aversao' => 'averSão',
-        'conversão' => 'converSão',
-        'conversao' => 'converSão',
-        'conversar' => 'converSar',
-        'conversa' => 'converSa',
-        'conversas' => 'converSas',
-        'universidade' => 'univerSidade',
-        'universo' => 'univerSo',
-        'diversidade' => 'diverSidade',
-        'urso' => 'urSo',
-        'ursos' => 'urSos',
-        'curso' => 'curSo',
-        'cursos' => 'curSos',
-        'recurso' => 'recurSo',
-        'recursos' => 'recurSos',
-        'difusão' => 'difuSão',
-        'difusao' => 'difuSão',
-        'fusão' => 'fuSão',
-        'fusao' => 'fuSão',
-        'confusão' => 'confuSão',
-        'confusao' => 'confuSão',
-        'usurpar' => 'uSurpar',
-        'usurpador' => 'uSurpador',
-        'justificativa' => 'juStificativa',
-        'justificar' => 'juStificar',
-        'gostoso' => 'goStoSo',
-        'gostosa' => 'goStoSa',
-        'sustentável' => 'SuStentável',
-        'sustentavel' => 'SuStentável',
-        'sustentar' => 'SuStentar',
-        'trabalhoso' => 'trabalhoSo',
-        'horizonte' => 'horizonte',
-        'curitibanos' => 'curitibânos',
-    ];
-
-    // Aplicar correcoes (case-insensitive)
-    foreach ($dict as $wrong => $correct) {
-        // Match exato case-sensitive primeiro
-        $text = str_replace($wrong, $correct, $text);
-    }
-
-    return $text;
-}
+// normalizePronunciation REMOVIDO (15/05/2026 v3):
+// O dicionario fonetico anterior criava palavras que nao existem
+// (ex: sucesso -> suceSSo, profissional -> profeSSional), piorando
+// a pronuncia. O modelo GPT-SoVITS ja fala portugues nativamente.
+// A solucao correta e converter o texto para minusculo (mb_strtolower)
+// aplicado na pipeline abaixo, antes do envio ao TTS.
 
 // ===================== SPLIT DE TEXTO LONGO =====================
 // Divide texto em chunks por pontuacao para evitar que TTS corte audio no final.
@@ -559,12 +368,14 @@ $pitch = $input['pitch'] ?? 'Auto';
 $style = $input['style'] ?? 'Auto';
 $accent = $input['accent'] ?? 'Auto';
 
-// ===================== DEFESA: STRIP SSML + CLEAN + NORMALIZE =====================
-// Se o frontend enviou tags SSML sem processar, remove aqui antes de enviar ao TTS.
-// O TTS NAO entende SSML — tags seriam lidas como texto literal.
+// ===================== DEFESA: STRIP SSML + CLEAN + MINUSCULO =====================
+// 1. Remove tags SSML (TTS nao entende SSML)
+// 2. Remove caracteres de controle invisiveis
+// 3. Converte para minusculo — o TTS pronuncia melhor texto em minusculo.
+//    Maiusculas no meio da palavra causam enfase errada e gagueira.
 $texto = stripSSML($texto);
 $texto = cleanText($texto);
-$texto = normalizePronunciation($texto);
+$texto = mb_strtolower($texto, 'UTF-8');
 
 debugLog('Input', 'info', "modo: $mode | texto: " . mb_substr($texto, 0, 50) . " | lang: $idioma | steps: $numStep");
 
