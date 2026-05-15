@@ -1808,7 +1808,7 @@ export default function VozProClient() {
                 {voiceMode === 'clone' && !selectedVoiceId && !uploadedVoiceUrl && voices.length > 0 && (
                   <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
                     <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
-                    <p className="text-amber-300 text-sm">Selecione uma voz abaixo para gerar o audio.</p>
+                    <p className="text-amber-300 text-sm">Selecione uma voz abaixo para gerar o audio, ou envie um audio de referencia de ate 10 segundos.</p>
                   </div>
                 )}
                 {voices.length === 0 ? (
@@ -2582,7 +2582,7 @@ export default function VozProClient() {
             {/* Generate Button */}
             <Button
               onClick={handleGenerate}
-              disabled={isGenerating || !text.trim() || (!selectedVoiceId && !uploadedVoiceUrl) || (!selectedVariationId && !uploadedVoiceUrl)}
+              disabled={isGenerating || !text.trim() || (voiceMode === 'clone' && ((!selectedVoiceId && !uploadedVoiceUrl) || (!selectedVariationId && !uploadedVoiceUrl)))}
               className="w-full h-14 text-lg font-bold bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50"
             >
               {isGenerating ? (
