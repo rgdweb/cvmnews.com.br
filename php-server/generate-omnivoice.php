@@ -24,7 +24,9 @@
 // - Adicionado concatenateWavFiles() para juntar audios WAV sem depender de ffmpeg
 // - Upload de audio de referencia feito 1 vez e reusado em todos os chunks
 
-// VERSAO: 20260515-v3-fix (mb_strtolower, sem dicionario fonetico)
+// VERSAO: 20260515-v5-fix (substr bug fix + opcache auto-invalidate)
+// Auto-invalidate OPcache em toda requisicao (previne codigo antigo em cache)
+if (function_exists('opcache_invalidate')) { @opcache_invalidate(__FILE__, true); }
 // ===== CAPTURA DE ERROS FATAIS =====
 // Se PHP crashar (fatal error, out of memory, etc), retorna JSON ao inves de pagina em branco 500
 register_shutdown_function(function() {
@@ -839,7 +841,8 @@ if ($chunkCount > 1) {
     debugLog('Concatenar', 'info', "Juntando $chunkCount pedacos de audio...");
 
     // Detectar formato (WAV ou outro) pelo primeiro arquivo
-    $isWav = (substr(file_get_contents($chunkAudioFiles[0], false, null, 0, 4)) === 'RIFF');
+    $first4 = @file_get_contents($chunkAudioFiles[0], false, null, 0, 4);
+    $isWav = ($first4 !== false && $first4 === 'RIFF');
 
     if ($isWav) {
         $finalAudioFile = concatenateWavFiles($chunkAudioFiles);
