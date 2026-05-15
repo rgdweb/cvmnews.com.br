@@ -577,7 +577,8 @@ export default function AdminDashboard() {
   const [pendingVoiceFile, setPendingVoiceFile] = useState<{ blob: Blob; name: string; info: string } | null>(null)
   const [voiceTrimState, setVoiceTrimState] = useState<{ buffer: AudioBuffer; duration: number; rangeStart: number; rangeEnd: number; fileName: string } | null>(null)
   const waveCanvasRef = useRef<HTMLCanvasElement>(null)
-  const voicePreviewRef = useRef<HTMLAudioElement | null>(null)
+  const voicePreviewCtxRef = useRef<AudioContext | null>(null)
+  const voicePreviewSrcRef = useRef<AudioBufferSourceNode | null>(null)
   const [voicePreviewing, setVoicePreviewing] = useState(false)
 
   // Track form state
@@ -953,13 +954,17 @@ export default function AdminDashboard() {
     toast.success(`Corte aplicado: ${dur}s`) // ✅
   }
 
-  // Preview trimmed audio (toggle play/pause)
-  const handlePreviewVoiceTrim = async () => {
+  // Preview trimmed audio (toggle play/pause) — toca direto do AudioBuffer, sem blob
+  const handlePreviewVoiceTrim = () => {
     if (!voiceTrimState) return
 
-    // Toggle: se ja esta tocando, pausa
-    if (voicePreviewing && voicePreviewRef.current && !voicePreviewRef.current.paused) {
-      voicePreviewRef.current.pause()
+    // Toggle: se ja esta tocando, para
+    if (voicePreviewing && voicePreviewSrcRef.current) {
+      try {
+        voicePreviewSrcRef.current.stop()
+      } catch { /* ja parou */ }
+      voicePreviewSrcRef.current = null
+      if (voicePreviewCtxRef.current) { voicePreviewCtxRef.current.close(); voicePreviewCtxRef.current = null }
       setVoicePreviewing(false)
       return
     }
@@ -972,33 +977,19 @@ export default function AdminDashboard() {
       return
     }
 
-    // Converter AudioBuffer para WAV via OfflineAudioContext (mais confiavel que blob manual)
     try {
-      const offlineCtx = new OfflineAudioContext(trimmed.numberOfChannels, trimmed.length, trimmed.sampleRate)
-      const source = offlineCtx.createBufferSource()
+      const ctx = new AudioContext()
+      const source = ctx.createBufferSource()
       source.buffer = trimmed
-      source.connect(offlineCtx.destination)
-      const rendered = await offlineCtx.startRendering()
-      const wavBlob = audioBufferToWav(rendered)
-      const url = URL.createObjectURL(wavBlob)
-
-      if (voicePreviewRef.current) { voicePreviewRef.current.pause(); voicePreviewRef.current.onended = null; URL.revokeObjectURL(voicePreviewRef.current.src) }
-
-      const audio = new Audio(url)
-      const onErr = () => { toast.error('Erro ao reproduzir preview'); setVoicePreviewing(false); URL.revokeObjectURL(url) }
-      audio.addEventListener('error', onErr, { once: true })
-      audio.onended = () => { setVoicePreviewing(false); URL.revokeObjectURL(url) }
-      voicePreviewRef.current = audio
+      source.connect(ctx.destination)
+      source.onended = () => { setVoicePreviewing(false); ctx.close(); voicePreviewCtxRef.current = null; voicePreviewSrcRef.current = null }
+      source.start(0)
+      voicePreviewCtxRef.current = ctx
+      voicePreviewSrcRef.current = source
       setVoicePreviewing(true)
-
-      // Tentar play direto — blob local geralmente esta pronto instantaneamente
-      try { await audio.play() } catch {
-        // Fallback: esperar canplaythrough
-        audio.addEventListener('canplaythrough', () => audio.play().catch(onErr), { once: true })
-      }
     } catch (err) {
       console.error('[VoiceTrim] Preview error:', err)
-      toast.error('Erro ao processar preview do corte')
+      toast.error('Erro ao reproduzir preview do corte')
     }
   }
 
@@ -1110,7 +1101,7 @@ export default function AdminDashboard() {
       setVariationForm({ label: '', emoji: '', refAudioPath: '', serverUrl: '', filename: '', refAudioName: '', refText: '', instruct: 'none' })
       setPendingVoiceFile(null)
       setVoiceTrimState(null)
-      if (voicePreviewRef.current) { voicePreviewRef.current.pause(); voicePreviewRef.current = null }
+      if (voicePreviewSrcRef.current) { try { voicePreviewSrcRef.current.stop() } catch { /* */ } voicePreviewSrcRef.current = null } if (voicePreviewCtxRef.current) { voicePreviewCtxRef.current.close(); voicePreviewCtxRef.current = null }
       setVoicePreviewing(false)
       loadData()
     } catch {
@@ -2416,7 +2407,7 @@ export default function AdminDashboard() {
               setAddingVariationTo(null)
               setPendingVoiceFile(null)
               setVoiceTrimState(null)
-              if (voicePreviewRef.current) { voicePreviewRef.current.pause(); voicePreviewRef.current = null }
+              if (voicePreviewSrcRef.current) { try { voicePreviewSrcRef.current.stop() } catch { /* */ } voicePreviewSrcRef.current = null } if (voicePreviewCtxRef.current) { voicePreviewCtxRef.current.close(); voicePreviewCtxRef.current = null }
               setVoicePreviewing(false)
             }
           }}>
@@ -2616,7 +2607,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="ghost" onClick={() => { setVariationDialogOpen(false); setEditingVariationId(null); setAddingVariationTo(null); setPendingVoiceFile(null); setVoiceTrimState(null); if (voicePreviewRef.current) { voicePreviewRef.current.pause(); voicePreviewRef.current = null } setVoicePreviewing(false) }} className="text-slate-400">Cancelar</Button>
+                <Button variant="ghost" onClick={() => { setVariationDialogOpen(false); setEditingVariationId(null); setAddingVariationTo(null); setPendingVoiceFile(null); setVoiceTrimState(null); if (voicePreviewSrcRef.current) { try { voicePreviewSrcRef.current.stop() } catch {} voicePreviewSrcRef.current = null } if (voicePreviewCtxRef.current) { voicePreviewCtxRef.current.close(); voicePreviewCtxRef.current = null } setVoicePreviewing(false) }} className="text-slate-400">Cancelar</Button>
                 <Button onClick={handleSaveVariation} disabled={uploadingRef} className="bg-violet-600 hover:bg-violet-700 text-white">
                   {uploadingRef ? (
                     <>
