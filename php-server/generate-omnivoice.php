@@ -23,6 +23,22 @@
 // - Adicionado concatenateWavFiles() para juntar audios WAV sem depender de ffmpeg
 // - Upload de audio de referencia feito 1 vez e reusado em todos os chunks
 
+// ===== CAPTURA DE ERROS FATAIS =====
+// Se PHP crashar (fatal error, out of memory, etc), retorna JSON ao inves de pagina em branco 500
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR])) {
+        http_response_code(500);
+        echo json_encode([
+            'erro' => 'Erro fatal do PHP: ' . $error['message'],
+            'file' => basename($error['file']),
+            'line' => $error['line'],
+            'php_fatal' => true
+        ]);
+        exit;
+    }
+});
+
 set_time_limit(0);
 ini_set('max_input_time', 0);
 ini_set('memory_limit', '512M');
@@ -150,7 +166,13 @@ define('MAX_REF_AUDIO_SECONDS', 12);
 function trimAudioToMaxSeconds($filePath, $maxSeconds = 12) {
     $trimScript = __DIR__ . '/trim_audio.py';
     if (!file_exists($trimScript)) {
-        return false; // trim_audio.py nao disponivel, usar original
+        debugLog('Trim ref audio', 'warn', 'trim_audio.py nao encontrado, usando original');
+        return false;
+    }
+    // Verificar se shell_exec esta disponivel (Hostgator pode desabilitar)
+    if (!function_exists('shell_exec') || in_array('shell_exec', array_map('trim', explode(',', ini_get('disable_functions'))))) {
+        debugLog('Trim ref audio', 'warn', 'shell_exec desabilitado, usando original');
+        return false;
     }
     $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
     $trimmedFile = tempnam(sys_get_temp_dir(), 'vp_trim_') . '.' . $ext;
@@ -160,7 +182,7 @@ function trimAudioToMaxSeconds($filePath, $maxSeconds = 12) {
          . escapeshellarg($trimmedFile) . ' '
          . escapeshellarg((string)$maxSeconds) . ' 2>&1';
 
-    $output = shell_exec($cmd);
+    $output = @shell_exec($cmd);
     $trimOk = (trim($output ?? '') === 'OK');
 
     if ($trimOk && file_exists($trimmedFile) && filesize($trimmedFile) > 0) {
