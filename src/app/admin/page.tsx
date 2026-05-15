@@ -953,19 +953,46 @@ export default function AdminDashboard() {
     toast.success(`Corte aplicado: ${dur}s`) // ✅
   }
 
-  // Preview trimmed audio
+  // Preview trimmed audio (toggle play/pause)
   const handlePreviewVoiceTrim = () => {
     if (!voiceTrimState) return
+
+    // Toggle: se ja esta tocando, pausa
+    if (voicePreviewing && voicePreviewRef.current && !voicePreviewRef.current.paused) {
+      voicePreviewRef.current.pause()
+      setVoicePreviewing(false)
+      return
+    }
+
     const { buffer, rangeStart, rangeEnd } = voiceTrimState
     const trimmed = extractAudioRange(buffer, rangeStart, rangeEnd)
+
+    if (trimmed.length === 0) {
+      toast.error('Intervalo de corte vazio. Ajuste os controles.')
+      return
+    }
+
     const wavBlob = audioBufferToWav(trimmed)
     const url = URL.createObjectURL(wavBlob)
-    if (voicePreviewRef.current) { voicePreviewRef.current.pause(); URL.revokeObjectURL(voicePreviewRef.current.src) }
+
+    if (voicePreviewRef.current) { voicePreviewRef.current.pause(); voicePreviewRef.current.onended = null; URL.revokeObjectURL(voicePreviewRef.current.src) }
+
     const audio = new Audio(url)
+    audio.addEventListener('canplaythrough', () => {
+      audio.play().catch(err => {
+        console.error('[VoiceTrim] Erro ao reproduzir preview:', err)
+        toast.error('Erro ao reproduzir preview do corte')
+        setVoicePreviewing(false)
+      })
+    }, { once: true })
+    audio.addEventListener('error', () => {
+      console.error('[VoiceTrim] Erro no audio element:', audio.error)
+      toast.error('Erro no audio. Formato nao suportado.')
+      setVoicePreviewing(false)
+    }, { once: true })
+    audio.onended = () => { setVoicePreviewing(false); URL.revokeObjectURL(url) }
     voicePreviewRef.current = audio
     setVoicePreviewing(true)
-    audio.play()
-    audio.onended = () => setVoicePreviewing(false)
   }
 
   // Reset trim to full audio
