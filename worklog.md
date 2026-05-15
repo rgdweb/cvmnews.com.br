@@ -44,3 +44,25 @@ Stage Summary:
 - File size: 38207 bytes, 1080 lines - matches GitHub version
 - The broken line was `$isWav = (substr('RIFF'))` (missing arguments), fixed to `$isWav = (substr(file_get_contents($chunkAudioFiles[0], false, null, 0, 4)) === 'RIFF')`
 - PHP endpoint now responds correctly without fatal error
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Implementar audio trimmer para upload de vozes no painel admin (auto + manual)
+
+Work Log:
+- Criado branch de backup: `backup-before-voice-trim` (SHA: 5b7467f)
+- Estudado o sistema de trim de trilhas existente (processTrackFile + encodeMp3)
+- Adicionadas funções de trimmer de voz: detectVoiceRange, extractAudioRange, audioBufferToWav, drawVoiceWaveform
+- Modificado estado: pendingVoiceFile agora é `{ blob, name, info }` (como trilhas)
+- Novo estado: voiceTrimState (AudioBuffer + range), waveCanvasRef, voicePreviewRef
+- Novos handlers: handleApplyVoiceTrim, handlePreviewVoiceTrim, handleResetVoiceTrim, handleAutoVoiceTrim
+- useEffect para desenhar waveform quando trim state muda
+- UI do dialog: waveform canvas + sliders (Início/Fim) + botões (Ouvir, Auto-trim, Usar tudo, Aplicar)
+- Commit: 833ab8a | feat: audio trimmer para upload de vozes (auto + manual)
+
+Stage Summary:
+- Arquivo: src/app/admin/page.tsx (+248 linhas, -19 linhas)
+- Funcionalidades: auto-trim (~10s de voz), manual (sliders 50ms), preview, waveform visual
+- Vercel build será automático via push
+- Backup disponível em: backup-before-voice-trim branch
