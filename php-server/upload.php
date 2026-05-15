@@ -28,7 +28,18 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 require_once __DIR__ . '/config.php';
 
 // Validar API Key
-$headers = getallheaders();
+$headers = [];
+if (function_exists('getallheaders')) {
+    $headers = getallheaders();
+} else {
+    // Fallback para servidores sem getallheaders() (FastCGI, nginx)
+    foreach ($_SERVER as $key => $value) {
+        if (strpos($key, 'HTTP_') === 0) {
+            $headerName = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($key, 5)))));
+            $headers[$headerName] = $value;
+        }
+    }
+}
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
 $apiKey = str_replace('Bearer ', '', $authHeader);
 

@@ -26,7 +26,18 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 // Validar API Key (server-to-server, mesma chave do upload.php)
-$headers = getallheaders();
+$headers = [];
+if (function_exists('getallheaders')) {
+    $headers = getallheaders();
+} else {
+    // Fallback para servidores sem getallheaders() (FastCGI, nginx)
+    foreach ($_SERVER as $key => $value) {
+        if (strpos($key, 'HTTP_') === 0) {
+            $headerName = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($key, 5)))));
+            $headers[$headerName] = $value;
+        }
+    }
+}
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
 $apiKey = str_replace('Bearer ', '', $authHeader);
 
@@ -134,8 +145,9 @@ if ($chunkIndex === $totalChunks - 1) {
     // Validar tamanho total
     if ($totalSize > MAX_SIZE) {
         // Limpar chunks
-        array_map('unlink', glob($chunkDir . '*'));
-        rmdir($chunkDir);
+        $glob = glob($chunkDir . '*');
+        if ($glob) array_map('unlink', $glob);
+        @rmdir($chunkDir);
         http_response_code(400);
         echo json_encode(['sucesso' => false, 'erro' => 'Arquivo final muito grande. Maximo: ' . round(MAX_SIZE / (1024 * 1024)) . 'MB']);
         exit;
@@ -173,18 +185,20 @@ if ($chunkIndex === $totalChunks - 1) {
 
     if (!in_array($mimeType, ALLOWED_TYPES)) {
         // Remover arquivo e chunks
-        unlink($caminhoFinal);
-        array_map('unlink', glob($chunkDir . '*'));
-        rmdir($chunkDir);
+        @unlink($caminhoFinal);
+        $glob = glob($chunkDir . '*');
+        if ($glob) array_map('unlink', $glob);
+        @rmdir($chunkDir);
         http_response_code(400);
         echo json_encode(['sucesso' => false, 'erro' => 'Tipo de arquivo nao permitido apos remontagem: ' . $mimeType]);
         exit;
     }
 
     // Limpar chunks
-    array_map('unlink', glob($chunkDir . '*'));
+    $glob = glob($chunkDir . '*');
+    if ($glob) array_map('unlink', $glob);
     if (is_dir($chunkDir)) {
-        rmdir($chunkDir);
+        @rmdir($chunkDir);
     }
     // Limpar dir chunks se vazio
     $chunksDir = UPLOAD_DIR . 'chunks/';
