@@ -16,7 +16,7 @@ import {
   AudioWaveform, LogOut, Plus, Trash2, Edit, Upload, Music, Mic,
   Loader2, RefreshCw, Volume2, FileAudio, CheckCircle2, Settings2,
   FolderOpen, ChevronLeft, FolderPlus, Folder, Play, Pause, Users, UserPlus, Shield,
-  UploadCloud, X
+  UploadCloud, X, Download
 } from 'lucide-react'
 import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
@@ -2140,6 +2140,9 @@ export default function AdminDashboard() {
                                         </button>
                                       )}
                                       <input type="file" accept="audio/*" onChange={(e) => handleQuickUploadAudio(v.id, e)} className="hidden" id={`quick-audio-${selectedVoiceCategory}-${v.id}`} />
+                                      {v.refAudioServerUrl && (
+                                        <a href={v.refAudioServerUrl} download={v.refAudioName || undefined} target="_blank" rel="noopener noreferrer" className="h-7 px-2 text-xs gap-1 inline-flex items-center text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 rounded-md transition-colors" title="Baixar áudio de referência"><Download className="w-3 h-3" /></a>
+                                      )}
                                       <Button variant="ghost" size="sm" onClick={() => document.getElementById(`quick-audio-${selectedVoiceCategory}-${v.id}`)?.click()} className={`h-7 px-2 text-xs gap-1 ${v.refAudioPath ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/30' : 'text-amber-400 hover:text-amber-300 hover:bg-amber-900/30'}`}><Upload className="w-3 h-3" />{v.refAudioPath ? 'Update' : 'Add'}</Button>
                                       <Button variant="ghost" size="sm" onClick={() => { setEditingVariationId(v.id); setAddingVariationTo(null); setVariationForm({ label: v.label, emoji: v.emoji, refAudioPath: '', serverUrl: '', filename: '', refAudioName: v.refAudioName, refText: v.refText, instruct: v.instruct || 'none' }); setPendingVoiceFile(null); setVariationDialogOpen(true) }} className="h-7 px-2 text-xs text-slate-400 hover:text-white hover:bg-slate-700 gap-1"><Edit className="w-3 h-3" />Editar</Button>
                                       <Switch checked={v.active} onCheckedChange={() => handleToggleVariation(v)} className="scale-75" />
@@ -2192,6 +2195,9 @@ export default function AdminDashboard() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-1">
+                                {(() => { const dv = voice.variations.find(v => v.active !== false && v.refAudioServerUrl); return dv ? (
+                                  <a href={dv.refAudioServerUrl} download={dv.refAudioName || undefined} target="_blank" rel="noopener noreferrer" className="h-8 w-8 rounded-full flex items-center justify-center text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 transition-colors" title={`Baixar áudio: ${dv.label}`}><Download className="w-3.5 h-3.5" /></a>
+                                ) : null })()}
                                 <Switch checked={voice.active} onCheckedChange={() => handleToggleVoice(voice)} className="scale-75" />
                                 <Button variant="ghost" size="icon" onClick={() => { setEditingVoiceId(voice.id); setVoiceForm({ name: voice.name, description: voice.description, gender: voice.gender, age: voice.age, accent: voice.accent, pitch: voice.pitch, category: voice.category || '' }); setVoiceDialogOpen(true) }} className="text-slate-400 hover:text-white h-8 w-8"><Edit className="w-3.5 h-3.5" /></Button>
                                 <Button variant="ghost" size="icon" onClick={() => handleDeleteVoice(voice.id)} className="text-slate-400 hover:text-red-400 h-8 w-8"><Trash2 className="w-3.5 h-3.5" /></Button>
@@ -2645,6 +2651,9 @@ export default function AdminDashboard() {
                               </div>
                             </div>
                             <div className="flex items-center gap-1">
+                              {track.audioPath && (
+                                <a href={track.audioPath} download={track.name || undefined} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-full flex items-center justify-center text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 transition-colors" title="Baixar trilha"><Download className="w-4 h-4" /></a>
+                              )}
                               <Switch checked={track.active} onCheckedChange={() => handleToggleTrack(track)} />
                               <Button variant="ghost" size="icon" onClick={() => { setEditingTrackId(track.id); setTrackForm({ name: track.name, description: track.description || '', emoji: track.emoji || '', category: track.category || '' }); setTrackFilePath(''); setTrackDuration(track.duration); setPendingTrackFile(null); setTrackDialogOpen(true) }} className="text-slate-400 hover:text-white"><Edit className="w-4 h-4" /></Button>
                               <Button variant="ghost" size="icon" onClick={() => handleDeleteTrack(track.id)} className="text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></Button>
@@ -2691,6 +2700,9 @@ export default function AdminDashboard() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-1">
+                                {track.audioPath && (
+                                  <a href={track.audioPath} download={track.name || undefined} target="_blank" rel="noopener noreferrer" className="h-8 w-8 rounded-full flex items-center justify-center text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 transition-colors" title="Baixar trilha"><Download className="w-3.5 h-3.5" /></a>
+                                )}
                                 <Switch checked={track.active} onCheckedChange={() => handleToggleTrack(track)} className="scale-75" />
                                 <Button variant="ghost" size="icon" onClick={() => { setEditingTrackId(track.id); setTrackForm({ name: track.name, description: track.description || '', emoji: track.emoji || '', category: track.category || '' }); setTrackFilePath(''); setTrackDuration(track.duration); setPendingTrackFile(null); setTrackDialogOpen(true) }} className="text-slate-400 hover:text-white h-8 w-8"><Edit className="w-3.5 h-3.5" /></Button>
                                 <Button variant="ghost" size="icon" onClick={() => handleDeleteTrack(track.id)} className="text-slate-400 hover:text-red-400 h-8 w-8"><Trash2 className="w-3.5 h-3.5" /></Button>
