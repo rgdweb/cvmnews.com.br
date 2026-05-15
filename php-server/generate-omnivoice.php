@@ -24,6 +24,7 @@
 // - Adicionado concatenateWavFiles() para juntar audios WAV sem depender de ffmpeg
 // - Upload de audio de referencia feito 1 vez e reusado em todos os chunks
 
+// VERSAO: 20260515-v3-fix (mb_strtolower, sem dicionario fonetico)
 // ===== CAPTURA DE ERROS FATAIS =====
 // Se PHP crashar (fatal error, out of memory, etc), retorna JSON ao inves de pagina em branco 500
 register_shutdown_function(function() {
