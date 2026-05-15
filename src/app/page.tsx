@@ -775,6 +775,11 @@ export default function VozProClient() {
       toast.error('Selecione uma voz ou faça upload de um áudio de referência')
       return
     }
+    // Avisar se esta usando voz padrao sem selecao explicita
+    if (voiceMode === 'clone' && !selectedVoiceId && !uploadedVoiceUrl) {
+      toast.warning('Nenhuma voz selecionada. Selecione uma voz ou faça upload de um áudio de referência.')
+      return
+    }
     // Verificar se a variação selecionada realmente existe na voz selecionada
     if (selectedVariationId && selectedVoice) {
       const variationExists = selectedVoice.variations.some(v => v.id === selectedVariationId)

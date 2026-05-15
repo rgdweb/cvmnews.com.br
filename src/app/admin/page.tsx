@@ -954,7 +954,7 @@ export default function AdminDashboard() {
   }
 
   // Preview trimmed audio (toggle play/pause)
-  const handlePreviewVoiceTrim = () => {
+  const handlePreviewVoiceTrim = async () => {
     if (!voiceTrimState) return
 
     // Toggle: se ja esta tocando, pausa
@@ -972,27 +972,34 @@ export default function AdminDashboard() {
       return
     }
 
-    const wavBlob = audioBufferToWav(trimmed)
-    const url = URL.createObjectURL(wavBlob)
+    // Converter AudioBuffer para WAV via OfflineAudioContext (mais confiavel que blob manual)
+    try {
+      const offlineCtx = new OfflineAudioContext(trimmed.numberOfChannels, trimmed.length, trimmed.sampleRate)
+      const source = offlineCtx.createBufferSource()
+      source.buffer = trimmed
+      source.connect(offlineCtx.destination)
+      const rendered = await offlineCtx.startRendering()
+      const wavBlob = audioBufferToWav(rendered)
+      const url = URL.createObjectURL(wavBlob)
 
-    if (voicePreviewRef.current) { voicePreviewRef.current.pause(); voicePreviewRef.current.onended = null; URL.revokeObjectURL(voicePreviewRef.current.src) }
+      if (voicePreviewRef.current) { voicePreviewRef.current.pause(); voicePreviewRef.current.onended = null; URL.revokeObjectURL(voicePreviewRef.current.src) }
 
-    const audio = new Audio(url)
-    audio.addEventListener('canplaythrough', () => {
-      audio.play().catch(err => {
-        console.error('[VoiceTrim] Erro ao reproduzir preview:', err)
-        toast.error('Erro ao reproduzir preview do corte')
-        setVoicePreviewing(false)
-      })
-    }, { once: true })
-    audio.addEventListener('error', () => {
-      console.error('[VoiceTrim] Erro no audio element:', audio.error)
-      toast.error('Erro no audio. Formato nao suportado.')
-      setVoicePreviewing(false)
-    }, { once: true })
-    audio.onended = () => { setVoicePreviewing(false); URL.revokeObjectURL(url) }
-    voicePreviewRef.current = audio
-    setVoicePreviewing(true)
+      const audio = new Audio(url)
+      const onErr = () => { toast.error('Erro ao reproduzir preview'); setVoicePreviewing(false); URL.revokeObjectURL(url) }
+      audio.addEventListener('error', onErr, { once: true })
+      audio.onended = () => { setVoicePreviewing(false); URL.revokeObjectURL(url) }
+      voicePreviewRef.current = audio
+      setVoicePreviewing(true)
+
+      // Tentar play direto — blob local geralmente esta pronto instantaneamente
+      try { await audio.play() } catch {
+        // Fallback: esperar canplaythrough
+        audio.addEventListener('canplaythrough', () => audio.play().catch(onErr), { once: true })
+      }
+    } catch (err) {
+      console.error('[VoiceTrim] Preview error:', err)
+      toast.error('Erro ao processar preview do corte')
+    }
   }
 
   // Reset trim to full audio
