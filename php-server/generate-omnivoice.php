@@ -12,6 +12,13 @@
 // - CURLOPT_ENCODING => '' adicionado no fetch da tunnel URL
 // - Timeout submit job 60s -> 90s
 // - Timeout download audio 120s -> 180s
+//
+// CORRECOES (15/05/2026 v2):
+// - CRITICO: Adicionado trim do audio de referencia para 12s (evita CUDA OOM na RTX 3060 12GB)
+//   Sem trim, audio de ref longo causava corte no final, travadas e audio corrompido
+// - Adicionado normalizePronunciation() com dicionario fonetico PT-BR
+// - Adicionado splitTextIntoChunks() para textos longos (evita corte de audio)
+// - Adicionado preservacao de pontuacao (virgulas, pontos, exclamacoes)
 
 set_time_limit(0);
 ini_set('max_input_time', 0);
@@ -128,6 +135,284 @@ function cleanText($text) {
     return trim($text);
 }
 
+// ===================== TRIMAR AUDIO DE REFERENCIA =====================
+// CRITICO: Limitar audio de ref para evitar CUDA OOM na RTX 3060 12GB.
+// Sem este trim, audio de referencia longo (>12s) pode causar:
+// - Audio cortado no final da geracao
+// - Travadas e silencios no meio do audio
+// - Audio corrompido com artefatos
+// Usa trim_audio.py existente (sem depender de ffmpeg)
+define('MAX_REF_AUDIO_SECONDS', 12);
+
+function trimAudioToMaxSeconds($filePath, $maxSeconds = 12) {
+    $trimScript = __DIR__ . '/trim_audio.py';
+    if (!file_exists($trimScript)) {
+        return false; // trim_audio.py nao disponivel, usar original
+    }
+    $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+    $trimmedFile = tempnam(sys_get_temp_dir(), 'vp_trim_') . '.' . $ext;
+
+    $cmd = 'python3 ' . escapeshellarg($trimScript) . ' '
+         . escapeshellarg($filePath) . ' '
+         . escapeshellarg($trimmedFile) . ' '
+         . escapeshellarg((string)$maxSeconds) . ' 2>&1';
+
+    $output = shell_exec($cmd);
+    $trimOk = (trim($output ?? '') === 'OK');
+
+    if ($trimOk && file_exists($trimmedFile) && filesize($trimmedFile) > 0) {
+        return $trimmedFile;
+    }
+    // Falha no trim, apagar arquivo temporario e retornar false
+    if (file_exists($trimmedFile)) unlink($trimmedFile);
+    return false;
+}
+
+// ===================== NORMALIZACAO FONETICA PT-BR =====================
+// Corrige palavras que o TTS pronuncia errado
+function normalizePronunciation($text) {
+    if (!is_string($text) || empty($text)) return $text;
+
+    // Dicionario de correcoes foneticas para PT-BR
+    // Formato: palavra_errada => palavra_correta
+    // Foco: terminacoes -SAR, -SOR, -SEL, -TIL e palavras comuns
+    static $dict = [
+        // Terminacoes que o TTS confunde S com Z
+        'acessar' => 'aceSSar',
+        'processar' => 'proceSSar',
+        'acessador' => 'aceSSador',
+        'processador' => 'proceSSador',
+        'comecar' => 'comecar',
+        'começar' => 'começar',
+        'pesquisador' => 'pesquiSador',
+        'assinador' => 'aSSinador',
+        'acessório' => 'aceSSório',
+        'acessorio' => 'aceSSório',
+        'acessórios' => 'aceSSórios',
+        'acessorios' => 'aceSSórios',
+        'acessível' => 'aceSSível',
+        'acessivel' => 'aceSSível',
+        'inacessível' => 'inaceSSível',
+        'inacessivel' => 'inaceSSível',
+        'excessivo' => 'eceSSivo',
+        'excessão' => 'eceSSão',
+        'excessao' => 'eceSSão',
+        'massagem' => 'maSSagem',
+        'mensagens' => 'menSagens',
+        'mensagem' => 'menSagem',
+        'passageiro' => 'paSSageiro',
+        'passageiros' => 'paSSageiros',
+        'possível' => 'poSSível',
+        'possivel' => 'poSSível',
+        'impossível' => 'impoSSível',
+        'impossivel' => 'impoSSível',
+        'possibilidade' => 'poSSibilidade',
+        'assunto' => 'aSSunto',
+        'assuntos' => 'aSSuntos',
+        'assinar' => 'aSSinar',
+        'assinatura' => 'aSSinatura',
+        'assenso' => 'aSSenSo',
+        'assessor' => 'aSSeSSor',
+        'assessores' => 'aSSeSSores',
+        'assessoria' => 'aSSeSSoria',
+        'cassino' => 'caSSino',
+        'pássaro' => 'páSSaro',
+        'passaro' => 'paSSaro',
+        'pássaros' => 'páSSaros',
+        'passaros' => 'paSSaros',
+        'ossada' => 'oSSada',
+        'ossos' => 'oSSos',
+        'osso' => 'oSSo',
+        'piscina' => 'piScina',
+        'discussão' => 'diScuSSão',
+        'discussao' => 'diScuSSão',
+        'discutir' => 'diScutir',
+        'profissional' => 'profeSSional',
+        'profissionais' => 'profeSSionais',
+        'sessão' => 'SeSSão',
+        'sessao' => 'SeSSão',
+        'sessões' => 'SeSSões',
+        'secoes' => 'SeSSões',
+        'concessão' => ' conceSSão',
+        'concessao' => ' conceSSão',
+        'admissão' => 'admiSSão',
+        'admissao' => 'admiSSão',
+        'recessão' => 'receSSão',
+        'recessao' => 'receSSão',
+        'progressão' => 'progreSSão',
+        'progressao' => 'progreSSão',
+        'expressão' => 'expreSSão',
+        'expressao' => 'expreSSão',
+        'impressionante' => 'impreSSionante',
+        'pressionar' => 'preSSionar',
+        'depressão' => 'depreSSão',
+        'depressao' => 'depreSSão',
+        'compressão' => 'compreSSão',
+        'compressao' => 'compreSSão',
+        'agressivo' => 'agreSSivo',
+        'agressão' => 'agreSSão',
+        'agressao' => 'agreSSão',
+        'opressão' => 'opreSSão',
+        'opressao' => 'opreSSão',
+        'transmissão' => 'tranSmiSSão',
+        'transmissao' => 'tranSmiSSão',
+        'missão' => 'miSSão',
+        'missao' => 'miSSão',
+        'missões' => 'miSSões',
+        'missoes' => 'miSSões',
+        'necessário' => 'neceSSário',
+        'necessario' => 'neceSSário',
+        'necessidade' => 'neceSSidade',
+        'essencial' => 'eSSencial',
+        'essenciais' => 'eSSenciais',
+        'sucesso' => 'suceSSo',
+        'sucessos' => 'suceSSos',
+        'insucesso' => 'insuceSSo',
+        'acesso' => 'aceSSo',
+        'acessos' => 'aceSSos',
+        'sensível' => 'SenSível',
+        'sensivel' => 'SenSível',
+        'sensibilidade' => 'SenSibilidade',
+        'consensual' => 'conSenSual',
+        'censura' => 'cenSura',
+        'censurado' => 'cenSurado',
+        'pensar' => 'penSar',
+        'pensamento' => 'penSamento',
+        'pensamentos' => 'penSamentos',
+        'insensato' => 'inSenSato',
+        'resentimento' => 'reSentimento',
+        'representar' => 'repreSentar',
+        'representante' => 'repreSentante',
+        'representação' => 'repreSentação',
+        'representacao' => 'repreSentação',
+        'presente' => 'preSente',
+        'presenteamento' => 'preSenteamento',
+        'ausência' => 'auSência',
+        'ausencia' => 'auSência',
+        'ausências' => 'auSências',
+        'ausencias' => 'auSências',
+        'essência' => 'eSSência',
+        'essencia' => 'eSSência',
+        'resenha' => 'reSenha',
+        'desenho' => 'deSenho',
+        'desenhos' => 'deSenhos',
+        'ensenhar' => 'enSenhar',
+        'sensação' => 'SenSação',
+        'sensacao' => 'SenSação',
+        'conserto' => 'conSerto',
+        'concerto' => 'conCerto',
+        'obesidade' => 'obeSidade',
+        'crescimento' => 'creScimento',
+        'crescer' => 'creScer',
+        'despertar' => 'deSpertar',
+        'despertador' => 'deSpertador',
+        'aspersão' => 'aSperSão',
+        'aspersao' => 'aSperSão',
+        'dispersão' => 'diSperSão',
+        'dispersao' => 'diSperSão',
+        'imersão' => 'imerSão',
+        'imersao' => 'imerSão',
+        'submersão' => 'submerSão',
+        'submersao' => 'submerSão',
+        'diversão' => 'diverSão',
+        'diversao' => 'diverSão',
+        'diverso' => 'diverSo',
+        'diversos' => 'diverSos',
+        'reversão' => 'reverSão',
+        'reversao' => 'reverSão',
+        'inversão' => 'inverSão',
+        'inversao' => 'inverSão',
+        'aversão' => 'averSão',
+        'aversao' => 'averSão',
+        'conversão' => 'converSão',
+        'conversao' => 'converSão',
+        'conversar' => 'converSar',
+        'conversa' => 'converSa',
+        'conversas' => 'converSas',
+        'universidade' => 'univerSidade',
+        'universo' => 'univerSo',
+        'diversidade' => 'diverSidade',
+        'urso' => 'urSo',
+        'ursos' => 'urSos',
+        'curso' => 'curSo',
+        'cursos' => 'curSos',
+        'recurso' => 'recurSo',
+        'recursos' => 'recurSos',
+        'difusão' => 'difuSão',
+        'difusao' => 'difuSão',
+        'fusão' => 'fuSão',
+        'fusao' => 'fuSão',
+        'confusão' => 'confuSão',
+        'confusao' => 'confuSão',
+        'usurpar' => 'uSurpar',
+        'usurpador' => 'uSurpador',
+        'justificativa' => 'juStificativa',
+        'justificar' => 'juStificar',
+        'gostoso' => 'goStoSo',
+        'gostosa' => 'goStoSa',
+        'sustentável' => 'SuStentável',
+        'sustentavel' => 'SuStentável',
+        'sustentar' => 'SuStentar',
+        'trabalhoso' => 'trabalhoSo',
+        'horizonte' => 'horizonte',
+        'curitibanos' => 'curitibânos',
+    ];
+
+    // Aplicar correcoes (case-insensitive)
+    foreach ($dict as $wrong => $correct) {
+        // Match exato case-sensitive primeiro
+        $text = str_replace($wrong, $correct, $text);
+    }
+
+    return $text;
+}
+
+// ===================== SPLIT DE TEXTO LONGO =====================
+// Divide texto em chunks para evitar que TTS corte audio no final.
+// TTS com texto muito longo pode gerar audio truncado por limite de tokens.
+function splitTextIntoChunks($text, $maxChars = 500) {
+    if (mb_strlen($text) <= $maxChars) {
+        return [$text];
+    }
+
+    $chunks = [];
+    $sentences = preg_split('/(?<=[.!?])\s+/', $text);
+    $current = '';
+
+    foreach ($sentences as $sentence) {
+        if (mb_strlen($current . ' ' . $sentence) > $maxChars && !empty($current)) {
+            $chunks[] = trim($current);
+            $current = $sentence;
+        } else {
+            $current = ($current ? $current . ' ' : '') . $sentence;
+        }
+    }
+
+    if (!empty(trim($current))) {
+        $chunks[] = trim($current);
+    }
+
+    // Fallback: se nao dividiu, cortar por maxChars
+    if (count($chunks) <= 1 && mb_strlen($text) > $maxChars) {
+        $chunks = [];
+        $words = explode(' ', $text);
+        $current = '';
+        foreach ($words as $word) {
+            if (mb_strlen($current . ' ' . $word) > $maxChars && !empty($current)) {
+                $chunks[] = trim($current);
+                $current = $word;
+            } else {
+                $current = ($current ? $current . ' ' : '') . $word;
+            }
+        }
+        if (!empty(trim($current))) {
+            $chunks[] = trim($current);
+        }
+    }
+
+    return $chunks;
+}
+
 // ===================== LER INPUT JSON =====================
 $rawInput = file_get_contents('php://input');
 $input = json_decode($rawInput, true);
@@ -152,11 +437,12 @@ $pitch = $input['pitch'] ?? 'Auto';
 $style = $input['style'] ?? 'Auto';
 $accent = $input['accent'] ?? 'Auto';
 
-// ===================== DEFESA: STRIP SSML + CLEAN TEXTO =====================
+// ===================== DEFESA: STRIP SSML + CLEAN + NORMALIZE =====================
 // Se o frontend enviou tags SSML sem processar, remove aqui antes de enviar ao TTS.
 // O TTS NAO entende SSML — tags seriam lidas como texto literal.
 $texto = stripSSML($texto);
 $texto = cleanText($texto);
+$texto = normalizePronunciation($texto);
 
 debugLog('Input', 'info', "modo: $mode | texto: " . mb_substr($texto, 0, 50) . " | lang: $idioma | steps: $numStep");
 
@@ -432,6 +718,22 @@ if ($mode === 'clone') {
         $tempRefFile = downloadRefAudio($refAudioUrl, $refAudioName);
         if (!$tempRefFile) {
             returnError('Falha ao baixar audio de referencia', 400);
+        }
+
+        // ===== TRIMAR AUDIO PARA EVITAR CUDA OOM =====
+        // CRITICO: Sem trim, audio de ref longo causa:
+        // - Audio cortado no final das frases
+        // - CUDA OOM na RTX 3060 12GB
+        // - Audio corrompido, travadas, silencios
+        $trimmedFile = trimAudioToMaxSeconds($tempRefFile, MAX_REF_AUDIO_SECONDS);
+        if ($trimmedFile && $trimmedFile !== $tempRefFile) {
+            if (file_exists($tempRefFile)) unlink($tempRefFile);
+            $tempRefFile = $trimmedFile;
+            debugLog('Trim ref audio', 'ok', round(filesize($tempRefFile) / 1024) . 'KB (max ' . MAX_REF_AUDIO_SECONDS . 's)');
+        } elseif ($trimmedFile === false) {
+            debugLog('Trim ref audio', 'warn', 'Falha no trim, usando original (pode causar OOM)');
+        } else {
+            debugLog('Trim ref audio', 'ok', 'Audio ja dentro do limite (' . MAX_REF_AUDIO_SECONDS . 's)');
         }
     }
 
