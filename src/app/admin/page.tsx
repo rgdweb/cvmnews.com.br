@@ -1086,13 +1086,19 @@ export default function AdminDashboard() {
   }
 
   // Draw waveform whenever trim state changes
+  // Filtra os tracinhos de silencio para mostrar apenas os DENTRO da selecao atual
   useEffect(() => {
     if (voiceTrimState && waveCanvasRef.current) {
       const canvas = waveCanvasRef.current
       const rect = canvas.getBoundingClientRect()
       canvas.width = rect.width * 2
       canvas.height = rect.height * 2
-      drawVoiceWaveform(canvas, voiceTrimState.buffer, voiceTrimState.rangeStart, voiceTrimState.rangeEnd, voiceTrimState.silenceRegions)
+      // Filtrar silencios: mostrar so os que estao dentro do range selecionado
+      const filteredSilences = (voiceTrimState.silenceRegions || []).filter(
+        sil => sil.start >= voiceTrimState.rangeStart && sil.end <= voiceTrimState.rangeEnd
+      )
+      setSilenceCount(filteredSilences.length)
+      drawVoiceWaveform(canvas, voiceTrimState.buffer, voiceTrimState.rangeStart, voiceTrimState.rangeEnd, filteredSilences)
     }
   }, [voiceTrimState])
 
