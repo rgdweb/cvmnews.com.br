@@ -16,7 +16,7 @@ import {
   AudioWaveform, LogOut, Plus, Trash2, Edit, Upload, Music, Mic,
   Loader2, RefreshCw, Volume2, FileAudio, CheckCircle2, Settings2,
   FolderOpen, ChevronLeft, FolderPlus, Folder, Play, Pause, Users, UserPlus, Shield,
-  UploadCloud, X
+  UploadCloud, X, Download, VolumeX
 } from 'lucide-react'
 import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
@@ -131,6 +131,212 @@ async function processTrackFile(file: File): Promise<{ blob: Blob; name: string;
 
   console.log(`[TrackProcess] ${info}`)
   return { blob: mp3Blob, name, info }
+}
+
+// ===================== VOICE AUDIO TRIMMER =====================
+// Corta audio de referencia com waveform visual: auto-trim (detecta voz) ou manual (slider).
+
+const VOICE_AUTO_TRIM_SECONDS = 10 // target de duracao apos auto-trim
+const SILENCE_THRESHOLD = 0.015 // RMS para detectar silencio
+
+/**
+ * Remove TODOS os trechos de silencio do audio, criando um buffer mais curto.
+ * Detecta regioes com RMS abaixo do threshold por mais de minSilenceMs
+ * e as remove, mantendo um keepBufferMs de margem antes/depois da voz.
+ *
+ * Retorna o novo AudioBuffer com silencios removidos.
+ */
+function removeSilenceFromAudio(audioBuffer: AudioBuffer, threshold = 0.015, minSilenceMs = 250, keepBufferMs = 60): AudioBuffer {
+  const data = audioBuffer.getChannelData(0)
+  const sr = audioBuffer.sampleRate
+  const numCh = audioBuffer.numberOfChannels
+
+  // Analisar RMS por janelas de 30ms
+  const winMs = 30
+  const winSamples = Math.floor(sr * winMs / 1000)
+  const numWins = Math.ceil(data.length / winSamples)
+  const rmsArr: boolean[] = [] // true = voz, false = silencio
+
+  for (let i = 0; i < numWins; i++) {
+    const start = i * winSamples
+    const end = Math.min(start + winSamples, data.length)
+    let sum = 0
+    for (let j = start; j < end; j++) sum += data[j] * data[j]
+    const rms = Math.sqrt(sum / (end - start))
+    rmsArr.push(rms > threshold)
+  }
+
+  // Converter minSilenceMs e keepBufferMs para janelas
+  const minSilenceWins = Math.ceil(minSilenceMs / winMs)
+  const keepBufferWins = Math.ceil(keepBufferMs / winMs)
+
+  // Encontrar regioes de silencio continuo (maiores que minSilenceWins)
+  // Marcar quais janelas manter (voice + buffers ao redor)
+  const keep = new Uint8Array(numWins) // 0 = descartar, 1 = manter
+
+  // Marcar todas as janelas com voz como "keep"
+  for (let i = 0; i < numWins; i++) {
+    if (rmsArr[i]) keep[i] = 1
+  }
+
+  // Expandir: adicionar buffers ao redor de cada regiao com voz
+  for (let i = 0; i < numWins; i++) {
+    if (keep[i] === 1) {
+      const expandStart = Math.max(0, i - keepBufferWins)
+      const expandEnd = Math.min(numWins, i + keepBufferWins + 1)
+      for (let j = expandStart; j < expandEnd; j++) keep[j] = 1
+    }
+  }
+
+  // Agora remover regioes de silencio contínuo que sao maiores que minSilenceWins
+  // (entre blocos de voz)
+  let silStart = -1
+  for (let i = 0; i < numWins; i++) {
+    if (keep[i] === 0) {
+      if (silStart === -1) silStart = i
+    } else {
+      if (silStart !== -1) {
+        const silLen = i - silStart
+        // Se o silencio for menor que o minimo, manter (provavelmente pausa entre palavras)
+        if (silLen < minSilenceWins) {
+          for (let j = silStart; j < i; j++) keep[j] = 1
+        }
+        silStart = -1
+      }
+    }
+  }
+  // Ultimo trecho
+  if (silStart !== -1 && (numWins - silStart) < minSilenceWins) {
+    for (let j = silStart; j < numWins; j++) keep[j] = 1
+  }
+
+  // Calcular samples a manter
+  let totalKeepSamples = 0
+  for (let i = 0; i < numWins; i++) {
+    if (keep[i] === 1) {
+      const start = i * winSamples
+      const end = Math.min(start + winSamples, data.length)
+      totalKeepSamples += (end - start)
+    }
+  }
+
+  if (totalKeepSamples === 0) {
+    console.warn('[removeSilence] Nenhum sample com voz encontrado, retornando original')
+    return audioBuffer
+  }
+
+  // Criar novo buffer
+  const newBuf = new AudioBuffer({ numberOfChannels: numCh, length: totalKeepSamples, sampleRate: sr })
+  let writeIdx = 0
+
+  for (let c = 0; c < numCh; c++) {
+    const srcData = audioBuffer.getChannelData(c)
+    const dstData = newBuf.getChannelData(c)
+    writeIdx = 0
+
+    for (let i = 0; i < numWins; i++) {
+      if (keep[i] === 1) {
+        const start = i * winSamples
+        const end = Math.min(start + winSamples, data.length)
+        for (let j = start; j < end; j++) {
+          dstData[writeIdx++] = srcData[j]
+        }
+      }
+    }
+  }
+
+  const timeSaved = (audioBuffer.duration - newBuf.duration).toFixed(1)
+  console.log(`[removeSilence] Original: ${audioBuffer.duration.toFixed(1)}s → Final: ${newBuf.duration.toFixed(1)}s (${timeSaved}s de silêncio removido)`)
+
+  return newBuf
+}
+
+function detectVoiceRange(audioBuffer: AudioBuffer): { start: number; end: number } {
+  const data = audioBuffer.getChannelData(0)
+  const sr = audioBuffer.sampleRate
+  const winMs = 150
+  const winSamples = Math.floor(sr * winMs / 1000)
+  const rmsArr: number[] = []
+  for (let i = 0; i < data.length; i += winSamples) {
+    let sum = 0; const end = Math.min(i + winSamples, data.length)
+    for (let j = i; j < end; j++) sum += data[j] * data[j]
+    rmsArr.push(Math.sqrt(sum / (end - i)))
+  }
+  let first = 0, last = rmsArr.length - 1
+  for (let i = 0; i < rmsArr.length; i++) { if (rmsArr[i] > SILENCE_THRESHOLD) { first = i; break } }
+  for (let i = rmsArr.length - 1; i >= 0; i--) { if (rmsArr[i] > SILENCE_THRESHOLD) { last = i; break } }
+  let s = Math.max(0, (first * winMs / 1000) - 0.15)
+  let e = Math.min(audioBuffer.duration, ((last + 1) * winMs / 1000) + 0.15)
+  if (e - s > VOICE_AUTO_TRIM_SECONDS) {
+    const c = (s + e) / 2; s = Math.max(0, c - VOICE_AUTO_TRIM_SECONDS / 2); e = s + VOICE_AUTO_TRIM_SECONDS
+    if (e > audioBuffer.duration) { e = audioBuffer.duration; s = Math.max(0, e - VOICE_AUTO_TRIM_SECONDS) }
+  }
+  return { start: s, end: e }
+}
+
+function extractAudioRange(buf: AudioBuffer, s: number, e: number): AudioBuffer {
+  const sr = buf.sampleRate, s0 = Math.max(0, Math.floor(s * sr)), s1 = Math.min(Math.floor(e * sr), buf.length)
+  const len = Math.max(1, s1 - s0) // Garantir pelo menos 1 sample
+  const ch = buf.numberOfChannels
+  const nb = new AudioBuffer({ numberOfChannels: ch, length: len, sampleRate: sr })
+  for (let c = 0; c < ch; c++) { const src = buf.getChannelData(c), dst = nb.getChannelData(c); for (let i = 0; i < len; i++) dst[i] = src[s0 + i] }
+  return nb
+}
+
+function audioBufferToWav(buffer: AudioBuffer): Blob {
+  const numCh = buffer.numberOfChannels, sr = buffer.sampleRate, bps = 16
+  const dataBytes = buffer.length * numCh * (bps / 8)
+  // Usar UM UNICO ArrayBuffer contiguo para evitar problemas com Blob multi-part
+  const totalSize = 44 + dataBytes
+  const ab = new ArrayBuffer(totalSize)
+  const header = new Uint8Array(ab, 0, 44)
+  const pcm = new Int16Array(ab, 44)
+
+  // Preencher header WAV
+  const h = new DataView(ab)
+  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) header[o + i] = s.charCodeAt(i) }
+  w(0, 'RIFF'); h.setUint32(4, 36 + dataBytes, true); w(8, 'WAVE')
+  w(12, 'fmt '); h.setUint32(16, 16, true); h.setUint16(20, 1, true)
+  h.setUint16(22, numCh, true); h.setUint32(24, sr, true)
+  h.setUint32(28, sr * numCh * bps / 8, true); h.setUint16(32, numCh * bps / 8, true); h.setUint16(34, bps, true)
+  w(36, 'data'); h.setUint32(40, dataBytes, true)
+
+  // Preencher dados PCM (interleaved)
+  let maxAmp = 0
+  for (let c = 0; c < numCh; c++) {
+    const d = buffer.getChannelData(c)
+    for (let i = 0; i < buffer.length; i++) {
+      const sample = Math.max(-32768, Math.min(32767, Math.round(d[i] * 32767)))
+      pcm[i * numCh + c] = sample
+      const abs = Math.abs(sample)
+      if (abs > maxAmp) maxAmp = abs
+    }
+  }
+
+  console.log(`[audioBufferToWav] ${buffer.length} samples, ${numCh}ch, ${sr}Hz, ${dataBytes} bytes PCM, maxAmp=${maxAmp}, blob=${totalSize} bytes`)
+  return new Blob([ab], { type: 'audio/wav' })
+}
+
+function drawVoiceWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, rs: number, re: number) {
+  const ctx = canvas.getContext('2d'); if (!ctx) return
+  const W = canvas.width, H = canvas.height, dur = buffer.duration, data = buffer.getChannelData(0), step = Math.max(1, Math.floor(data.length / W))
+  ctx.clearRect(0, 0, W, H); ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, W, H)
+  // Full waveform dimmed
+  ctx.fillStyle = '#475569'
+  for (let x = 0; x < W; x++) { let m = 0; for (let j = 0; j < step; j++) { const idx = x * step + j; if (idx < data.length) m = Math.max(m, Math.abs(data[idx])) } const h = m * H * 0.85; ctx.fillRect(x, (H - h) / 2, 1, h) }
+  // Selected range highlighted
+  const x1 = Math.floor((rs / dur) * W), x2 = Math.ceil((re / dur) * W)
+  ctx.fillStyle = '#8b5cf6'
+  for (let x = x1; x < x2; x++) { let m = 0; for (let j = 0; j < step; j++) { const idx = x * step + j; if (idx < data.length) m = Math.max(m, Math.abs(data[idx])) } const h = m * H * 0.85; ctx.fillRect(x, (H - h) / 2, 1, h) }
+  // Dim outside
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  if (x1 > 0) ctx.fillRect(0, 0, x1, H)
+  if (x2 < W) ctx.fillRect(x2, 0, W - x2, H)
+  // Range borders
+  ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x1, 0); ctx.lineTo(x1, H); ctx.moveTo(x2, 0); ctx.lineTo(x2, H); ctx.stroke()
+  // Time labels
+  ctx.fillStyle = '#e2e8f0'; ctx.font = '11px sans-serif'
+  ctx.fillText(`${rs.toFixed(1)}s`, 4, 14); ctx.fillText(`${re.toFixed(1)}s`, W - 35, 14)
 }
 
 interface VoiceVariation {
@@ -501,7 +707,14 @@ export default function AdminDashboard() {
   const [uploadingRef, setUploadingRef] = useState(false)
 
   // Pending files (not uploaded yet, waiting for save)
-  const [pendingVoiceFile, setPendingVoiceFile] = useState<File | null>(null)
+  const [pendingVoiceFile, setPendingVoiceFile] = useState<{ blob: Blob; name: string; info: string } | null>(null)
+  const [voiceTrimState, setVoiceTrimState] = useState<{ buffer: AudioBuffer; duration: number; rangeStart: number; rangeEnd: number; fileName: string } | null>(null)
+  const waveCanvasRef = useRef<HTMLCanvasElement>(null)
+  const voicePreviewCtxRef = useRef<AudioContext | null>(null)
+  const voicePreviewSrcRef = useRef<AudioBufferSourceNode | null>(null)
+  const [voicePreviewing, setVoicePreviewing] = useState(false)
+  const [loadingExistingAudio, setLoadingExistingAudio] = useState(false)
+  const [audioAlreadyUpdated, setAudioAlreadyUpdated] = useState(false)
 
   // Track form state
   const [trackForm, setTrackForm] = useState({ name: '', description: '', emoji: '', category: '' })
@@ -833,12 +1046,292 @@ export default function AdminDashboard() {
   }
 
   // --- VARIATION CRUD ---
-  // Select voice file (NO upload — just store in state for later upload on save)
-  const handleSelectVoiceFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Select voice file → decode, show waveform, auto-detect voice range
+  const handleSelectVoiceFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setPendingVoiceFile(file)
-    toast.success(`Arquivo pronto: ${file.name} (${(file.size / 1024).toFixed(0)}KB)`)
+    try {
+      toast.info('Analisando áudio...')
+      const actx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+      const ab = await file.arrayBuffer()
+      const audioBuf = await actx.decodeAudioData(ab)
+      await actx.close()
+      const range = detectVoiceRange(audioBuf)
+      setVoiceTrimState({ buffer: audioBuf, duration: audioBuf.duration, rangeStart: range.start, rangeEnd: range.end, fileName: file.name })
+      setPendingVoiceFile(null) // reset applied trim
+      toast.success(`Áudio: ${audioBuf.duration.toFixed(1)}s — voz detectada: ${(range.end - range.start).toFixed(1)}s`)
+    } catch (err) {
+      toast.error('Erro ao processar áudio. Tente outro formato.')
+      console.error('[VoiceTrim]', err)
+    }
+  }
+
+  // Draw waveform whenever trim state changes
+  useEffect(() => {
+    if (voiceTrimState && waveCanvasRef.current) {
+      const canvas = waveCanvasRef.current
+      const rect = canvas.getBoundingClientRect()
+      canvas.width = rect.width * 2
+      canvas.height = rect.height * 2
+      drawVoiceWaveform(canvas, voiceTrimState.buffer, voiceTrimState.rangeStart, voiceTrimState.rangeEnd)
+    }
+  }, [voiceTrimState])
+
+  // Apply trim → so cria o WAV blob localmente, sem upload nenhum
+  // O upload e update so acontecem ao clicar "Salvar Alteracoes"
+  const handleApplyVoiceTrim = () => {
+    if (!voiceTrimState) return
+    const { buffer, rangeStart, rangeEnd, fileName } = voiceTrimState
+
+    // Validar range
+    if (rangeEnd - rangeStart < 0.1) {
+      toast.error('Intervalo de corte muito curto. Ajuste os controles.')
+      return
+    }
+
+    const trimmed = extractAudioRange(buffer, rangeStart, rangeEnd)
+
+    // Verificar se o buffer cortado tem audio real (nao silencio)
+    const sampleData = trimmed.getChannelData(0)
+    let maxAmp = 0
+    for (let i = 0; i < sampleData.length; i++) {
+      const abs = Math.abs(sampleData[i])
+      if (abs > maxAmp) maxAmp = abs
+    }
+    if (maxAmp < 0.001) {
+      toast.error('O intervalo selecionado está em silêncio! Ajuste os controles para selecionar uma parte com voz.')
+      console.warn('[handleApplyVoiceTrim] Bloco cortado está em silêncio. maxAmp:', maxAmp, 'range:', rangeStart, '-', rangeEnd)
+      return
+    }
+
+    console.log(`[handleApplyVoiceTrim] Trim OK: ${rangeStart.toFixed(2)}s-${rangeEnd.toFixed(2)}s, ${trimmed.length} samples, ${trimmed.numberOfChannels}ch, ${trimmed.sampleRate}Hz, maxAmp=${maxAmp.toFixed(4)}`)
+
+    const wavBlob = audioBufferToWav(trimmed)
+    const baseName = fileName.replace(/\.[^.]+$/, '')
+    const dur = (rangeEnd - rangeStart).toFixed(1)
+
+    console.log(`[handleApplyVoiceTrim] WAV blob: ${(wavBlob.size / 1024).toFixed(0)}KB, esperado header+data = ${44 + trimmed.length * trimmed.numberOfChannels * 2} bytes`)
+
+    // Validar tamanho do blob
+    const expectedSize = 44 + trimmed.length * trimmed.numberOfChannels * 2
+    if (wavBlob.size !== expectedSize) {
+      toast.error(`Erro interno: tamanho do blob inconsistente (${wavBlob.size} vs ${expectedSize}). Tente novamente.`)
+      console.error('[handleApplyVoiceTrim] TAMANHO INCONSISTENTE!', wavBlob.size, 'vs', expectedSize)
+      return
+    }
+
+    // Guardar blob para enviar ao salvar (tanto para variacao nova quanto editando)
+    setPendingVoiceFile({ blob: wavBlob, name: `${baseName}.wav`, info: `${dur}s de ${buffer.duration.toFixed(1)}s — ${(wavBlob.size / 1024).toFixed(0)}KB WAV` })
+    setAudioAlreadyUpdated(false)
+    toast.success(`Corte aplicado: ${dur}s — clique em Salvar para enviar`)
+  }
+
+  // Preview trimmed audio (toggle play/pause) — toca direto do AudioBuffer, sem blob
+  const handlePreviewVoiceTrim = async () => {
+    if (!voiceTrimState) return
+
+    // Toggle: se ja esta tocando, para
+    if (voicePreviewing && voicePreviewSrcRef.current) {
+      try {
+        voicePreviewSrcRef.current.stop()
+      } catch { /* ja parou */ }
+      voicePreviewSrcRef.current = null
+      if (voicePreviewCtxRef.current) { voicePreviewCtxRef.current.close(); voicePreviewCtxRef.current = null }
+      setVoicePreviewing(false)
+      return
+    }
+
+    const { buffer, rangeStart, rangeEnd } = voiceTrimState
+    const trimmed = extractAudioRange(buffer, rangeStart, rangeEnd)
+
+    if (trimmed.length === 0) {
+      toast.error('Intervalo de corte vazio. Ajuste os controles.')
+      return
+    }
+
+    // Verificar se o buffer tem audio real (nao e silencio total)
+    const sampleData = trimmed.getChannelData(0)
+    let maxAmp = 0
+    for (let i = 0; i < sampleData.length; i++) {
+      const abs = Math.abs(sampleData[i])
+      if (abs > maxAmp) maxAmp = abs
+    }
+    if (maxAmp < 0.001) {
+      toast.error('O intervalo selecionado esta em silencio. Ajuste os controles.')
+      return
+    }
+
+    try {
+      const ctx = new AudioContext()
+
+      // Se o AudioContext estiver suspenso (autoplay policy), resumir
+      if (ctx.state === 'suspended') {
+        await ctx.resume()
+      }
+
+      const source = ctx.createBufferSource()
+      source.buffer = trimmed
+      source.connect(ctx.destination)
+      source.onended = () => {
+        setVoicePreviewing(false)
+        try { ctx.close() } catch { /* ja fechado */ }
+        voicePreviewCtxRef.current = null
+        voicePreviewSrcRef.current = null
+      }
+      source.start(0)
+      voicePreviewCtxRef.current = ctx
+      voicePreviewSrcRef.current = source
+      setVoicePreviewing(true)
+    } catch (err) {
+      console.error('[VoiceTrim] Preview error:', err)
+      toast.error('Erro ao reproduzir preview do corte')
+      setVoicePreviewing(false)
+    }
+  }
+
+  // --- LOAD EXISTING VARIATION AUDIO INTO TRIMMER ---
+  // Carrega audio de referencia existente quando clica Editar, permitindo corte direto
+  const handleEditVariationWithAudio = async (variation: VoiceVariation) => {
+    const audioUrl = variation.refAudioServerUrl || variation.refAudioPath
+    console.log('[EditVoiceAudio] Iniciando. variation.id:', variation.id, 'audioUrl:', audioUrl, 'serverUrl:', variation.refAudioServerUrl, 'path:', variation.refAudioPath)
+    if (!audioUrl) {
+      toast.error('Esta variação não possui áudio para editar')
+      return
+    }
+
+    // Abrir dialog primeiro com dados basicos
+    setEditingVariationId(variation.id)
+    setAddingVariationTo(null)
+    setVariationForm({
+      label: variation.label,
+      emoji: variation.emoji,
+      refAudioPath: '',
+      serverUrl: '',
+      filename: '',
+      refAudioName: variation.refAudioName,
+      refText: variation.refText,
+      instruct: variation.instruct || 'none',
+    })
+    setPendingVoiceFile(null)
+    setVoiceTrimState(null)
+    setAudioAlreadyUpdated(false)
+    setVariationDialogOpen(true)
+
+    // Carregar audio via proxy para evitar CORS
+    setLoadingExistingAudio(true)
+    try {
+      const proxyUrl = `/api/proxy-audio?url=${encodeURIComponent(audioUrl)}`
+      const res = await fetch(proxyUrl)
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
+      }
+
+      const arrayBuffer = await res.arrayBuffer()
+      console.log(`[EditVoiceAudio] Proxy OK: ${arrayBuffer.byteLength} bytes recebidos`)
+
+      const actx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+      const audioBuf = await actx.decodeAudioData(arrayBuffer)
+
+      // Verificar amplitude maxima do audio carregado
+      const checkData = audioBuf.getChannelData(0)
+      let loadedMaxAmp = 0
+      for (let i = 0; i < checkData.length; i++) {
+        const a = Math.abs(checkData[i])
+        if (a > loadedMaxAmp) loadedMaxAmp = a
+      }
+      console.log(`[EditVoiceAudio] Decoded: ${audioBuf.duration.toFixed(2)}s, ${audioBuf.numberOfChannels}ch, ${audioBuf.sampleRate}Hz, ${audioBuf.length} samples, maxAmp=${loadedMaxAmp.toFixed(4)}`)
+
+      // NAO fechar o AudioContext — manter aberto para que o AudioBuffer funcione corretamente
+      // em todos os browsers. Sera fechado quando o dialog fechar.
+
+      // Detectar automaticamente o range de voz
+      const range = detectVoiceRange(audioBuf)
+      setVoiceTrimState({
+        buffer: audioBuf,
+        duration: audioBuf.duration,
+        rangeStart: range.start,
+        rangeEnd: range.end,
+        fileName: variation.refAudioName || 'audio_existente.wav',
+      })
+      toast.success(`Áudio carregado: ${audioBuf.duration.toFixed(1)}s — voz detectada: ${(range.end - range.start).toFixed(1)}s`)
+    } catch (err) {
+      console.error('[EditVoiceAudio] Erro ao carregar audio:', err)
+      toast.error('Erro ao carregar áudio existente. Tente novamente.')
+    } finally {
+      setLoadingExistingAudio(false)
+    }
+  }
+
+  // Reset trim to full audio
+  const handleResetVoiceTrim = () => {
+    if (!voiceTrimState) return
+    setVoiceTrimState(prev => prev ? { ...prev, rangeStart: 0, rangeEnd: prev.duration } : null)
+    setPendingVoiceFile(null)
+  }
+
+  // Auto-detect voice range again
+  const handleAutoVoiceTrim = () => {
+    if (!voiceTrimState) return
+    const range = detectVoiceRange(voiceTrimState.buffer)
+    setVoiceTrimState(prev => prev ? { ...prev, rangeStart: range.start, rangeEnd: range.end } : null)
+    setPendingVoiceFile(null)
+  }
+
+  // Remove ALL silence from audio — creates compact buffer, updates waveform
+  const handleRemoveSilence = () => {
+    if (!voiceTrimState) return
+
+    try {
+      toast.info('Removendo silêncios...')
+
+      // Extract current selection first (in case user has adjusted sliders)
+      const { buffer, rangeStart, rangeEnd, fileName } = voiceTrimState
+      let workBuffer = buffer
+
+      // If user has a selection narrower than full audio, work with that
+      if (rangeEnd - rangeStart < buffer.duration - 0.1) {
+        workBuffer = extractAudioRange(buffer, rangeStart, rangeEnd)
+      }
+
+      // Remove silence from the working buffer
+      const cleaned = removeSilenceFromAudio(workBuffer, 0.015, 250, 60)
+
+      if (cleaned.duration < 0.1) {
+        toast.error('Áudio ficou muito curto apos remover silêncios. O áudio original será mantido.')
+        return
+      }
+
+      const timeSaved = (workBuffer.duration - cleaned.duration).toFixed(1)
+
+      // Check the cleaned buffer has real audio
+      const checkData = cleaned.getChannelData(0)
+      let maxAmp = 0
+      for (let i = 0; i < checkData.length; i++) {
+        const a = Math.abs(checkData[i])
+        if (a > maxAmp) maxAmp = a
+      }
+      if (maxAmp < 0.001) {
+        toast.error('Resultado esta em silencio. Nenhuma alteração feita.')
+        return
+      }
+
+      // Update trim state with cleaned buffer (full range of new buffer)
+      setVoiceTrimState({
+        buffer: cleaned,
+        duration: cleaned.duration,
+        rangeStart: 0,
+        rangeEnd: cleaned.duration,
+        fileName: fileName,
+      })
+      setPendingVoiceFile(null)
+      setAudioAlreadyUpdated(false)
+
+      toast.success(`Silêncios removidos: ${workBuffer.duration.toFixed(1)}s → ${cleaned.duration.toFixed(1)}s (${timeSaved}s removido)`)
+    } catch (err) {
+      console.error('[RemoveSilence] Erro:', err)
+      toast.error('Erro ao remover silêncios. Tente novamente.')
+    }
   }
 
   const handleSaveVariation = async () => {
@@ -848,15 +1341,20 @@ export default function AdminDashboard() {
     }
 
     const instructValue = variationForm.instruct === 'none' ? '' : variationForm.instruct
+    let pendingVoiceFileData: { serverUrl: string; filename: string; refAudioName: string; refAudioPath: string } | null = null
+
+    console.log('[handleSaveVariation] Iniciando. editingVariationId:', editingVariationId, 'pendingVoiceFile:', !!pendingVoiceFile, 'label:', variationForm.label)
 
     try {
-      // Upload pending voice file if there is one
+      // Upload pending voice file if there is one (corte aplicado)
       if (pendingVoiceFile) {
         setUploadingRef(true)
-        toast.info('Enviando arquivo de áudio...')
+        toast.info('Enviando áudio cortado...')
+
+        console.log(`[handleSaveVariation] Enviando blob: ${pendingVoiceFile.name}, ${(pendingVoiceFile.blob.size / 1024).toFixed(0)}KB`)
 
         const formData = new FormData()
-        formData.append('file', pendingVoiceFile)
+        formData.append('file', pendingVoiceFile.blob, pendingVoiceFile.name)
 
         const res = await fetch('/api/upload-voice', {
           method: 'POST',
@@ -871,14 +1369,41 @@ export default function AdminDashboard() {
           setUploadingRef(false)
           return
         }
+        console.log('[handleSaveVariation] Upload response:', JSON.stringify(data))
+
         if (data.serverUrl || data.path) {
+          // Atualizar variationForm com as URLs do upload
+          // So incluir refAudioPath se veio preenchido (HF pode falhar)
+          const uploadedPath = (data.path && typeof data.path === 'string' && data.path.length > 0) ? data.path : ''
+          const uploadedServerUrl = data.serverUrl || ''
+          const uploadedFilename = data.filename || ''
+          const uploadedName = data.name || pendingVoiceFile.name
+
+          console.log(`[handleSaveVariation] Upload OK. serverUrl: ${uploadedServerUrl ? 'SIM' : 'NAO'}, filename: ${uploadedFilename}, path: ${uploadedPath ? 'SIM' : 'NAO'}`)
+
+          // Validacao critica: se o PHP upload falhou (sem serverUrl), o HF path sozinho nao serve
+          if (!uploadedServerUrl) {
+            toast.error('Upload para o servidor falhou. O áudio não será atualizado. Tente novamente.')
+            setUploadingRef(false)
+            return
+          }
+
           setVariationForm(prev => ({
             ...prev,
-            refAudioPath: data.path || '',
-            serverUrl: data.serverUrl || '',
-            filename: data.filename || '',
-            refAudioName: data.name || pendingVoiceFile.name,
+            refAudioPath: uploadedPath,
+            serverUrl: uploadedServerUrl,
+            filename: uploadedFilename,
+            refAudioName: uploadedName,
           }))
+
+          // Atualizar o pendingVoiceFile com os dados do upload
+          // para que o PUT abaixo use os valores corretos
+          pendingVoiceFileData = {
+            serverUrl: uploadedServerUrl,
+            filename: uploadedFilename,
+            refAudioName: uploadedName,
+            refAudioPath: uploadedPath,
+          }
         } else {
           toast.error(data.error || 'Falha no upload do áudio')
           setUploadingRef(false)
@@ -896,18 +1421,25 @@ export default function AdminDashboard() {
           refText: variationForm.refText,
           instruct: instructValue,
         }
-        // Only update audio if a new one was uploaded
-        if (variationForm.serverUrl || variationForm.refAudioPath) {
-          updateBody.refAudioPath = variationForm.refAudioPath
-          updateBody.refAudioServerUrl = variationForm.serverUrl
-          updateBody.refAudioFilename = variationForm.filename
-          updateBody.refAudioName = variationForm.refAudioName
+        // So atualizar campos de audio se um novo arquivo foi carregado
+        // (usuario clicou em Aplicar corte antes)
+        if (pendingVoiceFileData) {
+          updateBody.refAudioServerUrl = pendingVoiceFileData.serverUrl
+          updateBody.refAudioFilename = pendingVoiceFileData.filename
+          updateBody.refAudioName = pendingVoiceFileData.refAudioName
+          // NUNCA enviar refAudioPath vazio — isso apaga o path no banco
+          if (pendingVoiceFileData.refAudioPath && pendingVoiceFileData.refAudioPath.length > 0) {
+            updateBody.refAudioPath = pendingVoiceFileData.refAudioPath
+          }
         }
-        await fetch(`/api/variations/${editingVariationId}`, {
+        console.log('[handleSaveVariation] PUT body:', JSON.stringify(updateBody))
+        const putRes = await fetch(`/api/variations/${editingVariationId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updateBody),
         })
+        const putData = await putRes.json()
+        console.log('[handleSaveVariation] PUT response:', putRes.ok, JSON.stringify(putData))
         toast.success('Variação atualizada!')
       } else {
         // CREATE new variation
@@ -933,6 +1465,10 @@ export default function AdminDashboard() {
       setAddingVariationTo(null)
       setVariationForm({ label: '', emoji: '', refAudioPath: '', serverUrl: '', filename: '', refAudioName: '', refText: '', instruct: 'none' })
       setPendingVoiceFile(null)
+      setVoiceTrimState(null)
+      setAudioAlreadyUpdated(false)
+      if (voicePreviewSrcRef.current) { try { voicePreviewSrcRef.current.stop() } catch { /* */ } voicePreviewSrcRef.current = null } if (voicePreviewCtxRef.current) { voicePreviewCtxRef.current.close(); voicePreviewCtxRef.current = null }
+      setVoicePreviewing(false)
       loadData()
     } catch {
       toast.error('Erro ao salvar variação')
@@ -2119,18 +2655,18 @@ export default function AdminDashboard() {
                             ) : (
                               <div className="space-y-2">
                                 {voice.variations.map((v) => (
-                                  <div key={v.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 ${!v.active ? 'border-slate-800 bg-slate-900/20 opacity-60' : v.refAudioPath ? 'border-emerald-800/40 bg-emerald-900/10' : 'border-amber-800/40 bg-amber-900/10'}`}>
+                                  <div key={v.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 ${!v.active ? 'border-slate-800 bg-slate-900/20 opacity-60' : (v.refAudioPath || v.refAudioServerUrl) ? 'border-emerald-800/40 bg-emerald-900/10' : 'border-amber-800/40 bg-amber-900/10'}`}>
                                     <div className="flex items-center gap-2 min-w-0">
                                       <span className="text-lg shrink-0">{v.emoji || '🎙️'}</span>
                                       <div className="min-w-0">
                                         <div className="flex items-center gap-1.5 flex-wrap">
                                           <span className="text-sm font-medium text-slate-300">{v.label}</span>
-                                          {v.refAudioPath ? (<Badge variant="outline" className="text-[10px] border-emerald-700 text-emerald-400 px-1.5 py-0"><Volume2 className="w-2.5 h-2.5 mr-0.5" /> Audio OK</Badge>) : (<Badge variant="outline" className="text-[10px] border-amber-700 text-amber-400 px-1.5 py-0">Sem audio</Badge>)}
+                                          {(v.refAudioPath || v.refAudioServerUrl) ? (<Badge variant="outline" className="text-[10px] border-emerald-700 text-emerald-400 px-1.5 py-0"><Volume2 className="w-2.5 h-2.5 mr-0.5" /> Audio OK</Badge>) : (<Badge variant="outline" className="text-[10px] border-amber-700 text-amber-400 px-1.5 py-0">Sem audio</Badge>)}
                                         </div>
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
-                                      {v.refAudioPath && (
+                                      {(v.refAudioPath || v.refAudioServerUrl) && (
                                         <button
                                           onClick={() => toggleVoicePreview(v)}
                                           className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 ${previewingVoiceVarId === v.id ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/30 scale-110' : 'bg-violet-500/20 text-violet-400 hover:bg-violet-500/20 hover:text-violet-300'}`}
@@ -2140,8 +2676,11 @@ export default function AdminDashboard() {
                                         </button>
                                       )}
                                       <input type="file" accept="audio/*" onChange={(e) => handleQuickUploadAudio(v.id, e)} className="hidden" id={`quick-audio-${selectedVoiceCategory}-${v.id}`} />
-                                      <Button variant="ghost" size="sm" onClick={() => document.getElementById(`quick-audio-${selectedVoiceCategory}-${v.id}`)?.click()} className={`h-7 px-2 text-xs gap-1 ${v.refAudioPath ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/30' : 'text-amber-400 hover:text-amber-300 hover:bg-amber-900/30'}`}><Upload className="w-3 h-3" />{v.refAudioPath ? 'Update' : 'Add'}</Button>
-                                      <Button variant="ghost" size="sm" onClick={() => { setEditingVariationId(v.id); setAddingVariationTo(null); setVariationForm({ label: v.label, emoji: v.emoji, refAudioPath: '', serverUrl: '', filename: '', refAudioName: v.refAudioName, refText: v.refText, instruct: v.instruct || 'none' }); setPendingVoiceFile(null); setVariationDialogOpen(true) }} className="h-7 px-2 text-xs text-slate-400 hover:text-white hover:bg-slate-700 gap-1"><Edit className="w-3 h-3" />Editar</Button>
+                                      {v.refAudioServerUrl && (
+                                        <a href={v.refAudioServerUrl} download={v.refAudioName || undefined} target="_blank" rel="noopener noreferrer" className="h-7 px-2 text-xs gap-1 inline-flex items-center text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 rounded-md transition-colors" title="Baixar áudio de referência"><Download className="w-3 h-3" /></a>
+                                      )}
+                                      <Button variant="ghost" size="sm" onClick={() => document.getElementById(`quick-audio-${selectedVoiceCategory}-${v.id}`)?.click()} className={`h-7 px-2 text-xs gap-1 ${(v.refAudioPath || v.refAudioServerUrl) ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/30' : 'text-amber-400 hover:text-amber-300 hover:bg-amber-900/30'}`}><Upload className="w-3 h-3" />{(v.refAudioPath || v.refAudioServerUrl) ? 'Update' : 'Add'}</Button>
+                                      <Button variant="ghost" size="sm" onClick={() => handleEditVariationWithAudio(v)} className="h-7 px-2 text-xs text-slate-400 hover:text-white hover:bg-slate-700 gap-1"><Edit className="w-3 h-3" />Editar</Button>
                                       <Switch checked={v.active} onCheckedChange={() => handleToggleVariation(v)} className="scale-75" />
                                       <Button variant="ghost" size="icon" onClick={() => handleDeleteVariation(v.id)} className="text-slate-500 hover:text-red-400 h-7 w-7"><Trash2 className="w-3 h-3" /></Button>
                                     </div>
@@ -2192,6 +2731,9 @@ export default function AdminDashboard() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-1">
+                                {(() => { const dv = voice.variations.find(v => v.active !== false && v.refAudioServerUrl); return dv ? (
+                                  <a href={dv.refAudioServerUrl} download={dv.refAudioName || undefined} target="_blank" rel="noopener noreferrer" className="h-8 w-8 rounded-full flex items-center justify-center text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 transition-colors" title={`Baixar áudio: ${dv.label}`}><Download className="w-3.5 h-3.5" /></a>
+                                ) : null })()}
                                 <Switch checked={voice.active} onCheckedChange={() => handleToggleVoice(voice)} className="scale-75" />
                                 <Button variant="ghost" size="icon" onClick={() => { setEditingVoiceId(voice.id); setVoiceForm({ name: voice.name, description: voice.description, gender: voice.gender, age: voice.age, accent: voice.accent, pitch: voice.pitch, category: voice.category || '' }); setVoiceDialogOpen(true) }} className="text-slate-400 hover:text-white h-8 w-8"><Edit className="w-3.5 h-3.5" /></Button>
                                 <Button variant="ghost" size="icon" onClick={() => handleDeleteVoice(voice.id)} className="text-slate-400 hover:text-red-400 h-8 w-8"><Trash2 className="w-3.5 h-3.5" /></Button>
@@ -2230,6 +2772,10 @@ export default function AdminDashboard() {
               setEditingVariationId(null)
               setAddingVariationTo(null)
               setPendingVoiceFile(null)
+              setVoiceTrimState(null)
+              setAudioAlreadyUpdated(false)
+              if (voicePreviewSrcRef.current) { try { voicePreviewSrcRef.current.stop() } catch { /* */ } voicePreviewSrcRef.current = null } if (voicePreviewCtxRef.current) { voicePreviewCtxRef.current.close(); voicePreviewCtxRef.current = null }
+              setVoicePreviewing(false)
             }
           }}>
             <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-lg">
@@ -2242,7 +2788,7 @@ export default function AdminDashboard() {
                 </DialogTitle>
                 <DialogDescription className="text-slate-400">
                   {editingVariationId
-                    ? 'Altere os dados da variação. Deixe o áudio vazio para manter o atual.'
+                    ? 'Ajuste o corte do áudio com o waveform. Clique Aplicar e depois Salvar para enviar.'
                     : 'Cada variação usa um áudio de referência diferente. A emoção vem do TOM do áudio enviado.'
                   }
                 </DialogDescription>
@@ -2269,15 +2815,27 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Select reference audio (upload happens on save) */}
+                {/* Select reference audio with waveform trimmer */}
                 <div className="space-y-2">
                   <Label className="text-slate-300">
-                    Áudio de Referência {editingVariationId ? '' : '*'} (3-10s)
+                    Áudio de Referência {editingVariationId ? '' : '*'}
+                    <span className="text-slate-500 ml-1">(ideal: 3-12s de voz clara)</span>
                   </Label>
-                  {editingVariationId && editingVariation?.refAudioPath && (
-                    <p className="text-xs text-slate-500">
-                      Audio atual: {editingVariation.refAudioName || 'arquivo'} — selecione um novo para substituir
-                    </p>
+                  {loadingExistingAudio && (
+                    <div className="flex items-center gap-2 py-3 px-4 rounded-lg bg-slate-900/60 border border-slate-700">
+                      <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
+                      <span className="text-sm text-slate-400">Carregando áudio existente...</span>
+                    </div>
+                  )}
+                  {!loadingExistingAudio && editingVariationId && editingVariation?.refAudioPath && !voiceTrimState && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-slate-500">
+                        Audio atual: {editingVariation.refAudioName || 'arquivo'}
+                      </p>
+                      <p className="text-xs text-amber-400/80">
+                        O audio nao foi carregado. Selecione um novo arquivo ou tente fechar e abrir o Editar novamente.
+                      </p>
+                    </div>
                   )}
                   <div className="relative">
                     <input
@@ -2296,27 +2854,114 @@ export default function AdminDashboard() {
                       {pendingVoiceFile ? (
                         <>
                           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          <span className="text-emerald-400">
-                            {pendingVoiceFile.name} ({(pendingVoiceFile.size / 1024).toFixed(0)}KB)
-                          </span>
+                          <span className="text-emerald-400">{pendingVoiceFile.name}</span>
                         </>
                       ) : (
                         <>
                           <Upload className="w-4 h-4" />
-                          {editingVariationId
-                            ? 'Enviar novo áudio (opcional)'
-                            : 'Selecionar arquivo de áudio'
-                          }
+                          {editingVariationId && voiceTrimState ? 'Enviar novo áudio (substituir)' : editingVariationId ? 'Selecionar arquivo de áudio' : 'Selecionar arquivo de áudio'}
                         </>
                       )}
                     </Button>
                   </div>
-                  {pendingVoiceFile && (
-                    <Badge variant="outline" className="bg-emerald-900/30 border-emerald-700 text-emerald-400">
-                      Pronto para enviar ao salvar
-                    </Badge>
-                  )}
                 </div>
+
+                {/* Waveform Trimmer — shows after file selection */}
+                {voiceTrimState && (
+                  <div className="space-y-3 rounded-lg bg-slate-900/60 p-3 border border-slate-700">
+                    {/* Waveform canvas */}
+                    <canvas
+                      ref={waveCanvasRef}
+                      className="w-full h-16 rounded cursor-crosshair"
+                      style={{ imageRendering: 'pixelated' }}
+                    />
+
+                    {/* Duration info */}
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>Original: {voiceTrimState.duration.toFixed(1)}s</span>
+                      <span className="text-violet-400 font-medium">
+                        Selecionado: {(voiceTrimState.rangeEnd - voiceTrimState.rangeStart).toFixed(1)}s
+                      </span>
+                    </div>
+
+                    {/* Start / End sliders */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-slate-400">Início: {voiceTrimState.rangeStart.toFixed(2)}s</Label>
+                        <input
+                          type="range"
+                          min={0}
+                          max={voiceTrimState.duration}
+                          step={0.05}
+                          value={voiceTrimState.rangeStart}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value)
+                            setVoiceTrimState(prev => prev && v < prev.rangeEnd ? { ...prev, rangeStart: v } : prev)
+                            setPendingVoiceFile(null)
+                            setAudioAlreadyUpdated(false)
+                          }}
+                          className="w-full accent-violet-500 h-2"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-slate-400">Fim: {voiceTrimState.rangeEnd.toFixed(2)}s</Label>
+                        <input
+                          type="range"
+                          min={0}
+                          max={voiceTrimState.duration}
+                          step={0.05}
+                          value={voiceTrimState.rangeEnd}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value)
+                            setVoiceTrimState(prev => prev && v > prev.rangeStart ? { ...prev, rangeEnd: v } : prev)
+                            setPendingVoiceFile(null)
+                            setAudioAlreadyUpdated(false)
+                          }}
+                          className="w-full accent-amber-400 h-2"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={handlePreviewVoiceTrim}
+                        className="border-slate-600 text-slate-300 hover:bg-slate-700 gap-1 text-xs">
+                        {voicePreviewing ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                        {voicePreviewing ? 'Pausar' : 'Ouvir corte'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleAutoVoiceTrim}
+                        className="border-violet-600 text-violet-400 hover:bg-violet-900/30 gap-1 text-xs">
+                        <AudioWaveform className="w-3 h-3" />
+                        Auto-trim voz
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleRemoveSilence}
+                        className="border-amber-500 text-amber-400 hover:bg-amber-900/30 gap-1 text-xs">
+                        <VolumeX className="w-3 h-3" />
+                        Remover silêncio
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleResetVoiceTrim}
+                        className="border-slate-600 text-slate-300 hover:bg-slate-700 gap-1 text-xs">
+                        <RefreshCw className="w-3 h-3" />
+                        Usar tudo
+                      </Button>
+                      <Button size="sm" onClick={handleApplyVoiceTrim} disabled={!!pendingVoiceFile}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 text-xs ml-auto">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Aplicar corte
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ready badge - corte aplicado, pronto para salvar */}
+                {pendingVoiceFile && (
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-emerald-900/30 border-emerald-700 text-emerald-400">
+                      <CheckCircle2 className="w-3 h-3 mr-1" /> Corte aplicado
+                    </Badge>
+                    <span className="text-xs text-slate-500">{pendingVoiceFile.info} — clique em Salvar para enviar</span>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label className="text-slate-300">Texto da Referência <span className="text-slate-500">(opcional)</span></Label>
@@ -2347,7 +2992,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="ghost" onClick={() => { setVariationDialogOpen(false); setEditingVariationId(null); setAddingVariationTo(null); setPendingVoiceFile(null) }} className="text-slate-400">Cancelar</Button>
+                <Button variant="ghost" onClick={() => { setVariationDialogOpen(false); setEditingVariationId(null); setAddingVariationTo(null); setPendingVoiceFile(null); setVoiceTrimState(null); setAudioAlreadyUpdated(false); if (voicePreviewSrcRef.current) { try { voicePreviewSrcRef.current.stop() } catch {} voicePreviewSrcRef.current = null } if (voicePreviewCtxRef.current) { voicePreviewCtxRef.current.close(); voicePreviewCtxRef.current = null } setVoicePreviewing(false) }} className="text-slate-400">Cancelar</Button>
                 <Button onClick={handleSaveVariation} disabled={uploadingRef} className="bg-violet-600 hover:bg-violet-700 text-white">
                   {uploadingRef ? (
                     <>
@@ -2645,6 +3290,9 @@ export default function AdminDashboard() {
                               </div>
                             </div>
                             <div className="flex items-center gap-1">
+                              {track.audioPath && (
+                                <a href={track.audioPath} download={track.name || undefined} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-full flex items-center justify-center text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 transition-colors" title="Baixar trilha"><Download className="w-4 h-4" /></a>
+                              )}
                               <Switch checked={track.active} onCheckedChange={() => handleToggleTrack(track)} />
                               <Button variant="ghost" size="icon" onClick={() => { setEditingTrackId(track.id); setTrackForm({ name: track.name, description: track.description || '', emoji: track.emoji || '', category: track.category || '' }); setTrackFilePath(''); setTrackDuration(track.duration); setPendingTrackFile(null); setTrackDialogOpen(true) }} className="text-slate-400 hover:text-white"><Edit className="w-4 h-4" /></Button>
                               <Button variant="ghost" size="icon" onClick={() => handleDeleteTrack(track.id)} className="text-slate-400 hover:text-red-400"><Trash2 className="w-4 h-4" /></Button>
@@ -2691,6 +3339,9 @@ export default function AdminDashboard() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-1">
+                                {track.audioPath && (
+                                  <a href={track.audioPath} download={track.name || undefined} target="_blank" rel="noopener noreferrer" className="h-8 w-8 rounded-full flex items-center justify-center text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 transition-colors" title="Baixar trilha"><Download className="w-3.5 h-3.5" /></a>
+                                )}
                                 <Switch checked={track.active} onCheckedChange={() => handleToggleTrack(track)} className="scale-75" />
                                 <Button variant="ghost" size="icon" onClick={() => { setEditingTrackId(track.id); setTrackForm({ name: track.name, description: track.description || '', emoji: track.emoji || '', category: track.category || '' }); setTrackFilePath(''); setTrackDuration(track.duration); setPendingTrackFile(null); setTrackDialogOpen(true) }} className="text-slate-400 hover:text-white h-8 w-8"><Edit className="w-3.5 h-3.5" /></Button>
                                 <Button variant="ghost" size="icon" onClick={() => handleDeleteTrack(track.id)} className="text-slate-400 hover:text-red-400 h-8 w-8"><Trash2 className="w-3.5 h-3.5" /></Button>
