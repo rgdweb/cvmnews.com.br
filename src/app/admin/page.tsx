@@ -137,13 +137,15 @@ async function processTrackFile(file: File): Promise<{ blob: Blob; name: string;
 // Corta audio de referencia com waveform visual: auto-trim (detecta voz) ou manual (slider).
 
 const VOICE_AUTO_TRIM_SECONDS = 10 // target de duracao apos auto-trim
-const SILENCE_THRESHOLD = 0.015 // RMS para detectar silencio
-const SILENCE_DETECT_WINDOW = 80 // ms - janela para analisar silencio
-const MIN_SILENCE_TO_CUT = 300 // ms - silencio minimo para marcar como cortavel
+const SILENCE_THRESHOLD = 0.015 // RMS absoluto para detectVoiceRange (auto-trim)
+const SILENCE_DETECT_WINDOW = 40 // ms - janela fina para detectar silencios com precisao
+const MIN_SILENCE_TO_CUT = 200 // ms - silencio minimo para marcar (mais sensivel)
 const MICRO_GAP_MS = 30 // ms - gap entre palavras apos remover silencio (nao emenda direto)
+const SILENCE_RATIO = 0.06 // silencio = RMS < 6% do pico do audio (relativo, adaptavel)
 
 /**
- * Detecta todas as regioes de silencio no audio.
+ * Detecta todas as regioes de silencio no audio usando threshold RELATIVO.
+ * Compara cada janela com o pico do audio — funciona em qualquer volume.
  * Retorna array de { start, end } em segundos dos trechos de silencio.
  */
 function detectSilenceRegions(audioBuffer: AudioBuffer): Array<{ start: number; end: number }> {
@@ -162,21 +164,35 @@ function detectSilenceRegions(audioBuffer: AudioBuffer): Array<{ start: number; 
     rmsArr.push(Math.sqrt(sum / (e - s)))
   }
   
+  // Encontrar o pico RMS do audio (ignorando os 5% mais altos para nao ser afetado por picos isolados)
+  const sorted = [...rmsArr].sort((a, b) => a - b)
+  const p95idx = Math.floor(sorted.length * 0.95)
+  const peakRms = Math.max(0.001, sorted[p95idx]) // minimo 0.001 para evitar divisao por zero
+  
+  // Threshold relativo: silencio = RMS abaixo de X% do pico
+  const threshold = peakRms * SILENCE_RATIO
+  // Mas nunca menor que um floor absoluto (para audios muito silenciosos)
+  const finalThreshold = Math.max(threshold, 0.003)
+  
+  console.log(`[detectSilence] peakRms=${peakRms.toFixed(4)}, threshold=${finalThreshold.toFixed(4)} (${SILENCE_RATIO*100}% do pico)`) 
+  
   // Encontrar regioes de silencio contínuo >= MIN_SILENCE_TO_CUT
   const regions: Array<{ start: number; end: number }> = []
   let silStart = -1
   const minSilWins = Math.ceil(MIN_SILENCE_TO_CUT / SILENCE_DETECT_WINDOW)
   
   for (let i = 0; i < numWins; i++) {
-    if (rmsArr[i] <= SILENCE_THRESHOLD) {
+    if (rmsArr[i] <= finalThreshold) {
       if (silStart === -1) silStart = i
     } else {
       if (silStart !== -1) {
         const len = i - silStart
         if (len >= minSilWins) {
+          // Adicionar margem de 20ms em cada lado (nao cortar dentro da palavra)
+          const marginMs = 20
           regions.push({
-            start: silStart * SILENCE_DETECT_WINDOW / 1000,
-            end: i * SILENCE_DETECT_WINDOW / 1000
+            start: Math.max(0, (silStart * SILENCE_DETECT_WINDOW / 1000) - marginMs / 1000),
+            end: Math.min(audioBuffer.duration, (i * SILENCE_DETECT_WINDOW / 1000) + marginMs / 1000)
           })
         }
         silStart = -1
