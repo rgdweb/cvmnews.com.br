@@ -486,6 +486,34 @@ const INSTRUCT_OPTIONS = [
 ]
 
 // ============================================================
+// Componente: Mostra duracao do audio da variacao com indicador verde
+// ============================================================
+function VarDuration({ url }: { url: string }) {
+  const [dur, setDur] = useState<number | null>(null)
+  useEffect(() => {
+    if (!url) return
+    const a = new Audio(url)
+    const onLoaded = () => { setDur(a.duration); URL.revokeObjectURL(a.src) }
+    const onError = () => { setDur(-1); URL.revokeObjectURL(a.src) }
+    a.addEventListener('loadedmetadata', onLoaded)
+    a.addEventListener('error', onError)
+    return () => { a.removeEventListener('loadedmetadata', onLoaded); a.removeEventListener('error', onError) }
+  }, [url])
+
+  if (dur === null) return null
+  if (dur < 0) return <Badge variant="outline" className="text-[10px] border-slate-600 text-slate-500 px-1.5 py-0">--s</Badge>
+
+  const isOk = dur >= 3 && dur <= 12
+  const secs = dur.toFixed(1)
+  return (
+    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 gap-0.5 ${isOk ? 'border-emerald-700 text-emerald-400' : dur < 3 ? 'border-amber-700 text-amber-400' : 'border-red-700 text-red-400'}`}>
+      {isOk && <CheckCircle2 className="w-2.5 h-2.5" />}
+      {secs}s
+    </Badge>
+  )
+}
+
+// ============================================================
 // COMPONENTE: Seção de Gestão de Usuários
 // ============================================================
 function UsersSection({ users, loaded, onRefresh }: {
@@ -2736,6 +2764,7 @@ export default function AdminDashboard() {
                                         <div className="flex items-center gap-1.5 flex-wrap">
                                           <span className="text-sm font-medium text-slate-300">{v.label}</span>
                                           {(v.refAudioPath || v.refAudioServerUrl) ? (<Badge variant="outline" className="text-[10px] border-emerald-700 text-emerald-400 px-1.5 py-0"><Volume2 className="w-2.5 h-2.5 mr-0.5" /> Audio OK</Badge>) : (<Badge variant="outline" className="text-[10px] border-amber-700 text-amber-400 px-1.5 py-0">Sem audio</Badge>)}
+                                          {v.refAudioServerUrl && <VarDuration url={v.refAudioServerUrl} />}
                                         </div>
                                       </div>
                                     </div>
