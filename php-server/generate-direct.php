@@ -232,7 +232,7 @@ function fixPortuguesePronunciation($text) {
         'ctps' => 'ce te pe esse',
         'titulo de eleitor' => 'titulo de eleitor',
         'cnh'  => 'ce ene aga',
-        'renavam' => 'renavam',
+        'renavam' => 'renavam', // palavra, nao sigla - TTS ja acerta
         'iptu' => 'i pe te u',
         'ipva' => 'i pe ve a',
 
@@ -311,6 +311,7 @@ function fixPortuguesePronunciation($text) {
         'pf'    => 'pe efe',
         'pj'    => 'pe jota',
         'mei'   => 'eme e i',
+        'cnpj'  => 'ce ene pe jota',
         'mf'    => 'eme efe',
         'bc'    => 'be ce',
         'cmn'   => 'ce eme ene',
@@ -358,6 +359,158 @@ function fixPortuguesePronunciation($text) {
         'testemunhar' => 'testemunhar',
     ];
 
+    // DICIONARIO DE PALAVRAS ESTRANGEIRAS COMUNS
+    // SO palavras que o TTS pronuncia claramente em ingles (sotaque estrangeiro)
+    // e os brasileiros falam aportuguesado. NAO incluir palavras que o TTS ja acerta.
+    // Regra: se o brasileiro fala "saite", "imeil", "loguine", o TTS precisa falar igual.
+    $foreignWords = [
+        // Internet / web - pronunciadas como brasileiros falam
+        'site'       => 'saite',
+        'sites'      => 'saites',
+        'website'    => 'uaibe saite',
+        'e-mail'     => 'imeil',
+        'email'      => 'imeil',
+        'login'      => 'login',
+        'logout'     => 'logaut',
+        'password'   => 'paswordi',
+        'dashboard'  => 'dachebord',
+        'download'   => 'downloadi',
+        'upload'     => 'uploadi',
+        'backup'     => 'bequi',
+        'feedback'   => 'fidebequi',
+        'link'       => 'linqui',
+        'click'      => 'clic',
+        'app'        => 'epi',
+        'apps'       => 'epis',
+        'chat'       => 'tchat',
+        'bot'        => 'bote',
+        'ai'         => 'a i',
+
+        // TI / dev - pronunciadas aportuguesadas
+        'software'   => 'softueire',
+        'hardware'   => 'iardueire',
+        'setup'      => 'setape',
+        'deploy'     => 'deploye',
+        'frontend'   => 'frontende',
+        'backend'    => 'bakiende',
+        'framework'  => 'frameuoque',
+        'plugin'     => 'pluguine',
+        'token'      => 'toquene',
+        'default'    => 'defauti',
+        'setting'    => 'setingue',
+        'bug'        => 'bage',
+        'release'    => 'rileise',
+        'update'     => 'updeite',
+        'upgrade'    => 'upugreide',
+        'feature'    => 'fitxe',
+        'performance' => 'performanse',
+        'container'  => 'containe',
+        'docker'     => 'doque',
+
+        // Redes / telecom
+        'streaming'  => 'streaminge',
+        'bluetooth'  => 'blutufe',
+        'wifi'       => 'uaifai',
+        'server'     => 'servidor',
+        'server'     => 'servidores',
+        'database'   => 'beise de dados',
+        'database'   => 'beise de dados',
+
+        // Dispositivos
+        'smartphone' => 'smartfone',
+        'laptop'     => 'laptop',
+        'notebook'   => 'notebooque',
+        'tablet'     => 'tablete',
+        'headphone'  => 'headfone',
+        'keyboard'   => 'teclado',
+        'mouse'      => 'mause',
+        'speaker'    => 'speiquer',
+        'microphone' => 'microfone',
+        'printer'    => 'printe',
+
+        // Marketing / business
+        'marketing'  => 'marqueteingue',
+        'meeting'    => 'mitingue',
+        'startup'    => 'startape',
+        'branding'   => 'brandinge',
+        'newsletter' => 'newsletter',
+        'analytics'  => 'analitiques',
+
+        // Segurança
+        'hacker'     => 'haquer',
+        'phishing'   => 'fixingue',
+        'malware'    => 'maluere',
+        'firewall'   => 'faireuol',
+
+        // Social media
+        'hashtag'    => 'axetaque',
+        'podcast'    => 'podcaste',
+        'trending'   => 'trendingue',
+        'vlog'       => 'vloque',
+        'follower'   => 'seguidor',
+        'follow'     => 'folou',
+
+        // UX / UI
+        'slider'     => 'slaider',
+        'widget'     => 'uidguelle',
+        'tooltip'    => 'tulipe',
+        'popup'      => 'popape',
+        'checkbox'   => 'xequeboxe',
+        'dropdown'   => 'dropdowni',
+        'scroll'     => 'escrole',
+        'thumbnail'  => 'thumbnaille',
+
+        // Outras comuns que o TTS fala em ingles
+        'speech'     => 'espiichi',
+        'review'     => 'reviu',
+        'preview'    => 'previu',
+        'overview'   => 'overviewi',
+        'guide'      => 'gaide',
+        'tutorial'   => 'tutoriale',
+        'template'   => 'template',
+        'layout'     => 'laiaute',
+        'gambling'   => 'gamblingue',
+        'gameplay'   => 'gameplei',
+        'fitness'    => 'fitnesse',
+        'brand'      => 'brande',
+        'premium'    => 'premiumie',
+        'discount'   => 'descontou',
+        'coupon'     => 'cupom',
+        'checkout'   => 'xequeaute',
+        'shipping'   => 'chipinge',
+        'delivery'   => 'delimiterie',
+        'standard'   => 'standarde',
+        'enterprise' => 'enterpraize',
+        'deadline'   => 'dedlaine',
+        'schedule'   => 'esquejuule',
+        'timeline'   => 'taimleine',
+        'reminder'   => 'remainde',
+        'status'     => 'statusse',
+        'priority'   => 'prioridaide',
+        'category'   => 'categoorie',
+        'notification' => 'notifiquexeone',
+        'attachment' => 'ataquexemente',
+        'screenshot' => 'screenshoti',
+        'resolution' => 'resoluxam',
+        'quality'    => 'qualidaide',
+        'autoplay'   => 'autopurei',
+        'subtitle'   => 'subtitle',
+        'volume'     => 'voliumi',
+        'mute'       => 'miuti',
+        'playlist'   => 'playlisti',
+        'playback'   => 'pureibeque',
+
+        // Financeiro / corporativo
+        'budget'     => 'borjete',
+        'invoice'    => 'invoice',
+
+        // AI / ML
+        'machine learning' => 'machine learningue',
+        'deep learning' => 'deep learningue',
+        'neural'     => 'neural',
+        'algorithm'  => 'algoritme',
+    ];
+
     // Aplicar dicionario principal (ex- palavras)
     foreach ($dict as $wrong => $correct) {
         $text = preg_replace('/\b' . preg_quote($wrong, '/') . '\b/i', $correct, $text);
@@ -378,6 +531,11 @@ function fixPortuguesePronunciation($text) {
         $text = preg_replace('/\b' . preg_quote($wrong, '/') . '\b/i', $correct, $text);
     }
 
+    // Aplicar palavras estrangeiras (pronuncia aportuguesada)
+    foreach ($foreignWords as $wrong => $correct) {
+        $text = preg_replace('/\b' . preg_quote($wrong, '/') . '\b/i', $correct, $text);
+    }
+
     // FALBACK FINAL: Regex generica para ex- + vogal que o frontend corrompeu
     // Captura qualquer "eksX" ou "ekssX" que comeca com ex- original
     $text = preg_replace('/\beks([aeiouáàãâéèêíïóôõúü])/i', 'ez$1', $text);
@@ -395,15 +553,24 @@ if (!$input) {
 
 $texto = $input['text'] ?? '';
 
-// DEFESA: strip SSML + clean texto + corrigir pronuncia PT-BR antes de enviar ao TTS
+// DEFESA: strip SSML + clean texto + corrigir pronuncia PT-BR + forcar contexto
 $texto = stripSSML($texto);
 $texto = cleanText($texto);
 $texto = fixPortuguesePronunciation($texto);
 $idioma = $input['language'] ?? 'Auto';
+// FORCAR PORTUGUES: autodetecção do GPT-SoVITS causa mistura de idiomas
+if (empty($idioma) || $idioma === 'Auto' || strtolower($idioma) === 'auto') {
+    $idioma = 'Portuguese';
+}
 $refAudioUrl = $input['refAudioUrl'] ?? '';
 $refAudioPath = $input['refAudioPath'] ?? '';
 $refText = $input['refText'] ?? '';
 $instruct = $input['instruct'] ?? '';
+// FORCAR INSTRUCT EM PORTUGUES quando vazio
+$isPortuguese = in_array(strtolower($idioma), ['portuguese', 'portugues', 'pt', 'pt-br', 'pt_br']);
+if ($isPortuguese && empty(trim($instruct ?? ''))) {
+    $instruct = 'Fale em portugues do Brasil';
+}
 $refAudioName = $input['refAudioName'] ?? 'ref_audio.wav';
 $speed = $input['speed'] ?? 1.0;
 // Clamp velocidade: modelo OmniVoice/GPT-SoVITS fica distorcido fora desta faixa
@@ -412,6 +579,11 @@ $speedOriginal = $speed;
 $speed = max(0.8, min(1.3, (float)$speed));
 $numStep = $input['numStep'] ?? 32;
 $guidanceScale = $input['guidanceScale'] ?? 2.0;
+
+// Prefixo [PT-BR] para forcar idioma no tokenizer do GPT-SoVITS
+if ($isPortuguese) {
+    $texto = '[PT-BR] ' . $texto;
+}
 
 debugLog('Input recebido', 'info', "texto: " . mb_substr($texto, 0, 50) . " | idioma: $idioma | steps: $numStep | speed: $speedOriginal -> $speed");
 
