@@ -1,4 +1,170 @@
 ---
+Task ID: 0
+Agent: main
+Task: PROCEDIMENTO DE ACESSO CPANEL - REGISTRO PERMANENTE
+
+Work Log:
+- Registrado procedimento completo para sempre acessar e editar arquivos no servidor
+
+## ==================== PROCEDIMENTO CPANEL ====================
+## SEMPRE que precisar editar/subir/verificar arquivos no servidor, seguir ESTES passos:
+
+### 1. ACESSAR CPANEL
+```
+URL: https://sorteiomax.com.br:2083
+Login: marci955
+Senha: Rgdweb@2637
+```
+
+### 2. FLUXO COM agent-browser
+```
+# Abrir cPanel
+agent-browser open "https://sorteiomax.com.br:2083"
+
+# Esperar carregar e fazer login
+agent-browser snapshot -i
+# Encontrar refs: @e11 (username), @e12 (password), @e13 (login button)
+agent-browser fill @e11 "marci955"
+agent-browser fill @e12 "Rgdweb@2637"
+agent-browser click @e13
+agent-browser wait --load networkidle
+
+# Se aparecer popup de consentimento, fechar:
+agent-browser click @e6  # Close User Consent
+```
+
+### 3. ABRIR FILE MANAGER
+```
+# Encontrar ref do "Gerenciador de arquivos" (geralmente @e55 na primeira carga)
+agent-browser snapshot -i
+# Procurar: link "Gerenciador de arquivos"
+agent-browser click @e55  # (ref pode mudar, sempre usar snapshot antes)
+agent-browser wait --load networkidle
+```
+
+### 4. NAVEGAR PARA /public_html/omnivoice/
+```
+# Via input de path (ref @e2 = textbox, @e3 = botão Ir):
+agent-browser fill @e2 "/public_html/omnivoice"
+agent-browser click @e3
+agent-browser wait --load networkidle
+```
+
+### 5. UPLOAD DE ARQUIVOS (ZIP)
+```
+# Clicar em Carregar (geralmente @e9 ou @e24)
+agent-browser snapshot -i  # encontrar ref de "Carregar"
+agent-browser click @e9
+agent-browser wait --load networkidle
+
+# Marcar "Substitua os arquivos existentes"
+agent-browser snapshot -i  # encontrar checkbox ref (ex: @e4)
+agent-browser check @e4
+
+# O file input fica invisível. Tornar visível e fazer upload:
+agent-browser eval "const fi = document.querySelector('input[type=file]'); fi.style.display='block'; fi.style.opacity='1'; fi.id='myFi';"
+agent-browser snapshot -i  # agora aparece "Choose File" (ex: @e6)
+agent-browser upload @e6 "/caminho/do/arquivo.zip"
+
+# Submeter form
+agent-browser eval "document.querySelector('form').submit();"
+
+# Voltar para listagem
+agent-browser snapshot -i  # encontrar "Voltar" (ex: @e3)
+agent-browser click @e3
+agent-browser wait --load networkidle
+```
+
+### 6. EXTRAIR ZIP
+```
+# Selecionar o arquivo zip clicando na celula com o nome
+agent-browser eval "document.querySelectorAll('td').forEach(td => { if(td.textContent.trim() === 'NOME_DO_ZIP.zip' && td.offsetParent) td.click(); });"
+
+# Clicar em Extrair
+agent-browser snapshot -i  # encontrar "Extrair" (ex: @e32)
+agent-browser click @e32
+agent-browser wait 3000
+
+# Confirmar extração
+agent-browser snapshot -i  # encontrar "Extract Files" (ex: @e22)
+agent-browser click @e22
+agent-browser wait --load networkidle
+
+# Fechar dialogo de resultado
+agent-browser snapshot -i  # encontrar "Close" (ex: @e8)
+agent-browser click @e8
+```
+
+### 7. VERIFICAR CONTEÚDO DE ARQUIVO (via editor ACE)
+```
+# Selecionar arquivo
+agent-browser eval "document.querySelectorAll('td').forEach(td => { if(td.textContent.trim() === 'generate-direct.php' && td.offsetParent) td.click(); });"
+
+# Clicar Editar
+agent-browser snapshot -i  # encontrar "Editar" (ex: @e29)
+agent-browser click @e29
+agent-browser wait 5000
+
+# Ler conteudo do ACE editor:
+agent-browser eval "const ace = document.querySelector('#codewindow'); const val = ace.env.editor.getValue(); val.includes('fixPortuguesePronunciation');"
+
+# Fechar editor: Escape
+agent-browser press Escape
+```
+
+### 8. DELETAR ARQUIVOS
+```
+# Selecionar arquivo clicando na celula
+agent-browser eval "document.querySelectorAll('td').forEach(td => { if(td.textContent.trim() === 'ARQUIVO.php' && td.offsetParent) td.click(); });"
+
+# Clicar Excluir
+agent-browser snapshot -i  # encontrar "Excluir" (ex: @e26)
+agent-browser click @e26
+agent-browser wait 3000
+
+# Confirmar exclusão
+agent-browser snapshot -i  # encontrar "Confirm" (ex: @e22)
+agent-browser click @e22
+agent-browser wait --load networkidle
+```
+
+### 9. VERIFICAR LISTA DE ARQUIVOS
+```
+# Listar todos os arquivos PHP no diretório atual:
+agent-browser eval "const allTds = document.querySelectorAll('td'); const phps = []; allTds.forEach(td => { if(td.textContent.trim().match(/\\.php$/) && td.offsetParent) { const row = td.parentElement; const cells = Array.from(row.children); phps.push(cells.map(c=>c.textContent.trim()).join(' | ')); }}); phps.join('\\n')"
+
+# Verificar se arquivo existe:
+agent-browser eval "const found = Array.from(document.querySelectorAll('td')).some(td => td.textContent.trim() === 'NOME.php' && td.offsetParent); found ? 'EXISTS' : 'NOT FOUND'"
+```
+
+### 10. EXECUTAR PHP REMOTAMENTE
+```
+# Subir um PHP de verificação e acessar via browser:
+agent-browser open "https://sorteiomax.com.br/omnivoice/check_pronuncia.php"
+agent-browser eval "document.body.innerText"
+```
+
+### DADOS IMPORTANTES DO SERVIDOR
+- cPanel: https://sorteiomax.com.br:2083
+- Site: https://sorteiomax.com.br
+- Diretório OmniVoice: /public_html/omnivoice/
+- Path absoluto: /home4/marci955/public_html/omnivoice/
+- PHP: 8.3.31, LiteSpeed, FastCGI
+- Local dev path: /home/z/my-project/php-server/
+
+### OBSERVAÇÕES IMPORTANTES
+- Os refs (ex: @e11, @e55) mudam a cada carregamento de página. SEMPRE usar snapshot -i antes de clicar
+- O editor do cPanel usa ACE editor (não textarea simples). Para ler conteúdo: document.querySelector('#codewindow').env.editor.getValue()
+- O file input de upload é invisível por padrão. Precisa tornar visível com JS antes de usar upload
+- Checkbox "Substitua os arquivos existentes" DEVE estar marcado ao subir arquivos atualizados
+- Sempre fechar/limpar arquivos temporários após verificações
+- O form de upload às vezes some, usar document.querySelector('form').submit() como fallback
+
+Stage Summary:
+- Procedimento completo de acesso cPanel registrado permanentemente no worklog
+- Sempre seguir estes passos para qualquer edição no servidor
+
+---
 Task ID: 1
 Agent: main
 Task: Verificar e corrigir arquivos PHP no servidor cPanel + diagnosticar pronúncia "exatamente"
