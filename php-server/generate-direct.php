@@ -218,13 +218,163 @@ function fixPortuguesePronunciation($text) {
         'ekstra'       => 'estra',
     ];
 
-    // Aplicar dicionario principal
+    // DICIONARIO DE SIGLAS: Substitui siglas pela pronuncia em portugues (letra por letra)
+    // O TTS tenta pronunciar siglas em ingles (ex: HTML = "aitch-tee-em-el", SQL = "sequel")
+    // Aqui forcamos a pronuncia correta em portugues brasileiro
+    $abbreviations = [
+        // Documentos / identificacao
+        'cpf'  => 'ce pe efe',
+        'cnpj' => 'ce ene pe jota',
+        'rg'   => 'ere ge',
+        'cns'  => 'ce ene esse',
+        'pis'  => 'pe i esse',
+        'pasep' => 'pe a ese e pe',
+        'ctps' => 'ce te pe esse',
+        'titulo de eleitor' => 'titulo de eleitor',
+        'cnh'  => 'ce ene aga',
+        'renavam' => 'renavam',
+        'iptu' => 'i pe te u',
+        'ipva' => 'i pe ve a',
+
+        // Tecnologia / TI
+        'html'  => 'aga te eme ele',
+        'css'   => 'ce esse esse',
+        'sql'   => 'esse cue ele',
+        'api'   => 'a pe i',
+        'tts'   => 'te te esse',
+        'gpu'   => 'ge pe u',
+        'cpu'   => 'ce pe u',
+        'pdf'   => 'pe de efe',
+        'xml'   => 'equis eme ele',
+        'json'  => 'jei otim eson',
+        'url'   => 'u erre ele',
+        'ui'    => 'u i',
+        'ux'    => 'u equis',
+        'php'   => 'pe aga pe',
+        'sdk'   => 'esse de ca',
+        'csv'   => 'ce esse ve',
+        'png'   => 'pe ene ge',
+        'jpg'   => 'jota pe ge',
+        'jpeg'  => 'jota pe e i',
+        'gif'   => 'ge i efe',
+        'svg'   => 'esse ve ge',
+        'mp3'   => 'eme pe treis',
+        'mp4'   => 'eme pe quatro',
+        'jwt'   => 'jei dableiu te',
+        'tcp'   => 'te ce pe',
+        'dns'   => 'de ene esse',
+        'ftp'   => 'efe te pe',
+        'ssh'   => 'esse esse aga',
+        'sms'   => 'esse eme esse',
+        'http'  => 'aga te te pe',
+        'https' => 'aga te te pe esse',
+        'ipv4'  => 'i pe ve quatro',
+        'ipv6'  => 'i pe ve seis',
+        'seo'   => 'esse e o',
+        'crm'   => 'ce erre eme',
+        'erp'   => 'e erre pe',
+        'saas'  => 'essa a esse',
+        'iaas'  => 'i a a esse',
+        'paas'  => 'pa a esse',
+        'html5' => 'aga te eme ele cinco',
+        'mysql' => 'me i esse cue ele',
+        'nosql' => 'no esse cue ele',
+        'oauth' => 'o aut',
+        'rest'  => 'reste',
+        'soap'  => 'sope',
+        'aws'   => 'a dableiu esse',
+        'gcp'   => 'ge ce pe',
+
+        // Redes / telecom
+        'wifi'  => 'uai fai',
+        'wan'   => 'ua ane',
+        'lan'   => 'el ane',
+        'vlan'  => 've el ane',
+        'vpn'   => 've pe ene',
+        'ip'    => 'i pe',
+        'mac'   => 'em a ce',
+        'ssd'   => 'esse esse de',
+        'hdmi'  => 'aga de eme i',
+        'usb'   => 'u esse be',
+        'bluetooth' => 'bluetooth',
+
+        // Medicina / ciencia
+        'sus'   => 'esse u esse',
+        'ans'   => 'a ene esse',
+        'anvisa' => 'anvisa',
+        'hiv'   => 'aga i ve',
+
+        // Governo / orgaos
+        'ibge'  => 'i be ge e',
+        'inss'  => 'i ene esse esse',
+        'receita federal' => 'receita federal',
+        'pf'    => 'pe efe',
+        'pj'    => 'pe jota',
+        'mei'   => 'eme e i',
+        'mf'    => 'eme efe',
+        'bc'    => 'be ce',
+        'cmn'   => 'ce eme ene',
+
+        // Educacao
+        'enem'  => 'e ene eme',
+        'prouni' => 'prouni',
+        'fies'  => 'fiis',
+        'saeb'  => 'essa e be',
+
+        // Financeiro
+        'pix'   => 'piquis',
+        'spc'   => 'esse pe ce',
+        'serasa' => 'serasa',
+        'cdi'   => 'ce de i',
+        'selic' => 'selic',
+        'igpm'  => 'i ge pe eme',
+        'ipca'  => 'i pe ce a',
+        'inpc'  => 'i ene pe ce',
+        'pib'   => 'pe i be',
+        'gdp'   => 'gi di pi',
+
+        // Outros
+        'ceo'   => 'ce i o',
+        'cfo'   => 'ce efe o',
+        'cto'   => 'ce te o',
+        'coo'   => 'ce o o',
+        'hr'    => 'aga erre',
+        'rh'    => 'erre aga',
+        'cv'    => 'ce ve',
+        'faq'   => 'efe a que',
+        'tiktok' => 'tic toc',
+        'youtube' => 'ioutube',
+        'whatsapp' => 'uatsape',
+    ];
+
+    // DICIONARIO DE PALAVRAS PROBLEMATICAS
+    // Palavras comuns que o TTS pronuncia com erro de timbre/vogal
+    $problemWords = [
+        'teste'       => 'téstie',    // TTS fala "têste" (aberto) -> forcamos "téstie" (fechado)
+        'testes'      => 'tésties',   // plural
+        'testar'      => 'testar',    // verbo - TTS geralmente acerta
+        'testando'    => 'testando',  // verbo - TTS geralmente acerta
+        'testemunha'  => 'testemunha',
+        'testemunhar' => 'testemunhar',
+    ];
+
+    // Aplicar dicionario principal (ex- palavras)
     foreach ($dict as $wrong => $correct) {
         $text = preg_replace('/\b' . preg_quote($wrong, '/') . '\b/i', $correct, $text);
     }
 
     // Aplicar correcoes de emergencia para palavras corrompidas
     foreach ($corrupted as $wrong => $correct) {
+        $text = preg_replace('/\b' . preg_quote($wrong, '/') . '\b/i', $correct, $text);
+    }
+
+    // Aplicar siglas (case-insensitive, word boundary)
+    foreach ($abbreviations as $wrong => $correct) {
+        $text = preg_replace('/\b' . preg_quote($wrong, '/') . '\b/i', $correct, $text);
+    }
+
+    // Aplicar correcoes de palavras problematicas
+    foreach ($problemWords as $wrong => $correct) {
         $text = preg_replace('/\b' . preg_quote($wrong, '/') . '\b/i', $correct, $text);
     }
 
