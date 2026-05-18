@@ -31,6 +31,18 @@ define('ALLOWED_CATEGORIES', ['ref', 'track', 'generated']);
 // Este valor so sera usado se TUNNEL_URL nao estiver definida.
 define('HF_SPACE_URL', ''); // vazio = usa get_tunnel.php dinamicamente
 
+// TUNNEL_URL - lido dinamicamente do tunnel-config.ini
+// Se o cloudflared atualizou o INI, usa ele. Caso contrario, vazio.
+$tunnelIniFile = __DIR__ . '/tunnel-config.ini';
+$_tunnelUrl = '';
+if (file_exists($tunnelIniFile)) {
+    $_tunnelIni = parse_ini_file($tunnelIniFile);
+    if ($_tunnelIni !== false && !empty($_tunnelIni['tunnel_url'])) {
+        $_tunnelUrl = trim($_tunnelIni['tunnel_url']);
+    }
+}
+define('TUNNEL_URL', $_tunnelUrl);
+
 // Habilitar logs
 define('ENABLE_LOGS', true);
 define('LOG_FILE', __DIR__ . '/uploads.log');

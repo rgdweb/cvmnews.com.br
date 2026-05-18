@@ -6,7 +6,7 @@
 
 set_time_limit(0);
 ini_set('max_input_time', 0);
-ini_set('memory_limit', '256M');
+ini_set('memory_limit', '512M');
 
 require_once __DIR__ . '/config.php';
 

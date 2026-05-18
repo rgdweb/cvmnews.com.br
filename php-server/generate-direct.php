@@ -14,6 +14,7 @@
 set_time_limit(0);
 ini_set('max_input_time', 0);
 ini_set('memory_limit', '512M');
+// v5: fix duplo array_pop no SSE buffer + trimAudio adicionado
 
 require_once __DIR__ . '/config.php';
 
@@ -296,7 +297,7 @@ function streamSSEForResult($eventId, $hfUrl, $timeoutSec = 600) {
         // Processar blocos SSE completos
         $blocks = explode("\n\n", $buffer);
         // Manter ultimo bloco possivelmente incompleto
-        $buffer = array_pop($blocks) !== null ? array_pop($blocks) : '';
+        $buffer = array_pop($blocks) ?? '';
 
         foreach ($blocks as $block) {
             $block = trim($block);
@@ -464,6 +465,31 @@ if (!empty($refAudioUrl)) {
 if (!$tempRefFile && !empty($refAudioPath)) {
     debugLog('Fallback HF path', 'info', $refAudioPath);
     $audioUrl = null; // vai usar uploadToHF com path existente
+}
+
+// ===== TRIMAR AUDIO DE REFERENCIA (max 10s) para evitar CUDA OOM =====
+if ($tempRefFile && file_exists($tempRefFile)) {
+    define('MAX_REF_AUDIO_SECONDS', 10);
+    $trimScript = __DIR__ . '/trim_audio.py';
+    if (file_exists($trimScript)) {
+        $ext = strtolower(pathinfo($tempRefFile, PATHINFO_EXTENSION));
+        $trimmedFile = tempnam(sys_get_temp_dir(), 'vp_dir_trim_') . '.' . $ext;
+        $cmd = 'python3 ' . escapeshellarg($trimScript) . ' '
+             . escapeshellarg($tempRefFile) . ' '
+             . escapeshellarg($trimmedFile) . ' '
+             . escapeshellarg((string)MAX_REF_AUDIO_SECONDS);
+        $trimOutput = trim(shell_exec($cmd . ' 2>&1') ?? '');
+        if ($trimOutput === 'OK' && file_exists($trimmedFile) && filesize($trimmedFile) > 0) {
+            debugLog('Trim ref audio', 'ok', round(filesize($trimmedFile) / 1024) . 'KB (max ' . MAX_REF_AUDIO_SECONDS . 's)');
+            unlink($tempRefFile);
+            $tempRefFile = $trimmedFile;
+        } else {
+            debugLog('Trim ref audio', 'warn', 'Falha no trim, usando original: ' . $trimOutput);
+            if (file_exists($trimmedFile)) unlink($trimmedFile);
+        }
+    } else {
+        debugLog('Trim ref audio', 'warn', 'trim_audio.py nao encontrado');
+    }
 }
 
 // Montar dados do Gradio
