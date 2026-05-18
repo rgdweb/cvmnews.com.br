@@ -132,23 +132,25 @@ function cleanText($text) {
 }
 
 // ===================== DICIONARIO PRONUNCIA PORTUGUES =====================
-// Corrige palavras que o TTS pronuncia errado em portugues.
-// Principalmente a letra X que tem sons diferentes (Z, KS, SH) dependendo da palavra.
-// O modelo TTS tende a pronunciar todo X como "KS" (ekssatamente),
-// mas em portugues: exato/ezato, anexo/aneksso, chave/xave, etc.
+// Corrige SOMENTE palavras que o TTS pronuncia errado.
+//
+// REGRA DA LETRA X EM PORTUGUES (nao mexer no que ja esta certo!):
+//   ex- + vogal   = Z     (exato = ezato)         <-- TTS ERRA AQUI, corrigir
+//   x + consoante = SS/KS  (proximo = prossimo, anexo = aneksso)  <-- TTS ja acerta, NAO mexer
+//   x antes de A  = CH/SH  (taxa = tacha)          <-- TTS ja acerta, NAO mexer
+//   enx- / ch-    = SH     (enxame, chave)         <-- TTS ja acerta, NAO mexer
+//
+// O TTS so erra no "ex-" + vogal (fala ekssatamente em vez de ezatamente).
+// Palavras como anexo, proximo, texto, complexo, taxa ja sao pronunciadas certo.
 function fixPortuguesePronunciation($text) {
     if (!is_string($text) || empty($text)) return $text;
 
-    // Dicionario: palavra errada => correcao fonetica
-    // Som Z (ex- antes de vogal): exato, exemplo, existir, examinar, exame, etc.
-    // Som KS (x depois de consoante): anexo, proximo, texto, contexto - JA CORRETO, nao mexer
-    // Som SH (enx-, ch-): chaveiro, enxame - JA CORRETO, nao mexer
+    // Apenas palavras com "ex-" onde X soa como Z e o TTS fala "eks"
     $dict = [
-        // === X soa como Z (exato, exame, exemplo, existir, etc.) ===
         'exatamente'  => 'ezatamente',
         'exato'       => 'ezato',
-        'exatos'      => 'ezatos',
         'exata'       => 'ezata',
+        'exatos'      => 'ezatos',
         'exatas'      => 'ezatas',
         'exemplo'     => 'ezemplo',
         'exemplos'    => 'ezemplos',
@@ -196,28 +198,10 @@ function fixPortuguesePronunciation($text) {
         'exagero'     => 'ezagero',
         'exigencia'   => 'ezigencia',
         'exumir'      => 'ezumir',
-        // === X soa como S (em alguns compostos/gregos) ===
-        'anax'        => 'anass',
-        'hexagono'    => 'egagono',
-        'toxina'      => 'tocina',
-        'taxativo'    => 'tasativo',
-        'taxa'        => 'tasa',
-        'taxas'       => 'tasas',
-        'maximo'      => 'massimo',
-        'maximos'     => 'massimos',
-        'minimo'      => 'minimo',
-        'boxe'        => 'boxe',  // palavra estrangeira, mantem
-        'sintaxe'     => 'sintasse',
-        'taxonomia'   => 'tasonomia',
-        'ortodoxo'    => 'ortodosso',
-        'paradoxo'    => 'paradosso',
-        'complexo'    => 'complessso',
-        'complexos'   => 'complessos',
+        'exumacao'    => 'ezumacao',
     ];
 
-    // Aplicar substituicoes preservando case
     foreach ($dict as $wrong => $correct) {
-        // Versao original (minuscula)
         $text = preg_replace('/\b' . preg_quote($wrong, '/') . '\b/i', $correct, $text);
     }
 
