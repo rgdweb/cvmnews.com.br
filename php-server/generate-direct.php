@@ -580,10 +580,8 @@ $speed = max(0.8, min(1.3, (float)$speed));
 $numStep = $input['numStep'] ?? 32;
 $guidanceScale = $input['guidanceScale'] ?? 2.0;
 
-// Prefixo [PT-BR] para forcar idioma no tokenizer do GPT-SoVITS
-if ($isPortuguese) {
-    $texto = '[PT-BR] ' . $texto;
-}
+// [PT-BR] prefixo removido - o TTS lia literalmente "pe-te-brr" em voz alta
+// A forca de idioma agora e feita apenas pelo parametro language=Portuguese
 
 debugLog('Input recebido', 'info', "texto: " . mb_substr($texto, 0, 50) . " | idioma: $idioma | steps: $numStep | speed: $speedOriginal -> $speed");
 

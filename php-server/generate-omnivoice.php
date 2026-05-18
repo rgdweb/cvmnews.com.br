@@ -584,12 +584,8 @@ $texto = stripSSML($texto);
 $texto = cleanText($texto);
 $texto = fixPortuguesePronunciation($texto);
 
-// FORCAR CONTEXTO PORTUGUES NO TEXTO
-// Prefixo textual que o tokenizer do GPT-SoVITS usa para definir o idioma.
-// Testado: sem prefixo o modelo mistura ingles no meio de texto em portugues.
-if ($isPortuguese) {
-    $texto = '[PT-BR] ' . $texto;
-}
+// [PT-BR] prefixo removido - o TTS lia literalmente "pe-te-brr" em voz alta
+// A forca de idioma agora e feita apenas pelo parametro language=Portuguese
 
 debugLog('Input', 'info', "modo: $mode | texto: " . mb_substr($texto, 0, 50) . " | lang: $idioma | steps: $numStep");
 
