@@ -247,8 +247,10 @@ $refAudioUrl = $input['referenceAudioUrl'] ?? '';
 $refAudioName = $input['referenceAudioName'] ?? 'ref_audio.wav';
 $instruct = $input['instruct'] ?? '';
 $speed = $input['speed'] ?? 1.0;
-// Clamp velocidade: API OmniVoice min=0.5 max=2.0 (valores fora causam erro ou audio distorcido)
-$speed = max(0.5, min(2.0, (float)$speed));
+// Clamp velocidade: modelo OmniVoice/GPT-SoVITS fica distorcido fora desta faixa
+// < 0.8 = audio reverso/garbled ("lingua dos anjos") | > 1.3 = acelera demais/engole palavras
+$speedOriginal = $speed;
+$speed = max(0.8, min(1.3, (float)$speed));
 $numStep = $input['numStep'] ?? 32;
 
 // Voice Design params (usados no _design_fn)
