@@ -1642,6 +1642,8 @@ const X_WORD_DICTIONARY: Record<string, string> = {
   'Existir': 'Ezistir',
   'exame': 'ezame',
   'Exame': 'Ezame',
+  'exatamente': 'ezatamente',
+  'Exatamente': 'Ezatamente',
   'exato': 'ezato',
   'Exato': 'Ezato',
   'exceção': 'ezeção',
