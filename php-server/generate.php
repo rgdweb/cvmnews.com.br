@@ -239,8 +239,10 @@ $refText = $input['refText'] ?? '';
 $instruct = $input['instruct'] ?? '';
 $refAudioName = $input['refAudioName'] ?? 'ref_audio.wav';
 $speed = $input['speed'] ?? 1.0;
-// Clamp velocidade: API OmniVoice min=0.5 max=2.0 (valores fora causam erro ou audio distorcido)
-$speed = max(0.5, min(2.0, (float)$speed));
+// Clamp velocidade: modelo OmniVoice/GPT-SoVITS fica distorcido fora desta faixa
+// < 0.8 = audio reverso/garbled ("lingua dos anjos") | > 1.3 = acelera demais/engole palavras
+$speedOriginal = $speed;
+$speed = max(0.8, min(1.3, (float)$speed));
 $numStep = $input['numStep'] ?? 32;
 
 // DEFESA DUPLA: strip SSML + clean texto + corrigir pronuncia PT-BR antes de enviar ao TTS
