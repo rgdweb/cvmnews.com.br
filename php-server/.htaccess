@@ -1,45 +1,19 @@
-# OmniVoice TTS - Configuracao Apache
+# OmniVoice TTS - Configuracao Apache (.htaccess)
+# Apenas CORS e seguranca basica
+# Config PHP esta no .user.ini
+
+# Desabilitar listagem de diretorio
+Options -Indexes
+
 # CORS headers para chamadas diretas do browser
 <IfModule mod_headers.c>
-    # Remove duplicatas de CORS para evitar "multiple CORS headers" error
-    Header always unset Access-Control-Allow-Origin
-    Header always unset Access-Control-Allow-Methods
-    Header always unset Access-Control-Allow-Headers
-
     Header always set Access-Control-Allow-Origin "*"
     Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
     Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Upload-Token, X-Generate-Token"
 </IfModule>
 
-# Permitir PHP executar nesta pasta
-<IfModule mod_php.c>
-    php_value upload_max_filesize 50M
-    php_value post_max_size 55M
-    php_value max_execution_time 600
-    php_value max_input_time 600
-    php_value memory_limit 512M
-</IfModule>
-
-<IfModule mod_php7.c>
-    php_value upload_max_filesize 50M
-    php_value post_max_size 55M
-    php_value max_execution_time 600
-    php_value max_input_time 600
-    php_value memory_limit 512M
-</IfModule>
-
-# Desabilitar listagem de diretorio
-Options -Indexes
-
-# Respostas OPTIONS (preflight CORS)
-RewriteEngine On
-RewriteCond %{REQUEST_METHOD} OPTIONS
-RewriteRule ^(.*)$ $1 [R=200,L]
-
-# Seguranca: bloquear acesso a arquivos sensiveis
-<FilesMatch "^(config|tunnel-config|uploads\.log)">
-    # Bloqueia acesso direto ao config e logs via browser
-    # Mas permite include/require interno pelo PHP
+# Seguranca: bloquear acesso direto a arquivos sensiveis via browser
+<FilesMatch "^(config\.php|tunnel-config\.ini|uploads\.log|audio_helpers\.php)$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>
@@ -49,15 +23,13 @@ RewriteRule ^(.*)$ $1 [R=200,L]
     </IfModule>
 </FilesMatch>
 
-# Permitir acesso ao .user.ini e .htaccess nao sao servidos
-<Files ".user.ini">
-    Require all denied
-</Files>
-
-# Cache para audios gerados (pasta audios/)
-<IfModule mod_expires.c>
-    ExpiresActive On
-    <Directory "audios">
-        ExpiresDefault "access plus 7 days"
-    </Directory>
-</IfModule>
+# Bloquear acesso ao .user.ini e .htaccess
+<FilesMatch "^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
+</FilesMatch>
