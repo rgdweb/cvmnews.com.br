@@ -59,3 +59,31 @@ Stage Summary:
 - Palavras NÃO tocadas (já corretas): anexo, próximo, texto, contexto, fixo, tóxico
 - ZIP atualizado: /home/z/my-project/download/omnivoice-quality-fixes.zip (45KB)
 
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Full audit of PHP + frontend files. Fix pronunciation "exatamente" → "ekssatamente" and stutter/tranco.
+
+Work Log:
+- Read all 3 PHP generate files, config.php, audio-concatenator.ts, pronunciation-optimizer.ts, tts-chunker.ts
+- Verified fixPortuguesePronunciation() exists in all 3 PHP files and is called in text pipeline ✅
+- Verified audio-concatenator.ts has crossfadeMs: 0 ✅
+- Diagnosed ROOT CAUSE of pronunciation issue:
+  - Frontend preprocessX() has fallback regex `([aeiou])x([aeiou])` → `ks` that converts "exatamente" → "eksatamente" 
+  - If X_WORD_DICTIONARY doesn't have the entry (old deployed code), this regex corrupts the word
+  - PHP receives "eksatamente" but regex \bexatamente\b doesn't match → no fix applied
+- Diagnosed ROOT CAUSE of stutter:
+  - page.tsx chunking threshold was 200 chars (too low)
+  - User's ~270 char test text was being split into 2 chunks
+  - Each chunk generated separately, then concatenated with 400ms pause → noticeable "tranco"
+- Fixed all 3 PHP files: added corrupted word fallback dictionary + generic regex fallback
+- Fixed page.tsx: increased chunking threshold from 200 to 1500 chars
+- Fixed tts-chunker.ts: getMaxChunks returns 999 for normal texts (no chunking)
+- Created deployment ZIP: omnivoice-quality-fixes.zip (25KB, 4 PHP files)
+
+Stage Summary:
+- Pronunciation fix: PHP now catches BOTH "exatamente" AND "eksatamente/ekssatamente" → "ezatamente"
+- Stutter fix: Texts <1500 chars now generate in one shot (no chunking = no tranco)
+- Files: /home/z/my-project/download/omnivoice-quality-fixes.zip (4 PHP files)
+- Frontend changes (page.tsx, tts-chunker.ts) need Vercel redeploy to take effect

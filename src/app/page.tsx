@@ -907,7 +907,7 @@ export default function VozProClient() {
         // Estilo NaturalReaders: cada pontuação vira pausa real (silêncio)
         // O texto chega AQUI com pontuação. O chunker divide em frases.
         // O backend (route.ts) remove pontuação antes de enviar ao TTS.
-        const shouldChunk = textToSend.length > 200 // Ativa chunking para textos longos (>200 chars = ~30 palavras)
+        const shouldChunk = textToSend.length > 1500 // Aumentado: so chunkar textos muito longos (>1500 chars = ~250 palavras). Textos normais geram de uma vez = zero trancos.
 
         if (shouldChunk) {
           console.log('[VozPro] Usando chunking (NaturalReaders style)...')

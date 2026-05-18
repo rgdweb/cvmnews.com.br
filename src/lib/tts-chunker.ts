@@ -57,9 +57,11 @@ const MAX_CHUNK_WORDS = 100   // máximo de palavras antes de forçar quebra (au
  */
 function getMaxChunks(text: string): number {
   const words = text.split(/\s+/).filter(w => w.length > 0).length
-  if (words > 300) return 4
-  if (words > 150 || text.length > 1000) return 3
-  return 2
+  // Texto curto/medio: NAO chunkar (gerar tudo de uma vez = zero trancos)
+  // Aumentado de 2 para 999 para textos ate 400 palavras
+  if (words > 400 || text.length > 2500) return 4
+  if (words > 250 || text.length > 1500) return 3
+  return 999 // textos normais: gerar tudo de uma vez (sem chunk = sem tranco)
 }
 
 // ============================================================

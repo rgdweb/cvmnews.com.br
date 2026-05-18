@@ -198,9 +198,36 @@ function fixPortuguesePronunciation($text) {
         'exumacao'    => 'ezumacao',
     ];
 
+    // FALBACK: Palavras ja corrompidas pelo frontend (preprocessX converteu x→ks)
+    // O frontend pode ter transformado "exatamente" em "eksatamente" ANTES do PHP receber.
+    // Este dicionario captura essas correcoes de emergencia.
+    $corrupted = [
+        'eksatamente'  => 'ezatamente',
+        'ekssatamente' => 'ezatamente',
+        'eksato'       => 'ezato',
+        'eksata'       => 'ezata',
+        'eksexemplo'   => 'ezemplo',
+        'eksisitir'    => 'ezistir',
+        'eksisiste'    => 'eziste',
+        'eksercicio'   => 'ezerccio',
+        'eksplicar'    => 'esplicar',
+        'ekstremo'     => 'estremo',
+        'ekstra'       => 'estra',
+    ];
+
+    // Aplicar dicionario principal
     foreach ($dict as $wrong => $correct) {
         $text = preg_replace('/\b' . preg_quote($wrong, '/') . '\b/i', $correct, $text);
     }
+
+    // Aplicar correcoes de emergencia para palavras corrompidas
+    foreach ($corrupted as $wrong => $correct) {
+        $text = preg_replace('/\b' . preg_quote($wrong, '/') . '\b/i', $correct, $text);
+    }
+
+    // FALBACK FINAL: Regex generica para ex- + vogal que o frontend corrompeu
+    // Captura qualquer "eksX" ou "ekssX" que comeca com ex- original
+    $text = preg_replace('/\beks([aeiouáàãâéèêíïóôõúü])/i', 'ez$1', $text);
 
     return $text;
 }
