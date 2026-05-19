@@ -642,8 +642,6 @@ export default function VozProClient() {
   const [numStep, setNumStep] = useState(32)
   const [guidanceScale, setGuidanceScale] = useState(2.0)
   const [showAdvanced, setShowAdvanced] = useState(false)
-  const [pronunciationOptimization, setPronunciationOptimization] = useState(false) // Agente IA de pronúncia (ligado por padrão)
-  const [llmPreprocess, setLlmPreprocess] = useState(false) // LLM pré-processador (opcional)
 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false)
@@ -812,43 +810,7 @@ export default function VozProClient() {
       console.log('[Pipeline] SSML convertido para formato nativo do', engine)
     }
 
-    // 1. Control tags (sempre ativo)
-    textToSend = processControlTags(textToSend, engine)
 
-    // 1b. H MUDO — REMOVIDO DAQUI! O pronunciation-optimizer.ts (step 1d) já trata H mudo
-    // com proteção completa via H_DICT_WORDS. Palavras em inglês como "Hello", "Hear", etc.
-    // são protegidas automaticamente. Remover H aqui ANTES do dicionário corrompia palavras em inglês.
-    // O optimizePronunciation() na linha 728 faz todo o trabalho corretamente.
-
-    // 2. Text preprocessor (pontuação, spacing)
-    if (pronunciationOptimization) {
-      textToSend = preprocessTTS(textToSend)
-    }
-
-    // 3. Regex + dictionary pipeline
-    if (pronunciationOptimization) {
-      textToSend = await optimizePronunciation(textToSend)
-    }
-
-    // 4. LLM pre-processor (opcional, só quando toggle ativo)
-    if (llmPreprocess && textToSend.length > 20) {
-      try {
-        const res = await fetch('/api/optimize-pronunciation', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: textToSend }),
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data.optimized && data.changed) {
-            textToSend = data.optimized
-          }
-        }
-      } catch {
-        // Fallback silencioso — nunca bloqueia a geração
-        console.log('[LLM Pre-process] Falha, usando texto original')
-      }
-    }
 
     // Timer para mostrar tempo decorrido ao usuario
     const genStartTime = Date.now()
@@ -1191,7 +1153,7 @@ export default function VozProClient() {
       setIsGenerating(false)
       setGeneratingTime(0)
     }
-  }, [text, selectedVariationId, language, speed, numStep, guidanceScale, trackEnabled, selectedTrackId, trackVolume, duckVolume, fadeInMs, duckFadeMs, unduckFadeMs, fadeOutMs, musicStartLeadMs, voiceMode, uploadedVoiceUrl, pronunciationOptimization, llmPreprocess])
+  }, [text, selectedVariationId, language, speed, numStep, guidanceScale, trackEnabled, selectedTrackId, trackVolume, duckVolume, fadeInMs, duckFadeMs, unduckFadeMs, fadeOutMs, musicStartLeadMs, voiceMode, uploadedVoiceUrl])
 
   // Fetch GPU stats polling
   useEffect(() => {
@@ -1802,74 +1764,6 @@ export default function VozProClient() {
                     className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 resize-none focus:border-violet-500"
                   />
                 </div>
-
-                {/* Pronunciation Optimization Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-                    <span className="text-xs text-slate-400">Otimização de pronúncia IA</span>
-                  </div>
-                  <Switch
-                    checked={pronunciationOptimization}
-                    onCheckedChange={setPronunciationOptimization}
-                  />
-                </div>
-
-                {/* LLM Pre-processor Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id="llm-preprocess"
-                      checked={llmPreprocess}
-                      onCheckedChange={setLlmPreprocess}
-                    />
-                    <Label htmlFor="llm-preprocess" className="text-xs text-slate-400 cursor-pointer">
-                      IA Pré-processamento (lento, mais preciso)
-                    </Label>
-                  </div>
-                </div>
-
-                {/* Emotion presets - insert control tags into text */}
-                {pronunciationOptimization && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs text-slate-500">Prosódia:</span>
-                    {[
-                      { label: '📖 Normal', insert: '' },
-                      { label: '🤫 Sussurro', insert: ' ', action: 'whisper' as const },
-                      { label: '⚡ Rápido', insert: ' ', action: 'fast' as const },
-                      { label: '🐢 Devagar', insert: ' ', action: 'slow' as const },
-                      { label: '⏸️ Pausa longa', insert: '... ' },
-                      { label: '⏸️ Pausa curta', insert: '.. ' },
-                    ].map(preset => (
-                      <button
-                        key={preset.label}
-                        onClick={() => {
-                          const textarea = document.getElementById('tts-text') as HTMLTextAreaElement
-                          if (!textarea) return
-                          const start = textarea.selectionStart
-                          const end = textarea.selectionEnd
-                          const currentText = textarea.value
-                          if ('action' in preset && preset.action) {
-                            const selected = currentText.substring(start, end)
-                            if (selected) {
-                              const newText = currentText.substring(0, start) + `{{${preset.action}}}${selected}{{/${preset.action}}}` + currentText.substring(end)
-                              setText(newText)
-                            } else {
-                              toast.info('Selecione o texto no campo acima primeiro')
-                            }
-                          } else if (preset.insert) {
-                            const newText = currentText.substring(0, start) + preset.insert + currentText.substring(end)
-                            setText(newText)
-                          }
-                        }}
-                        className="px-2 py-0.5 rounded-full text-xs border border-white/10 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
-                        title={'action' in preset && preset.action ? `Selecione texto e clique para ${preset.action}` : 'Insere pausa no cursor'}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
 
                 {/* Language */}
                 <div className="flex items-center gap-3">
