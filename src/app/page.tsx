@@ -2269,39 +2269,6 @@ export default function VozProClient() {
               </CardContent>
             </Card>
 
-            {/* Info card - Como funciona */}
-            <Card className="bg-white/5 border-white/10 backdrop-blur">
-              
-              <CardContent className="pt-5">
-                <div className="space-y-3 text-sm text-slate-400">
-                  <h3 className="font-medium text-slate-300">Como funciona</h3>
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-2">
-                      <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5">1</Badge>
-                      <p>Escolha uma voz e o estilo/emissão desejado</p>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5">2</Badge>
-                      <p>Digite o texto que deseja sintetizar</p>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5">3</Badge>
-                      <p>Opcionalmente, adicione uma trilha musical de fundo</p>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5">4</Badge>
-                      <p>Clique em &quot;Gerar Voz&quot; e aguarde o resultado</p>
-                    </div>
-                  </div>
-                  <Separator className="bg-white/[0.06]" />
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    A emoção da voz vem do áudio de referência usado na clonagem.
-                    Cada variação de emoção usa um áudio diferente, capturando o tom e a entonação automaticamente.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
             {/* Debug/Developer Panel */}
             <details open={debugOpen} className="group">
               <summary
@@ -2397,6 +2364,38 @@ export default function VozProClient() {
             </details>
           </div>
         </div>
+
+        {/* Como funciona - abaixo do grid */}
+        <Card className="bg-white/5 border-white/10 backdrop-blur">
+          <CardContent className="pt-5">
+            <div className="space-y-3 text-sm text-slate-400">
+              <h3 className="font-medium text-slate-300">Como funciona</h3>
+              <div className="space-y-2">
+                <div className="flex items-start gap-2">
+                  <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5">1</Badge>
+                  <p>Escolha uma voz e o estilo/emissão desejado</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5">2</Badge>
+                  <p>Digite o texto que deseja sintetizar</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5">3</Badge>
+                  <p>Opcionalmente, adicione uma trilha musical de fundo</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5">4</Badge>
+                  <p>Clique em &quot;Gerar Voz&quot; e aguarde o resultado</p>
+                </div>
+              </div>
+              <Separator className="bg-white/[0.06]" />
+              <p className="text-xs text-slate-500 leading-relaxed">
+                A emoção da voz vem do áudio de referência usado na clonagem.
+                Cada variação de emoção usa um áudio diferente, capturando o tom e a entonação automaticamente.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </main>
 
       {/* ===== MOBILE FIXED BOTTOM BAR ===== */}
