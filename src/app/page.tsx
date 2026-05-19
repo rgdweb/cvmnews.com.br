@@ -71,8 +71,8 @@ function TrackControls({
         <span className="text-xs text-slate-500">{Math.round(trackVolume * 100)}%</span>
       </div>
       <Slider value={[trackVolume]} onValueChange={([v]) => onTrackVolumeChange(v)} min={0} max={1} step={0.05} className="w-full" />
-      <div className="pt-3 border-t border-white/[0.06]">
-        <button onClick={onToggleDuckingSettings} className="flex items-center gap-2 text-sm text-slate-400 hover:text-violet-300 transition-colors duration-200 w-full hover:bg-white/[0.02] -ml-2 px-2 py-1 rounded-lg">
+      <div className="pt-3 border-t border-white/10">
+        <button onClick={onToggleDuckingSettings} className="flex items-center gap-2 text-sm text-slate-400 hover:text-violet-300 transition-colors duration-200 w-full hover:bg-white/5 -ml-2 px-2 py-1 rounded-lg">
           <Volume2 className="w-4 h-4" />
           Controles de Ducking
           <ChevronDown className={`w-3 h-3 ml-auto transition-transform duration-300 ${showDuckingSettings ? 'rotate-180' : ''}`} />
@@ -82,46 +82,46 @@ function TrackControls({
             <div className="space-y-1">
               <div className="flex justify-between">
                 <label className="text-xs text-slate-400">Volume durante a voz</label>
-                <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{Math.round(duckVolume * 100)}%</Badge>
+                <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{Math.round(duckVolume * 100)}%</Badge>
               </div>
               <Slider value={[duckVolume]} onValueChange={([v]) => onDuckVolumeChange(v)} min={0} max={1} step={0.01} />
             </div>
             <div className="space-y-1">
               <div className="flex justify-between">
                 <label className="text-xs text-slate-400">Fade-in inicial</label>
-                <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{fadeInMs / 1000}s</Badge>
+                <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{fadeInMs / 1000}s</Badge>
               </div>
               <Slider value={[fadeInMs]} onValueChange={([v]) => onFadeInMsChange(v)} min={0} max={5000} step={100} />
             </div>
             <div className="space-y-1">
               <div className="flex justify-between">
                 <label className="text-xs text-slate-400">Música antes da voz</label>
-                <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{(musicStartLeadMs / 1000).toFixed(1)}s</Badge>
+                <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{(musicStartLeadMs / 1000).toFixed(1)}s</Badge>
               </div>
               <Slider value={[musicStartLeadMs]} onValueChange={([v]) => onMusicStartLeadMsChange(v)} min={0} max={10000} step={100} />
             </div>
             <div className="space-y-1">
               <div className="flex justify-between">
                 <label className="text-xs text-slate-400">Transição Duck</label>
-                <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{duckFadeMs / 1000}s</Badge>
+                <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{duckFadeMs / 1000}s</Badge>
               </div>
               <Slider value={[duckFadeMs]} onValueChange={([v]) => onDuckFadeMsChange(v)} min={0} max={3000} step={50} />
             </div>
             <div className="space-y-1">
               <div className="flex justify-between">
                 <label className="text-xs text-slate-400">Transição Unduck</label>
-                <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{unduckFadeMs / 1000}s</Badge>
+                <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{unduckFadeMs / 1000}s</Badge>
               </div>
               <Slider value={[unduckFadeMs]} onValueChange={([v]) => onUnduckFadeMsChange(v)} min={0} max={3000} step={50} />
             </div>
             <div className="space-y-1">
               <div className="flex justify-between">
                 <label className="text-xs text-slate-400">Fade-out final</label>
-                <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{fadeOutMs / 1000}s</Badge>
+                <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{fadeOutMs / 1000}s</Badge>
               </div>
               <Slider value={[fadeOutMs]} onValueChange={([v]) => onFadeOutMsChange(v)} min={0} max={8000} step={100} />
             </div>
-            <div className="pt-2 border-t border-white/[0.06]">
+            <div className="pt-2 border-t border-white/10">
               <p className="text-[10px] text-slate-500 mb-2">Timeline do áudio:</p>
               <div className="flex items-center gap-1 text-[10px]">
                 <div className="bg-purple-500/30 border border-purple-500/50 rounded px-2 py-1 text-purple-300">Música {(musicStartLeadMs / 1000).toFixed(1)}s</div>
@@ -1282,16 +1282,10 @@ export default function VozProClient() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0520] via-violet-950/90 to-slate-950 relative overflow-hidden">
-        {/* Animated background orbs */}
-        <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-violet-600/20 rounded-full blur-[120px] animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/15 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '1s' }} />
-        <div className="text-center relative z-10">
-          <div className="relative inline-block mb-6">
-            <div className="absolute inset-0 bg-violet-500/30 rounded-2xl blur-xl animate-pulse" />
-            <div className="relative bg-gradient-to-br from-violet-500/20 to-purple-500/20 backdrop-blur-xl border border-violet-500/30 rounded-2xl p-6">
-              <AudioWaveform className="w-14 h-14 mx-auto text-violet-400 animate-pulse drop-shadow-[0_0_12px_rgba(139,92,246,0.5)]" />
-            </div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+          <div className="text-center">
+          <div className="mb-6">
+            <AudioWaveform className="w-12 h-12 mx-auto text-violet-400 animate-pulse" />
           </div>
           <p className="text-violet-300 font-medium tracking-wide">Carregando VozPro<span className="animate-pulse">...</span></p>
           <div className="mt-3 flex justify-center gap-1">
@@ -1307,42 +1301,31 @@ export default function VozProClient() {
   // Aguardar verificação de autenticação
   if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0520] via-violet-950/90 to-slate-950 relative overflow-hidden">
-        <div className="absolute top-1/3 right-1/3 w-64 h-64 bg-violet-600/15 rounded-full blur-[100px] animate-pulse" />
-        <div className="text-center text-slate-400 relative z-10">
-          <div className="relative inline-block mb-4">
-            <div className="absolute inset-0 bg-violet-500/20 rounded-full blur-lg animate-ping" />
-            <div className="relative w-10 h-10 border-2 border-violet-500/70 border-t-transparent rounded-full animate-spin mx-auto" />
-          </div>
-          <p className="tracking-wide text-slate-300">Verificando acesso...</p>
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="text-center text-slate-400">
+          <Loader2 className="w-10 h-10 mx-auto mb-4 text-violet-400 animate-spin" />
+          <p>Verificando acesso...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#0a0520] via-violet-950/90 to-slate-950 relative">
-      {/* Ambient background effects */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-0 left-1/3 w-[600px] h-[600px] bg-violet-600/[0.07] rounded-full blur-[200px]" />
-        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-purple-600/[0.05] rounded-full blur-[180px]" />
-        <div className="absolute top-1/2 left-0 w-[400px] h-[400px] bg-indigo-600/[0.04] rounded-full blur-[150px]" />
-      </div>
-
+    <div className="min-h-screen flex flex-col bg-slate-900 relative">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-slate-950/60 backdrop-blur-2xl shadow-[0_1px_0_0_rgba(255,255,255,0.03)]">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-900/80 backdrop-blur-xl">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 via-purple-500 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-violet-500/30 ring-1 ring-white/10">
-              <AudioWaveform className="w-5 h-5 text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/25">
+              <AudioWaveform className="w-5 h-5 text-white" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-white tracking-tight">VozPro</h1>
-              <p className="text-[11px] text-violet-300/60 tracking-wider uppercase font-medium">Vozes Profissionais com IA</p>
+              <p className="text-xs text-violet-300/70">Vozes Profissionais com IA</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 gap-1 bg-emerald-500/5 shadow-[0_0_8px_rgba(16,185,129,0.15)]">
+            <Badge variant="outline" className="border-violet-500/30 text-violet-300 gap-1">
               <Globe className="w-3 h-3" />
               Online
             </Badge>
@@ -1361,13 +1344,13 @@ export default function VozProClient() {
       </header>
 
       {/* Main */}
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-6xl relative z-10">
+      <main className="flex-1 container mx-auto px-4 py-6 max-w-6xl">
         {/* Hero */}
-        <div className="mb-10 text-center">
-          <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-3 tracking-tight drop-shadow-[0_0_30px_rgba(139,92,246,0.2)]">
-            Crie Vozes <span className="bg-gradient-to-r from-violet-300 via-fuchsia-400 to-purple-400 bg-clip-text text-transparent">Profissionais</span>
+        <div className="mb-8 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">
+            Crie Vozes <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">Profissionais</span>
           </h2>
-          <p className="text-slate-400/80 max-w-xl mx-auto text-[15px] leading-relaxed">
+          <p className="text-slate-400 max-w-xl mx-auto">
             Escolha uma voz, selecione a emoção, digite seu texto e gere áudios incríveis para propagandas, vídeos e conteúdo.
           </p>
         </div>
@@ -1376,13 +1359,11 @@ export default function VozProClient() {
           {/* Left Panel - Voice & Track Selection */}
           <div className="lg:col-span-3 space-y-5">
             {/* Voice Selection */}
-            <Card className="bg-white/[0.03] border-white/[0.08] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)] relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/40 to-transparent" />
+            <Card className="bg-white/5 border-white/10 backdrop-blur">
+              
               <CardHeader className="pb-3">
                 <CardTitle className="text-white flex items-center gap-2 text-lg">
-                  <div className="w-7 h-7 rounded-lg bg-violet-500/15 flex items-center justify-center ring-1 ring-violet-500/20">
-                    <Mic className="w-4 h-4 text-violet-400" />
-                  </div>
+                  <Mic className="w-5 h-5 text-violet-400" />
                   Escolha a Voz
                 </CardTitle>
               </CardHeader>
@@ -1425,18 +1406,18 @@ export default function VozProClient() {
                                 }}
                                 className={`w-full p-3 rounded-xl border text-left transition-all duration-300 flex items-center gap-2 ${
                                   isSelected
-                                    ? 'border-violet-500/60 bg-gradient-to-r from-violet-500/15 to-purple-500/10 shadow-lg shadow-violet-500/15 ring-1 ring-violet-500/20'
-                                    : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05] hover:shadow-md'
+                                    ? 'border-violet-500 bg-violet-500/20 shadow-lg shadow-violet-500/10'
+                                    : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
                                 }`}
                               >
-                                <Mic className={`w-4 h-4 flex-shrink-0 transition-colors duration-200 ${isSelected ? 'text-violet-400 drop-shadow-[0_0_4px_rgba(139,92,246,0.5)]' : 'text-slate-500'}`} />
+                                <Mic className={`w-4 h-4 flex-shrink-0 transition-colors duration-200 ${isSelected ? 'text-violet-400' : 'text-slate-500'}`} />
                                 <div className="flex-1 min-w-0">
                                   <span className={`font-medium text-sm block truncate transition-colors duration-200 ${isSelected ? 'text-violet-200' : 'text-slate-300'}`}>
                                     {voice.name}
                                   </span>
                                   {voice.description && <p className="text-xs text-slate-500 line-clamp-1">{voice.description}</p>}
                                 </div>
-                                <span className="text-xs text-slate-500 bg-white/5 px-1.5 py-0.5 rounded-md flex-shrink-0 ring-1 ring-white/[0.05]">
+                                <span className="text-xs text-slate-500 bg-white/5 px-1.5 py-0.5 rounded-md flex-shrink-0">
                                   {voice.variations.length}
                                 </span>
                                 <ChevronDown className={`w-3.5 h-3.5 text-slate-500 flex-shrink-0 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-violet-400' : ''}`} />
@@ -1456,8 +1437,8 @@ export default function VozProClient() {
                                           isInactive
                                             ? 'border-slate-800 bg-slate-900/30 text-slate-600 opacity-50 cursor-default'
                                             : isVarSelected
-                                              ? 'border-violet-500/50 bg-violet-500/10 text-violet-200 shadow-sm shadow-violet-500/10 ring-1 ring-violet-500/20'
-                                              : 'border-white/[0.05] bg-white/[0.02] text-slate-400 hover:border-white/15 hover:bg-white/[0.05]'
+                                              ? 'border-violet-500 bg-violet-500/20 text-violet-200'
+                                              : 'border-white/10 bg-white/5 text-slate-400 hover:border-white/20'
                                         }`}
                                         title={isInactive ? 'Variação desativada / sem áudio' : v.label}
                                       >
@@ -1495,14 +1476,14 @@ export default function VozProClient() {
                             <button
                               key={voice.id}
                               onClick={() => setSelectedVoiceId(voice.id)}
-                              className={`p-3 rounded-xl border text-left transition-all duration-300 hover:scale-[1.02] ${
+                              className={`p-3 rounded-xl border text-left transition-all ${
                                 selectedVoiceId === voice.id
-                                  ? 'border-violet-500/60 bg-gradient-to-r from-violet-500/15 to-purple-500/10 shadow-lg shadow-violet-500/15 ring-1 ring-violet-500/20'
-                                  : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05] hover:shadow-md'
+                                  ? 'border-violet-500 bg-violet-500/20 shadow-lg shadow-violet-500/10'
+                                  : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
                               }`}
                             >
                               <div className="flex items-center gap-2 mb-1">
-                                <Mic className={`w-4 h-4 transition-colors duration-200 ${selectedVoiceId === voice.id ? 'text-violet-400 drop-shadow-[0_0_4px_rgba(139,92,246,0.5)]' : 'text-slate-500'}`} />
+                                <Mic className={`w-4 h-4 transition-colors duration-200 ${selectedVoiceId === voice.id ? 'text-violet-400' : 'text-slate-500'}`} />
                                 <span className={`font-medium text-sm flex-1 min-w-0 transition-colors duration-200 ${selectedVoiceId === voice.id ? 'text-violet-200' : 'text-slate-300'}`}>
                                   {voice.name}
                                 </span>
@@ -1518,11 +1499,11 @@ export default function VozProClient() {
                         <button
                           key={cat.name}
                           onClick={() => { setSelectedVoiceCategory(cat.name); setSelectedVoiceId(''); setSelectedVariationId('') }}
-                          className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] hover:bg-violet-500/10 hover:border-violet-500/40 transition-all duration-300 cursor-pointer group hover:shadow-lg hover:shadow-violet-500/10 hover:scale-[1.03] active:scale-[0.98] ring-0 hover:ring-1 hover:ring-violet-500/20"
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-violet-500/10 hover:border-violet-500/40 cursor-pointer group"
                         >
                           <span className="text-base group-hover:scale-110 transition-transform duration-300">{cat.emoji || '📁'}</span>
                           <span className="text-sm font-medium text-white whitespace-nowrap">{cat.name}</span>
-                          <span className="text-xs text-slate-500 bg-white/[0.06] px-1.5 py-0.5 rounded-md ring-1 ring-white/[0.05]">{cat.count}</span>
+                          <span className="text-xs text-slate-500 bg-white/5 px-1.5 py-0.5 rounded-md">{cat.count}</span>
                         </button>
                       ))}
                     </div>
@@ -1534,7 +1515,7 @@ export default function VozProClient() {
                           {selectedVoice.variations.map((v) => {
                             const varAudioUrl = v.refAudioServerUrl || v.refAudioPath || ''
                             return (
-                              <button key={v.id} onClick={() => setSelectedVariationId(v.id)} className={`px-4 py-2 rounded-full border text-sm transition-all duration-300 flex items-center gap-1.5 ${selectedVariationId === v.id ? 'border-violet-500/60 bg-violet-500/15 text-violet-200 shadow-md shadow-violet-500/15 ring-1 ring-violet-500/20' : 'border-white/[0.08] bg-white/[0.02] text-slate-400 hover:border-white/20 hover:bg-white/[0.05]'}`}>
+                              <button key={v.id} onClick={() => setSelectedVariationId(v.id)} className={`px-4 py-2 rounded-full border text-sm transition-all duration-300 flex items-center gap-1.5 ${selectedVariationId === v.id ? 'border-violet-500 bg-violet-500/20 text-violet-200' : 'border-white/10 bg-white/5 text-slate-400 hover:border-white/20'}`}>
                                 <VoicePreviewButton
                                   audioUrl={varAudioUrl}
                                   voiceId={v.id}
@@ -1559,14 +1540,14 @@ export default function VozProClient() {
                         <button
                           key={voice.id}
                           onClick={() => setSelectedVoiceId(voice.id)}
-                          className={`p-3 rounded-xl border text-left transition-all duration-300 hover:scale-[1.02] ${
+                          className={`p-3 rounded-xl border text-left transition-all ${
                             selectedVoiceId === voice.id
-                              ? 'border-violet-500/60 bg-gradient-to-r from-violet-500/15 to-purple-500/10 shadow-lg shadow-violet-500/15 ring-1 ring-violet-500/20'
-                              : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05] hover:shadow-md'
+                              ? 'border-violet-500 bg-violet-500/20 shadow-lg shadow-violet-500/10'
+                              : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
                           }`}
                         >
                           <div className="flex items-center gap-2 mb-1">
-                            <Mic className={`w-4 h-4 transition-colors duration-200 ${selectedVoiceId === voice.id ? 'text-violet-400 drop-shadow-[0_0_4px_rgba(139,92,246,0.5)]' : 'text-slate-500'}`} />
+                            <Mic className={`w-4 h-4 transition-colors duration-200 ${selectedVoiceId === voice.id ? 'text-violet-400' : 'text-slate-500'}`} />
                             <span className={`font-medium text-sm flex-1 min-w-0 transition-colors duration-200 ${selectedVoiceId === voice.id ? 'text-violet-200' : 'text-slate-300'}`}>
                               {voice.name}
                             </span>
@@ -1582,7 +1563,7 @@ export default function VozProClient() {
                           {selectedVoice.variations.map((v) => {
                             const varAudioUrl = v.refAudioServerUrl || v.refAudioPath || ''
                             return (
-                              <button key={v.id} onClick={() => setSelectedVariationId(v.id)} className={`px-4 py-2 rounded-full border text-sm transition-all duration-300 flex items-center gap-1.5 ${selectedVariationId === v.id ? 'border-violet-500/60 bg-violet-500/15 text-violet-200 shadow-md shadow-violet-500/15 ring-1 ring-violet-500/20' : 'border-white/[0.08] bg-white/[0.02] text-slate-400 hover:border-white/20 hover:bg-white/[0.05]'}`}>
+                              <button key={v.id} onClick={() => setSelectedVariationId(v.id)} className={`px-4 py-2 rounded-full border text-sm transition-all duration-300 flex items-center gap-1.5 ${selectedVariationId === v.id ? 'border-violet-500 bg-violet-500/20 text-violet-200' : 'border-white/10 bg-white/5 text-slate-400 hover:border-white/20'}`}>
                                 <VoicePreviewButton
                                   audioUrl={varAudioUrl}
                                   voiceId={v.id}
@@ -1604,13 +1585,11 @@ export default function VozProClient() {
             </Card>
 
             {/* Voice Mode Selector + Upload + Design */}
-            <Card className="bg-white/[0.03] border-white/[0.08] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)] relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/40 to-transparent" />
+            <Card className="bg-white/5 border-white/10 backdrop-blur">
+              
               <CardHeader className="pb-3">
                 <CardTitle className="text-white flex items-center gap-2 text-lg">
-                  <div className="w-7 h-7 rounded-lg bg-purple-500/15 flex items-center justify-center ring-1 ring-purple-500/20">
-                    <Mic className="w-4 h-4 text-purple-400" />
-                  </div>
+                  <Mic className="w-5 h-5 text-purple-400" />
                   Modo de Voz
                 </CardTitle>
               </CardHeader>
@@ -1621,8 +1600,8 @@ export default function VozProClient() {
                     onClick={() => setVoiceMode('clone')}
                     className={`p-3 rounded-xl border text-center transition-all duration-300 ${
                       voiceMode === 'clone'
-                        ? 'border-violet-500/60 bg-violet-500/15 shadow-lg shadow-violet-500/15 ring-1 ring-violet-500/20 scale-[1.02]'
-                        : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05] hover:shadow-md'
+                        ? 'border-violet-500 bg-violet-500/20'
+                        : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
                     }`}
                   >
                     <div className="text-lg mb-1">🎙️</div>
@@ -1635,8 +1614,8 @@ export default function VozProClient() {
                     onClick={() => setVoiceMode('design')}
                     className={`p-3 rounded-xl border text-center transition-all duration-300 ${
                       voiceMode === 'design'
-                        ? 'border-purple-500/60 bg-purple-500/15 shadow-lg shadow-purple-500/15 ring-1 ring-purple-500/20 scale-[1.02]'
-                        : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05] hover:shadow-md'
+                        ? 'border-purple-500 bg-purple-500/20'
+                        : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
                     }`}
                   >
                     <div className="text-lg mb-1">✨</div>
@@ -1649,8 +1628,8 @@ export default function VozProClient() {
                     onClick={() => setVoiceMode('auto')}
                     className={`p-3 rounded-xl border text-center transition-all duration-300 ${
                       voiceMode === 'auto'
-                        ? 'border-blue-500/60 bg-blue-500/15 shadow-lg shadow-blue-500/15 ring-1 ring-blue-500/20 scale-[1.02]'
-                        : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05] hover:shadow-md'
+                        ? 'border-blue-500 bg-blue-500/20'
+                        : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
                     }`}
                   >
                     <div className="text-lg mb-1">🎲</div>
@@ -1663,13 +1642,13 @@ export default function VozProClient() {
 
                 {/* Voice Design input */}
                 {voiceMode === 'design' && (
-                  <div className="space-y-2 pt-2 border-t border-white/[0.06]">
+                  <div className="space-y-2 pt-2 border-t border-white/10">
                     <label className="text-sm text-slate-400">Descreva a voz desejada</label>
                     <Input
                       value={voiceDesignInstruct}
                       onChange={(e) => setVoiceDesignInstruct(e.target.value)}
                       placeholder="female, young, low pitch, whisper, british accent"
-                      className="bg-white/[0.03] border-white/[0.08] text-white placeholder:text-slate-600 focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 transition-all duration-200"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-violet-500"
                     />
                     <p className="text-[10px] text-slate-600">
                       Atributos: <b>gender</b> (male/female), <b>age</b> (child/teen/young/old), <b>pitch</b> (low/moderate/high), <b>style</b> (whisper), <b>accent</b> (brazilian/british/american/japanese)
@@ -1679,7 +1658,7 @@ export default function VozProClient() {
 
                 {/* Auto mode hint */}
                 {voiceMode === 'auto' && (
-                  <div className="pt-2 border-t border-white/[0.06]">
+                  <div className="pt-2 border-t border-white/10">
                     <p className="text-xs text-blue-300/70 text-center">
                       O sistema vai criar uma voz aleatória. Cada geração será diferente!
                     </p>
@@ -1688,10 +1667,10 @@ export default function VozProClient() {
 
                 {/* Upload voz (no modo clone) - somente se liberado pelo admin */}
                 {voiceMode === 'clone' && enableFrontendUpload && (
-                  <div className="space-y-2 pt-2 border-t border-white/[0.06]">
+                  <div className="space-y-2 pt-2 border-t border-white/10">
                     <label className="text-sm text-slate-400">Upload de Voz (opcional)</label>
                     <div className="flex items-center gap-3">
-                      <label className="cursor-pointer px-4 py-2 rounded-lg bg-white/[0.06] hover:bg-white/10 border border-white/[0.08] text-sm text-slate-300 transition-all duration-200 hover:border-white/20 hover:shadow-sm">
+                      <label className="cursor-pointer px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-slate-300 transition-all">
                         <input
                           key={uploadedVoiceUrl || 'upload-input'}
                           type="file"
@@ -1752,7 +1731,7 @@ export default function VozProClient() {
                 )}
 
                 {/* Pronúncia CMU */}
-                <div className="space-y-2 pt-2 border-t border-white/[0.06]">
+                <div className="space-y-2 pt-2 border-t border-white/10">
                   <label className="text-sm text-slate-400">Dica: Controle de Pronúncia</label>
                   <p className="text-[10px] text-slate-600">
                     Use colchetes para corrigir pronúncia: "He plays the [B EY1 S] guitar"
@@ -1762,8 +1741,8 @@ export default function VozProClient() {
             </Card>
 
             {/* Text Input */}
-            <Card className="bg-white/[0.03] border-white/[0.08] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)] relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/30 to-transparent" />
+            <Card className="bg-white/5 border-white/10 backdrop-blur">
+              
               <CardContent className="pt-5 space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -1776,7 +1755,7 @@ export default function VozProClient() {
                     onChange={(e) => setText(e.target.value)}
                     placeholder="Digite o texto que deseja que a voz fale... Ex: Na compra de qualquer produto, ganhe 50% de desconto! Aproveite essa promoção exclusiva!"
                     rows={4}
-                    className="bg-white/[0.03] border-white/[0.08] text-white placeholder:text-slate-600 resize-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 transition-all duration-200"
+                    className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 resize-none focus:border-violet-500"
                   />
                 </div>
 
@@ -1784,10 +1763,10 @@ export default function VozProClient() {
                 <div className="flex items-center gap-3">
                   <label className="text-sm font-medium text-slate-300 whitespace-nowrap">Idioma</label>
                   <Select value={language} onValueChange={setLanguage}>
-                    <SelectTrigger className="bg-white/[0.03] border-white/[0.08] text-white focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20">
+                    <SelectTrigger className="bg-white/5 border-white/10 text-white focus:border-violet-500">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800/95 backdrop-blur-xl border-white/[0.08] shadow-xl shadow-black/30">
+                    <SelectContent className="bg-slate-800 border-slate-700">
                       {LANGUAGES.map(l => (
                         <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
                       ))}
@@ -1798,14 +1777,12 @@ export default function VozProClient() {
             </Card>
 
             {/* Music Track */}
-            <Card className="bg-white/[0.03] border-white/[0.08] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)] relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/30 to-transparent" />
+            <Card className="bg-white/5 border-white/10 backdrop-blur">
+              
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-white flex items-center gap-2 text-lg">
-                    <div className="w-7 h-7 rounded-lg bg-purple-500/15 flex items-center justify-center ring-1 ring-purple-500/20">
-                      <Music className="w-4 h-4 text-purple-400" />
-                    </div>
+                    <Music className="w-5 h-5 text-purple-400" />
                     Trilha Musical
                   </CardTitle>
                   <div className="flex items-center gap-2">
@@ -1843,10 +1820,10 @@ export default function VozProClient() {
                               <button
                                 key={track.id}
                                 onClick={() => setSelectedTrackId(track.id)}
-                                className={`p-3 rounded-xl border text-left transition-all duration-300 hover:scale-[1.02] ${
+                                className={`p-3 rounded-xl border text-left transition-all ${
                                   selectedTrackId === track.id
-                                    ? 'border-purple-500/60 bg-gradient-to-r from-purple-500/15 to-fuchsia-500/10 shadow-lg shadow-purple-500/15 ring-1 ring-purple-500/20'
-                                    : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05] hover:shadow-md'
+                                    ? 'border-purple-500 bg-purple-500/20'
+                                    : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
                                 }`}
                               >
                                 <div className="flex items-center gap-2 mb-1">
@@ -1867,7 +1844,7 @@ export default function VozProClient() {
                             ))}
                           </div>
                           {(() => { const remaining = tracks.filter(t => t.category === selectedTrackCategory).length - trackShowLimit; if (remaining > 0) return (
-                            <button onClick={() => setTrackShowLimit(prev => prev + 15)} className="w-full text-center text-sm text-purple-400 hover:text-purple-300 py-2 rounded-lg border border-white/[0.06] hover:border-purple-500/30 transition-all duration-200 hover:bg-purple-500/5">
+                            <button onClick={() => setTrackShowLimit(prev => prev + 15)} className="w-full text-center text-sm text-purple-400 hover:text-purple-300 py-2 rounded-lg border border-white/10 hover:border-purple-500/30 transition-all duration-200 hover:bg-purple-500/5">
                               Ver mais {remaining}
                             </button>
                           ); return null; })()}
@@ -1906,10 +1883,10 @@ export default function VozProClient() {
                               <button
                                 key={track.id}
                                 onClick={() => setSelectedTrackId(track.id)}
-                                className={`p-3 rounded-xl border text-left transition-all duration-300 hover:scale-[1.02] ${
+                                className={`p-3 rounded-xl border text-left transition-all ${
                                   selectedTrackId === track.id
-                                    ? 'border-purple-500/60 bg-gradient-to-r from-purple-500/15 to-fuchsia-500/10 shadow-lg shadow-purple-500/15 ring-1 ring-purple-500/20'
-                                    : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05] hover:shadow-md'
+                                    ? 'border-purple-500 bg-purple-500/20'
+                                    : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
                                 }`}
                               >
                                 <div className="flex items-center gap-2 mb-1">
@@ -1930,7 +1907,7 @@ export default function VozProClient() {
                             ))}
                           </div>
                           {(() => { const remaining = tracks.filter(t => !t.category).length - trackShowLimit; if (remaining > 0) return (
-                            <button onClick={() => setTrackShowLimit(prev => prev + 15)} className="w-full text-center text-sm text-purple-400 hover:text-purple-300 py-2 rounded-lg border border-white/[0.06] hover:border-purple-500/30 transition-all duration-200 hover:bg-purple-500/5">
+                            <button onClick={() => setTrackShowLimit(prev => prev + 15)} className="w-full text-center text-sm text-purple-400 hover:text-purple-300 py-2 rounded-lg border border-white/10 hover:border-purple-500/30 transition-all duration-200 hover:bg-purple-500/5">
                               Ver mais {remaining}
                             </button>
                           ); return null; })()}
@@ -1941,11 +1918,11 @@ export default function VozProClient() {
                           <button
                             key={cat.name}
                             onClick={() => setSelectedTrackCategory(cat.name)}
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] hover:bg-purple-500/10 hover:border-purple-500/40 transition-all duration-300 cursor-pointer group hover:shadow-lg hover:shadow-purple-500/10 hover:scale-[1.03] active:scale-[0.98] ring-0 hover:ring-1 hover:ring-purple-500/20"
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-purple-500/10 hover:border-purple-500/40 cursor-pointer group"
                           >
                             <span className="text-base group-hover:scale-110 transition-transform duration-300">{cat.emoji || '📁'}</span>
                             <span className="text-sm font-medium text-white whitespace-nowrap">{cat.name}</span>
-                            <span className="text-xs text-slate-500 bg-white/[0.06] px-1.5 py-0.5 rounded-md ring-1 ring-white/[0.05]">{cat.count}</span>
+                            <span className="text-xs text-slate-500 bg-white/5 px-1.5 py-0.5 rounded-md">{cat.count}</span>
                           </button>
                         ))}
                       </div>
@@ -1979,10 +1956,10 @@ export default function VozProClient() {
                           <button
                             key={track.id}
                             onClick={() => setSelectedTrackId(track.id)}
-                            className={`p-3 rounded-xl border text-left transition-all duration-300 hover:scale-[1.02] ${
+                            className={`p-3 rounded-xl border text-left transition-all ${
                               selectedTrackId === track.id
-                                ? 'border-purple-500/60 bg-gradient-to-r from-purple-500/15 to-fuchsia-500/10 shadow-lg shadow-purple-500/15 ring-1 ring-purple-500/20'
-                                : 'border-white/[0.08] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.05] hover:shadow-md'
+                                ? 'border-purple-500 bg-purple-500/20'
+                                : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
                             }`}
                           >
                             <div className="flex items-center gap-2 mb-1">
@@ -2003,7 +1980,7 @@ export default function VozProClient() {
                         ))}
                       </div>
                       {(() => { const remaining = tracks.length - trackShowLimit; if (remaining > 0) return (
-                        <button onClick={() => setTrackShowLimit(prev => prev + 15)} className="w-full text-center text-sm text-purple-400 hover:text-purple-300 py-2 rounded-lg border border-white/5 hover:border-purple-500/30 transition-all">
+                        <button onClick={() => setTrackShowLimit(prev => prev + 15)} className="w-full text-center text-sm text-purple-400 hover:text-purple-300 py-2 rounded-lg border border-white/10 hover:border-purple-500/30">
                           Ver mais {remaining}
                         </button>
                       ); return null; })()}
@@ -2014,8 +1991,8 @@ export default function VozProClient() {
                             <span className="text-xs text-slate-500">{Math.round(trackVolume * 100)}%</span>
                           </div>
                           <Slider value={[trackVolume]} onValueChange={([v]) => setTrackVolume(v)} min={0} max={1} step={0.05} className="w-full" />
-                          <div className="pt-3 border-t border-white/[0.06]">
-                            <button onClick={() => setShowDuckingSettings(!showDuckingSettings)} className="flex items-center gap-2 text-sm text-slate-400 hover:text-violet-300 transition-colors duration-200 w-full hover:bg-white/[0.02] -ml-2 px-2 py-1 rounded-lg">
+                          <div className="pt-3 border-t border-white/10">
+                            <button onClick={() => setShowDuckingSettings(!showDuckingSettings)} className="flex items-center gap-2 text-sm text-slate-400 hover:text-violet-300 transition-colors duration-200 w-full hover:bg-white/5 -ml-2 px-2 py-1 rounded-lg">
                               <Volume2 className="w-4 h-4" />
                               Controles de Ducking
                               <ChevronDown className={`w-3 h-3 ml-auto transition-transform duration-300 ${showDuckingSettings ? 'rotate-180' : ''}`} />
@@ -2025,46 +2002,46 @@ export default function VozProClient() {
                                 <div className="space-y-1">
                                   <div className="flex justify-between">
                                     <label className="text-xs text-slate-400">Volume durante a voz</label>
-                                    <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{Math.round(duckVolume * 100)}%</Badge>
+                                    <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{Math.round(duckVolume * 100)}%</Badge>
                                   </div>
                                   <Slider value={[duckVolume]} onValueChange={([v]) => setDuckVolume(v)} min={0} max={1} step={0.01} />
                                 </div>
                                 <div className="space-y-1">
                                   <div className="flex justify-between">
                                     <label className="text-xs text-slate-400">Fade-in inicial</label>
-                                    <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{fadeInMs / 1000}s</Badge>
+                                    <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{fadeInMs / 1000}s</Badge>
                                   </div>
                                   <Slider value={[fadeInMs]} onValueChange={([v]) => setFadeInMs(v)} min={0} max={5000} step={100} />
                                 </div>
                                 <div className="space-y-1">
                                   <div className="flex justify-between">
                                     <label className="text-xs text-slate-400">Música antes da voz</label>
-                                    <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{(musicStartLeadMs / 1000).toFixed(1)}s</Badge>
+                                    <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{(musicStartLeadMs / 1000).toFixed(1)}s</Badge>
                                   </div>
                                   <Slider value={[musicStartLeadMs]} onValueChange={([v]) => setMusicStartLeadMs(v)} min={0} max={10000} step={100} />
                                 </div>
                                 <div className="space-y-1">
                                   <div className="flex justify-between">
                                     <label className="text-xs text-slate-400">Transição Duck</label>
-                                    <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{duckFadeMs / 1000}s</Badge>
+                                    <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{duckFadeMs / 1000}s</Badge>
                                   </div>
                                   <Slider value={[duckFadeMs]} onValueChange={([v]) => setDuckFadeMs(v)} min={0} max={3000} step={50} />
                                 </div>
                                 <div className="space-y-1">
                                   <div className="flex justify-between">
                                     <label className="text-xs text-slate-400">Transição Unduck</label>
-                                    <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{unduckFadeMs / 1000}s</Badge>
+                                    <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{unduckFadeMs / 1000}s</Badge>
                                   </div>
                                   <Slider value={[unduckFadeMs]} onValueChange={([v]) => setUnduckFadeMs(v)} min={0} max={3000} step={50} />
                                 </div>
                                 <div className="space-y-1">
                                   <div className="flex justify-between">
                                     <label className="text-xs text-slate-400">Fade-out final</label>
-                                    <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{fadeOutMs / 1000}s</Badge>
+                                    <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{fadeOutMs / 1000}s</Badge>
                                   </div>
                                   <Slider value={[fadeOutMs]} onValueChange={([v]) => setFadeOutMs(v)} min={0} max={8000} step={100} />
                                 </div>
-                                <div className="pt-2 border-t border-white/[0.06]">
+                                <div className="pt-2 border-t border-white/10">
                                   <p className="text-[10px] text-slate-500 mb-2">Timeline do áudio:</p>
                                   <div className="flex items-center gap-1 text-[10px]">
                                     <div className="bg-purple-500/30 border border-purple-500/50 rounded px-2 py-1 text-purple-300">Música {(musicStartLeadMs / 1000).toFixed(1)}s</div>
@@ -2095,20 +2072,20 @@ export default function VozProClient() {
                 Configurações Avançadas
                 <ChevronRight className="w-3 h-3 transition-transform duration-200 group-open:rotate-90" />
               </summary>
-              <Card className="mt-2 bg-white/[0.03] border-white/[0.08] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)]">
+              <Card className="mt-2 bg-white/5 border-white/10 backdrop-blur">
                 <CardContent className="pt-5 space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <label className="text-xs text-slate-400">Passos</label>
-                        <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{numStep}</Badge>
+                        <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{numStep}</Badge>
                       </div>
                       <Slider value={[numStep]} onValueChange={([v]) => setNumStep(v)} min={4} max={64} step={1} />
                     </div>
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <label className="text-xs text-slate-400">Guia (CFG)</label>
-                        <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{guidanceScale.toFixed(1)}</Badge>
+                        <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{guidanceScale.toFixed(1)}</Badge>
                       </div>
                       <Slider value={[guidanceScale]} onValueChange={([v]) => setGuidanceScale(v)} min={0} max={4} step={0.1} />
                     </div>
@@ -2116,7 +2093,7 @@ export default function VozProClient() {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <label className="text-xs text-slate-400">Velocidade</label>
-                      <Badge variant="outline" className="text-xs border-white/[0.06] text-slate-500 bg-white/[0.02]">{speed.toFixed(2)}x</Badge>
+                      <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{speed.toFixed(2)}x</Badge>
                     </div>
                     <Slider value={[speed]} onValueChange={([v]) => setSpeed(v)} min={0.5} max={1.5} step={0.05} />
                   </div>
@@ -2129,7 +2106,7 @@ export default function VozProClient() {
               <Button
                 onClick={handleGenerate}
                 disabled={isGenerating || !text.trim() || (!selectedVariationId && !uploadedVoiceUrl)}
-                className="w-full h-14 text-lg font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 hover:from-violet-500 hover:via-purple-500 hover:to-fuchsia-500 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50 transition-all duration-300 hover:shadow-violet-500/40 hover:scale-[1.01] active:scale-[0.99] ring-0 hover:ring-2 hover:ring-violet-400/20"
+                className="w-full h-14 text-lg font-bold bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50"
               >
                 {isGenerating ? (
                   <>
@@ -2148,13 +2125,11 @@ export default function VozProClient() {
 
           {/* Right Panel - Output */}
           <div className="lg:col-span-2 space-y-5">
-            <Card className="sticky top-20 bg-white/[0.03] border-white/[0.08] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)] relative">
-              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/40 to-transparent" />
+            <Card className="bg-white/5 border-white/10 backdrop-blur sticky top-20">
+              
               <CardHeader className="pb-3">
                 <CardTitle className="text-white flex items-center gap-2 text-lg">
-                  <div className="w-7 h-7 rounded-lg bg-violet-500/15 flex items-center justify-center ring-1 ring-violet-500/20">
-                    <Volume2 className="w-4 h-4 text-violet-400" />
-                  </div>
+                  <Volume2 className="w-5 h-5 text-violet-400" />
                   Resultado
                 </CardTitle>
               </CardHeader>
@@ -2162,9 +2137,8 @@ export default function VozProClient() {
                 {(audioUrl || mixedAudioUrl) ? (
                   <div className="space-y-4">
                     {/* Audio player */}
-                    <div className="bg-gradient-to-br from-violet-500/[0.08] via-purple-500/[0.05] to-transparent rounded-2xl p-5 border border-violet-500/20 ring-1 ring-violet-500/10 shadow-inner relative overflow-hidden">
-                      <div className="absolute inset-0 bg-gradient-to-t from-violet-500/5 to-transparent" />
-                      <audio
+                    <div className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 rounded-xl p-4 border border-violet-500/20">
+                                            <audio
                         ref={resultAudioRef}
                         src={mixedAudioUrl || audioUrl || undefined}
                         className="w-full relative z-10"
@@ -2176,17 +2150,17 @@ export default function VozProClient() {
                     {/* Status badges */}
                     <div className="flex flex-wrap gap-2">
                       {selectedVoice && (
-                        <Badge variant="outline" className="border-violet-500/30 text-violet-300 bg-violet-500/5">
+                        <Badge variant="outline" className="border-violet-500/30 text-violet-300">
                           {selectedVoice.name}
                         </Badge>
                       )}
                       {selectedVariation && (
-                        <Badge variant="outline" className="border-purple-500/30 text-purple-300 bg-purple-500/5">
+                        <Badge variant="outline" className="border-purple-500/30 text-purple-300">
                           {selectedVariation.emoji} {selectedVariation.label}
                         </Badge>
                       )}
                       {isMixed && selectedTrack && (
-                        <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 bg-emerald-500/5">
+                        <Badge variant="outline" className="border-emerald-500/30 text-emerald-300">
                           <Music className="w-3 h-3 mr-1" />
                           {selectedTrack.name}
                         </Badge>
@@ -2198,7 +2172,7 @@ export default function VozProClient() {
                       <Button
                         onClick={togglePlayback}
                         variant="outline"
-                        className="flex-1 border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 text-violet-100 hover:text-white gap-1.5 transition-all duration-200 hover:shadow-md hover:shadow-violet-500/15 hover:border-violet-500/50"
+                        className="flex-1 border-violet-500/40 bg-violet-500/10 hover:bg-violet-500/20 text-violet-100 hover:text-white gap-1.5"
                       >
                         {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                         {isPlaying ? 'Pausar' : 'Reproduzir'}
@@ -2206,13 +2180,13 @@ export default function VozProClient() {
                       <Button
                         onClick={stopPlayback}
                         variant="outline"
-                        className="border-slate-500/30 bg-slate-500/10 hover:bg-slate-500/20 text-slate-200 hover:text-white transition-all duration-200 hover:border-slate-500/50"
+                        className="border-slate-500/40 bg-slate-500/10 hover:bg-slate-500/20 text-slate-200 hover:text-white"
                       >
                         <Square className="w-4 h-4" />
                       </Button>
                       <Button
                         onClick={handleDownload}
-                        className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white gap-1.5 transition-all duration-200 hover:shadow-lg hover:shadow-emerald-500/25 hover:scale-[1.02] active:scale-[0.98]"
+                        className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white gap-1.5"
                       >
                         <Download className="w-4 h-4" />
                         Baixar MP3
@@ -2259,17 +2233,14 @@ export default function VozProClient() {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <div className="relative mb-5">
-                      <div className="absolute inset-0 rounded-full bg-violet-500/10 blur-xl animate-pulse" />
-                      <div className="relative w-20 h-20 rounded-full bg-gradient-to-br from-violet-500/10 to-purple-500/10 flex items-center justify-center ring-1 ring-violet-500/15 border border-violet-500/10">
+                    <div className="w-20 h-20 rounded-full bg-violet-500/10 flex items-center justify-center mb-4">
                         {isGenerating ? (
-                          <Loader2 className="w-10 h-10 text-violet-400 animate-spin drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
+                          <Loader2 className="w-10 h-10 text-violet-400 animate-spin" />
                         ) : (
                           <AudioWaveform className="w-10 h-10 text-violet-500/40" />
                         )}
-                      </div>
                     </div>
-                    <p className="text-slate-400 font-medium">
+                    <p className="text-slate-400">
                       {isGenerating ? 'Gerando seu áudio...' : 'Nenhum áudio gerado ainda'}
                     </p>
                     {isGenerating && (
@@ -2299,26 +2270,26 @@ export default function VozProClient() {
             </Card>
 
             {/* Info card - Como funciona */}
-            <Card className="bg-white/[0.03] border-white/[0.08] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)] relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
+            <Card className="bg-white/5 border-white/10 backdrop-blur">
+              
               <CardContent className="pt-5">
                 <div className="space-y-3 text-sm text-slate-400">
-                  <h3 className="font-semibold text-slate-200 text-base">Como funciona</h3>
+                  <h3 className="font-medium text-slate-300">Como funciona</h3>
                   <div className="space-y-2">
                     <div className="flex items-start gap-2">
-                      <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5 bg-violet-500/5">1</Badge>
+                      <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5">1</Badge>
                       <p>Escolha uma voz e o estilo/emissão desejado</p>
                     </div>
                     <div className="flex items-start gap-2">
-                      <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5 bg-violet-500/5">2</Badge>
+                      <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5">2</Badge>
                       <p>Digite o texto que deseja sintetizar</p>
                     </div>
                     <div className="flex items-start gap-2">
-                      <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5 bg-violet-500/5">3</Badge>
+                      <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5">3</Badge>
                       <p>Opcionalmente, adicione uma trilha musical de fundo</p>
                     </div>
                     <div className="flex items-start gap-2">
-                      <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5 bg-violet-500/5">4</Badge>
+                      <Badge variant="outline" className="border-violet-500/30 text-violet-400 shrink-0 mt-0.5">4</Badge>
                       <p>Clique em &quot;Gerar Voz&quot; e aguarde o resultado</p>
                     </div>
                   </div>
@@ -2341,7 +2312,7 @@ export default function VozProClient() {
                 Painel de Debug
                 <ChevronDown className={`w-3 h-3 transition-transform duration-300 ${debugOpen ? 'rotate-180' : ''}`} />
               </summary>
-              <Card className="mt-2 bg-white/[0.03] border-white/[0.08] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)]">
+              <Card className="mt-2 bg-white/5 border-white/10 backdrop-blur">
                 <CardContent className="pt-5 space-y-3">
                   {/* Debug Steps Timeline */}
                   {(lastGenResponse as Record<string, unknown>)?.debug && 
@@ -2414,7 +2385,7 @@ export default function VozProClient() {
                           <Copy className="w-3 h-3" />
                         </Button>
                       </div>
-                      <pre className="bg-slate-900/50 border border-white/[0.06] rounded-lg p-2 text-[10px] text-slate-400 max-h-40 overflow-auto whitespace-pre-wrap break-all">
+                      <pre className="bg-slate-900/50 border border-white/10 rounded-lg p-2 text-[10px] text-slate-400 max-h-40 overflow-auto whitespace-pre-wrap break-all">
 {JSON.stringify(lastGenResponse, null, 2)}
                       </pre>
                     </div>
@@ -2438,14 +2409,14 @@ export default function VozProClient() {
         {/* Expanded audio result — slides up when there's audio */}
         {mobilePlayerExpanded && (audioUrl || mixedAudioUrl) && (
           <div
-            className="fixed bottom-16 left-0 right-0 bg-slate-950/95 backdrop-blur-2xl border-t border-violet-500/20 rounded-t-2xl max-h-[60vh] overflow-y-auto z-50 px-4 pb-4 pt-3 space-y-3"
+            className="fixed bottom-16 left-0 right-0 bg-slate-900 border-t border-white/10 rounded-t-2xl max-h-[60vh] overflow-y-auto z-50 px-4 pb-4 pt-3 space-y-3"
           >
             <div className="flex justify-center">
               <div className="w-10 h-1 rounded-full bg-white/20" />
             </div>
 
             {/* Audio player */}
-            <div className="bg-gradient-to-br from-violet-500/[0.08] via-purple-500/[0.05] to-transparent rounded-2xl p-4 border border-violet-500/20 ring-1 ring-violet-500/10 shadow-inner relative overflow-hidden">
+            <div className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 rounded-xl p-4 border border-violet-500/20">
               <audio
                 ref={resultAudioRef}
                 src={mixedAudioUrl || audioUrl || undefined}
@@ -2458,23 +2429,23 @@ export default function VozProClient() {
             {/* Status badges */}
             <div className="flex flex-wrap gap-2">
               {selectedVoice && (
-                <Badge variant="outline" className="border-violet-500/30 text-violet-300 bg-violet-500/5 text-xs">{selectedVoice.name}</Badge>
+                <Badge variant="outline" className="border-violet-500/30 text-violet-300 text-xs">{selectedVoice.name}</Badge>
               )}
               {selectedVariation && (
-                <Badge variant="outline" className="border-purple-500/30 text-purple-300 bg-purple-500/5 text-xs">{selectedVariation.emoji} {selectedVariation.label}</Badge>
+                <Badge variant="outline" className="border-purple-500/30 text-purple-300 text-xs">{selectedVariation.emoji} {selectedVariation.label}</Badge>
               )}
             </div>
 
             {/* Controls */}
             <div className="flex gap-2">
-              <Button onClick={togglePlayback} variant="outline" size="sm" className="flex-1 border-violet-500/30 bg-violet-500/10 text-violet-100 gap-1.5">
+              <Button onClick={togglePlayback} variant="outline" size="sm" className="flex-1 border-violet-500/40 bg-violet-500/10 text-violet-100 gap-1.5">
                 {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                 {isPlaying ? 'Pausar' : 'Ouvir'}
               </Button>
-              <Button onClick={stopPlayback} variant="outline" size="sm" className="border-slate-500/30 bg-slate-500/10 text-slate-200">
+              <Button onClick={stopPlayback} variant="outline" size="sm" className="border-slate-500/40 bg-slate-500/10 text-slate-200">
                 <Square className="w-4 h-4" />
               </Button>
-              <Button onClick={handleDownload} size="sm" className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white gap-1.5">
+              <Button onClick={handleDownload} size="sm" className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white gap-1.5">
                 <Download className="w-4 h-4" />
                 Baixar
               </Button>
@@ -2492,18 +2463,18 @@ export default function VozProClient() {
         )}
 
         {/* FIXED BOTTOM BAR — always visible with Generate button */}
-        <div className="relative z-50 bg-slate-950/95 backdrop-blur-2xl border-t border-violet-500/20 px-4 py-3">
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/40 to-transparent" />
+        <div className="relative z-50 bg-slate-900/95 border-t border-white/10 px-4 py-3">
+          
 
           {/* Audio generated — compact bar with play + result indicator */}
           {(audioUrl || mixedAudioUrl) && !isGenerating && (
             <div
-              className="flex items-center gap-3 mb-2 pb-2 border-b border-white/[0.06] cursor-pointer"
+              className="flex items-center gap-3 mb-2 pb-2 border-b border-white/10 cursor-pointer"
               onClick={() => setMobilePlayerExpanded(!mobilePlayerExpanded)}
             >
               <button
                 onClick={(e) => { e.stopPropagation(); togglePlayback() }}
-                className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/30 shrink-0 active:scale-95 transition-transform"
+                className="w-9 h-9 rounded-full bg-violet-500 flex items-center justify-center shrink-0"
               >
                 {isPlaying ? <Pause className="w-3.5 h-3.5 text-white" /> : <Play className="w-3.5 h-3.5 text-white ml-0.5" />}
               </button>
@@ -2527,7 +2498,7 @@ export default function VozProClient() {
 
           {/* Generating indicator */}
           {isGenerating && (
-            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/[0.06]">
+            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/10">
               <Loader2 className="w-4 h-4 text-violet-400 animate-spin shrink-0" />
               <span className="text-xs text-violet-300 flex-1">Gerando áudio... {generatingTime}s</span>
             </div>
@@ -2537,7 +2508,7 @@ export default function VozProClient() {
           <Button
             onClick={handleGenerate}
             disabled={isGenerating || !text.trim() || (!selectedVariationId && !uploadedVoiceUrl)}
-            className="w-full h-12 text-base font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 hover:from-violet-500 hover:via-purple-500 hover:to-fuchsia-500 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50 transition-all duration-300 active:scale-[0.98]"
+            className="w-full h-12 text-base font-bold bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50"
           >
             {isGenerating ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Gerando...</>
@@ -2552,8 +2523,8 @@ export default function VozProClient() {
       <div className="lg:hidden h-24" />
 
       {/* Footer — hidden on mobile (covered by fixed player) */}
-      <footer className="hidden lg:block border-t border-white/[0.06] bg-slate-950/40 backdrop-blur-xl mt-auto relative">
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
+      <footer className="hidden lg:block border-t border-white/10 mt-auto">
+        
         <div className="container mx-auto px-4 py-5 flex items-center justify-between text-xs text-slate-500">
           <p className="flex items-center gap-2">
             <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">VozPro</span>
