@@ -10,7 +10,7 @@ set CUDA_VISIBLE_DEVICES=0
 set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:32
 
 echo [1/2] Iniciando F5-TTS na porta 7860...
-start "F5-TTS" /B cmd /c "python -m f5_tts.infer_cli_gradio --port 7860 2>&1"
+start "F5-TTS" /B cmd /c "call C:\Users\Administrador\Miniconda3\Scripts\activate.bat && python -m f5_tts.infer_cli_gradio --port 7860 2>&1"
 
 timeout /t 5 /nobreak >nul
 
@@ -21,4 +21,4 @@ echo.
 echo ============================================
 echo   Servidor iniciado! Aguarde o tunnel gerar a URL
 echo ============================================
-timeout /t 999999
+timeout /t 99999
