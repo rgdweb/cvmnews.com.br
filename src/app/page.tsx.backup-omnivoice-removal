@@ -23,6 +23,7 @@ import VoicePreviewButton from '@/components/voice-preview-button'
 import { optimizePronunciation, processControlTags, containsSSML, type TTSEngine } from '@/lib/pronunciation-optimizer'
 import { parseSSML } from '@/lib/ssml-parser'
 import { preprocessTTS } from '@/lib/tts-text-preprocessor'
+import { chunkText, type TextChunk } from '@/lib/tts-chunker'
 
 interface TrackControlsProps {
   selectedTrack: { id: string; name: string; audioPath: string; [key: string]: unknown } | null
@@ -726,6 +727,16 @@ export default function VozProClient() {
           const configData = await configRes.json()
           setUsePhpGenerate(!!configData.phpServerUrl)
           setUseTunnelGenerate(true)
+          // Verificar se VozPro PHP direto esta disponivel
+          if (configData.phpServerUrl) {
+            try {
+              const ovTokenRes = await fetch('/api/omnivoice-token')
+              if (ovTokenRes.ok) {
+                const ovTokenData = await ovTokenRes.json()
+                if (ovTokenData.generateUrl) setOmnivoicePhpUrl(ovTokenData.generateUrl)
+              }
+            } catch { /* VozPro PHP nao disponivel */ }
+          }
         }
         if (settingsRes.ok) {
           const settingsData = await settingsRes.json()
@@ -733,7 +744,14 @@ export default function VozProClient() {
         }
         if (trackCatRes.ok) setTrackCategories(await trackCatRes.json())
         if (voiceCatRes.ok) setVoiceCategories(await voiceCatRes.json())
-
+        // Verificar se VozPro server esta disponivel
+        try {
+          const ovRes = await fetch('/api/omnivoice-generate')
+          if (ovRes.ok) {
+            const ovData = await ovRes.json()
+            if (ovData.reachable) setOmnivoiceAvailable(true)
+          }
+        } catch { /* VozPro nao disponivel, tudo bem */ }
       } catch {
         toast.error('Erro ao carregar dados')
       } finally {
@@ -899,6 +917,339 @@ export default function VozProClient() {
 
         // Determinar instruct baseado no modo
         let finalInstruct = instructStr
+          const chunks = chunkText(textToSend)
+          console.log(`[VozPro] ${chunks.length} chunks identificados`)
+          console.log('[VozPro] Chunks:', chunks.map((c, i) => `  [${i}] "${c.text}" (${c.pauseAfterMs}ms, ${c.punctuation})`).join('\n'))
+
+          if (chunks.length >= 1 && chunks.length <= 50) {
+            // ===== GERACAO PARALELA: até 3 chunks ao mesmo tempo =====
+            const CONCURRENCY = 3
+            const audioResults: { index: number; buffer: ArrayBuffer; pauseMs: number }[] = []
+            let failedCount = 0
+
+            // Função para gerar um único chunk
+            const generateChunk = async (chunk: TextChunk, chunkIndex: number): Promise<{ buffer: ArrayBuffer; pauseMs: number } | null> => {
+              const chunkBody: Record<string, unknown> = {
+                text: chunk.text,
+                mode: voiceMode,
+                instruct: '',
+                referenceAudioUrl: uploadedVoiceUrl || selectedVariation?.refAudioServerUrl || '',
+                referenceAudioName: uploadedVoiceFile?.name || selectedVariation?.refAudioName || 'ref_audio.wav',
+                refText: selectedVariation?.refText || '',
+                numStep: 32, // OmniVoice: 32 = qualidade padrao (igual ao local)
+                speed,
+                language,
+                gender: isAutoMode ? 'Auto' : (isDesignMode ? designParams.gender : 'Auto'),
+                age: isAutoMode ? 'Auto' : (isDesignMode ? designParams.age : 'Auto'),
+                pitch: isAutoMode ? 'Auto' : (isDesignMode ? designParams.pitch : 'Auto'),
+                style: isAutoMode ? 'Auto' : (isDesignMode ? designParams.style : 'Auto'),
+                accent: isAutoMode ? 'Auto' : (isDesignMode ? designParams.accent : 'Auto'),
+              }
+
+              try {
+                let chunkRes: Response
+                if (omnivoicePhpUrl) {
+                  const tokenData = await fetch('/api/omnivoice-token').then(r => r.json())
+                  if (tokenData.generateUrl && tokenData.token) {
+                    chunkRes = await fetch(tokenData.generateUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'X-Generate-Token': tokenData.token },
+                      body: JSON.stringify(chunkBody),
+                      signal: controller.signal,
+                    })
+                  } else {
+                    chunkRes = await fetch('/api/omnivoice-generate', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(chunkBody),
+                      signal: controller.signal,
+                    })
+                  }
+                } else {
+                  chunkRes = await fetch('/api/omnivoice-generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(chunkBody),
+                    signal: controller.signal,
+                  })
+                }
+
+                if (chunkRes.ok) {
+                  const contentType = chunkRes.headers.get('content-type') || ''
+                  if (contentType.includes('audio') || contentType.includes('octet-stream')) {
+                    // Resposta raw (wav/mp3 direto)
+                    const buffer = await chunkRes.arrayBuffer()
+                    return { buffer, pauseMs: chunk.pauseAfterMs }
+                  }
+                  // API retorna JSON com { audioUrl, ... } — buscar o áudio real
+                  const json = await chunkRes.json().catch(() => null)
+                  if (json?.audioUrl) {
+                    try {
+                      const url = json.audioUrl
+                      let buffer: ArrayBuffer
+
+                      if (url.startsWith('data:')) {
+                        // Data URI (base64) — converter direto para ArrayBuffer
+                        const base64 = url.split(',')[1]
+                        const binaryStr = atob(base64)
+                        const bytes = new Uint8Array(binaryStr.length)
+                        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
+                        buffer = bytes.buffer
+                      } else {
+                        // URL remoto — buscar
+                        const audioRes = await fetch(url)
+                        if (!audioRes.ok) throw new Error(`HTTP ${audioRes.status}`)
+                        buffer = await audioRes.arrayBuffer()
+                      }
+
+                      console.log(`[VozPro Chunk ${chunkIndex + 1}] Áudio obtido (${(buffer.byteLength / 1024).toFixed(0)} KB)`)
+                      return { buffer, pauseMs: chunk.pauseAfterMs }
+                    } catch (e) {
+                      console.warn(`[VozPro Chunk ${chunkIndex + 1}] Falha ao obter áudio:`, e)
+                    }
+                  }
+                  // Sem audioUrl — é erro mesmo
+                  console.warn(`[VozPro Chunk ${chunkIndex + 1}] Resposta sem áudio: ${contentType}`, json?.error || json?.message || '')
+                  return null
+                } else {
+                  console.warn(`[VozPro Chunk ${chunkIndex + 1}] Erro: ${chunkRes.status}`)
+                  return null
+                }
+              } catch (err) {
+                console.warn(`[VozPro Chunk ${chunkIndex + 1}] Falha:`, err)
+                return null
+              }
+            }
+
+            // Processar chunks em batches paralelos
+            for (let batchStart = 0; batchStart < chunks.length; batchStart += CONCURRENCY) {
+              const batchEnd = Math.min(batchStart + CONCURRENCY, chunks.length)
+              const batch = chunks.slice(batchStart, batchEnd)
+
+              const results = await Promise.all(
+                batch.map((chunk, i) => generateChunk(chunk, batchStart + i))
+              )
+
+              for (let i = 0; i < results.length; i++) {
+                if (results[i]) {
+                  audioResults.push({ index: batchStart + i, ...results[i]! })
+                } else {
+                  failedCount++
+                }
+              }
+
+              // Atualizar progresso
+              const completed = Math.min(batchEnd, chunks.length)
+              console.log(`[VozPro] Progresso: ${completed}/${chunks.length} chunks processados`)
+            }
+
+            // Ordenar resultados pelo índice original (paralelo pode desordenar)
+            audioResults.sort((a, b) => a.index - b.index)
+
+            // Concatenar áudios com silêncio entre chunks
+            // O chunker agora mantém pontuação no texto → TTS produz finais limpos
+            // Basta colar chunks com silêncio (pausa configurada) entre eles.
+            if (audioResults.length > 0) {
+              console.log(`[VozPro] Concatenando ${audioResults.length} áudios (${failedCount} falhas)...`)
+              const audioCtx = new AudioContext({ sampleRate: 44100 })
+
+              // Passo 1: Decodificar todos os buffers + trim início + trim fim + normalize
+              // Pipeline: trimStartSilence → trimEndSilence → rmsNormalize
+              // trimEndSilence corta o silêncio excedente que o VozPro adiciona no final (52s → ~14s)
+              // Conservador: 200ms de buffer para não cortar a última sílaba
+              const decodedChunks: { audioBuffer: AudioBuffer; pauseMs: number }[] = []
+              for (const { buffer, pauseMs } of audioResults) {
+                try {
+                  const raw = await audioCtx.decodeAudioData(buffer.slice(0))
+                  const mono = raw.numberOfChannels > 1 ? toMono(raw) : raw
+                  const trimmedStart = trimStartSilence(mono)
+                  const trimmedEnd = trimEndSilence(trimmedStart)
+                  const normalized = rmsNormalize(trimmedEnd, -16)
+                  decodedChunks.push({ audioBuffer: normalized, pauseMs })
+                  console.log(`[VozPro Chunk] Decodificado: ${(buffer.byteLength / 1024).toFixed(0)}KB → ${(trimmedStart.duration * 1000).toFixed(0)}ms (raw) → ${(normalized.duration * 1000).toFixed(0)}ms (após trim+normalize)`)
+                } catch {
+                  console.warn('[VozPro Chunk] Falha ao decodificar áudio')
+                }
+              }
+
+              if (decodedChunks.length === 0) {
+                console.warn('[VozPro] Nenhum chunk decodificado')
+              } else {
+                // Passo 2: Concatenação com crossfade suave (5ms) para evitar cliques secos
+                // O TTS gera áudio com cauda natural. Usamos crossfade MÍNIMO (5ms)
+                // apenas para suavizar a transição, sem cortar sílabas.
+                const SAMPLE_RATE = 44100
+                const CROSSFADE_MS = 5  // crossfade mínimo — só para evitar clique seco
+                const crossfadeSamples = Math.floor((CROSSFADE_MS / 1000) * SAMPLE_RATE)
+
+                try {
+                // Calcular duração total (crossfade superpõe 2 chunks, reduzindo total)
+                let totalSamples = 0
+                for (let i = 0; i < decodedChunks.length; i++) {
+                  const chunkLen = decodedChunks[i].audioBuffer.length
+                  totalSamples += chunkLen
+                  if (i < decodedChunks.length - 1) {
+                    totalSamples += Math.floor((decodedChunks[i].pauseMs / 1000) * SAMPLE_RATE)
+                    // Crossfade superpõe final de um chunk com início do próximo
+                    // Garantir que não subtrai mais que o tamanho de qualquer chunk
+                    const cfOverlap = Math.min(crossfadeSamples, chunkLen, decodedChunks[i + 1].audioBuffer.length)
+                    totalSamples -= cfOverlap
+                  }
+                }
+                totalSamples = Math.max(totalSamples, 1) // garantir positivo
+
+                // Criar buffer final
+                const output = new AudioContext({ sampleRate: SAMPLE_RATE }).createBuffer(1, totalSamples, SAMPLE_RATE)
+                const outputData = output.getChannelData(0)
+
+                let writePos = 0
+                for (let i = 0; i < decodedChunks.length; i++) {
+                  const { audioBuffer, pauseMs } = decodedChunks[i]
+                  const data = audioBuffer.getChannelData(0)
+
+                  if (i === 0) {
+                    // Primeiro chunk: copiar inteiro (menos os últimos crossfadeSamples)
+                    const cfOverlap = decodedChunks.length > 1
+                      ? Math.min(crossfadeSamples, data.length, decodedChunks[1].audioBuffer.length)
+                      : 0
+                    const copyLen = data.length - cfOverlap
+                    for (let s = 0; s < Math.max(0, copyLen) && writePos < totalSamples; s++) {
+                      outputData[writePos++] = data[s]
+                    }
+                  } else {
+                    // Chunks subsequentes: silêncio (pausa) + crossfade + restante
+                    const prevData = decodedChunks[i - 1].audioBuffer.getChannelData(0)
+                    const cfOverlap = Math.min(crossfadeSamples, prevData.length, data.length)
+
+                    // Pegar final do chunk anterior e início do atual para crossfade
+                    const prevStart = prevData.length - cfOverlap
+
+                    // Silêncio da pausa de pontuação
+                    const pauseSamples = Math.floor((pauseMs / 1000) * SAMPLE_RATE)
+                    for (let s = 0; s < pauseSamples && writePos < totalSamples; s++) {
+                      outputData[writePos++] = 0
+                    }
+
+                    // Crossfade: misturar final do chunk anterior com início do atual
+                    for (let s = 0; s < cfOverlap && writePos < totalSamples; s++) {
+                      const t = cfOverlap > 1 ? s / (cfOverlap - 1) : 0  // 0.0 → 1.0
+                      // Fade-out suave (cosseno)
+                      const fadeOut = 0.5 * (1 + Math.cos(Math.PI * t))
+                      // Fade-in suave (cosseno)
+                      const fadeIn = 0.5 * (1 - Math.cos(Math.PI * t))
+                      outputData[writePos++] = prevData[prevStart + s] * fadeOut + data[s] * fadeIn
+                    }
+
+                    // Copiar restante do chunk (após crossfade)
+                    for (let s = cfOverlap; s < data.length && writePos < totalSamples; s++) {
+                      outputData[writePos++] = data[s]
+                    }
+                  }
+                }
+
+                console.log(`[VozPro] Concatenação OK: ${writePos} samples = ${(writePos / SAMPLE_RATE).toFixed(1)}s`)
+
+                // Passo 3: Converter para WAV
+                const finalBuffer = new AudioContext({ sampleRate: SAMPLE_RATE }).createBuffer(1, writePos, SAMPLE_RATE)
+                const finalData = finalBuffer.getChannelData(0)
+                for (let i = 0; i < writePos; i++) finalData[i] = outputData[i]
+
+                const wavBlob = audioBufferToWavBlob(finalBuffer)
+                const finalUrl = URL.createObjectURL(wavBlob)
+
+                setAudioUrl(finalUrl)
+                setIsGenerating(false)
+                clearInterval(timerInterval)
+                setGeneratingTime(Math.floor((Date.now() - genStartTime) / 1000))
+
+                if (audioResults.length === chunks.length) {
+                  toast.success(`${audioResults.length} frases geradas com sucesso!`)
+                } else {
+                  toast.warning(`${audioResults.length}/${chunks.length} frases geradas${failedCount > 0 ? ` (${failedCount} falha(s))` : ''}`)
+                }
+                return
+                } catch (concatError) {
+                  console.error('[VozPro] Erro na concatenação de chunks:', concatError)
+                  // Cai pro fluxo normal (single-shot) se a concatenação falhar
+                }
+              } // fim else (decodedChunks.length > 0)
+              // Se nenhum chunk decodificou, cai pro fluxo normal
+              console.warn('[VozPro] Nenhum chunk decodificado, tentando single-shot...')
+            }
+            // Se todos falharam, cai pro fluxo normal (single-shot)
+            console.warn('[VozPro] Todos os chunks falharam, tentando single-shot...')
+          }
+        }
+
+        const ovBody: Record<string, unknown> = {
+          text: textToSend,
+          mode: voiceMode,
+          instruct: '', // _design_fn não usa instruct (usa dropdowns)
+          referenceAudioUrl: voiceMode === 'clone' ? (uploadedVoiceUrl || selectedVariation?.refAudioServerUrl || '') : '',
+          referenceAudioName: voiceMode === 'clone' ? (uploadedVoiceFile?.name || selectedVariation?.refAudioName || 'ref_audio.wav') : '',
+          refText: selectedVariation?.refText || '',
+          numStep: 32, // OmniVoice: 32 = qualidade padrao (igual ao local)
+          speed,
+          language: language, // usa o idioma selecionado pelo usuario (Portuguese, Auto, etc)
+          // Voice Design params (usados pelo _design_fn endpoint)
+          gender: isAutoMode ? 'Auto' : (isDesignMode ? designParams.gender : 'Auto'),
+          age: isAutoMode ? 'Auto' : (isDesignMode ? designParams.age : 'Auto'),
+          pitch: isAutoMode ? 'Auto' : (isDesignMode ? designParams.pitch : 'Auto'),
+          style: isAutoMode ? 'Auto' : (isDesignMode ? designParams.style : 'Auto'),
+          accent: isAutoMode ? 'Auto' : (isDesignMode ? designParams.accent : 'Auto'),
+        }
+
+        if (omnivoicePhpUrl) {
+          // ===== OMNIVOICE PHP DIRETO: browser -> PHP sorteiomax -> tunnel -> GPU (ZERO Vercel) =====
+          console.log('[VozPro] Gerando via VozPro PHP direto (bypassa Vercel)...')
+          const tokenRes = await fetch('/api/omnivoice-token')
+          if (!tokenRes.ok) {
+            toast.error('Erro ao obter token VozPro')
+            return
+          }
+          const { generateUrl: phpDirectUrl, token } = await tokenRes.json()
+          lastRequestBody = ovBody
+
+          if (!phpDirectUrl || !token) {
+            toast.error('VozPro PHP nao configurado, usando Vercel...')
+            // Fallback pra Vercel
+            lastRequestUrl = '/api/omnivoice-generate'
+            res = await fetch('/api/omnivoice-generate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(ovBody),
+              signal: controller.signal,
+            })
+          } else {
+            lastRequestUrl = phpDirectUrl
+            res = await fetch(phpDirectUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Generate-Token': token,
+              },
+              body: JSON.stringify(ovBody),
+              signal: controller.signal,
+            })
+          }
+        } else {
+          // ===== OMNIVOICE VIA VERCEL (fallback) =====
+          console.log('[VozPro] Gerando via VozPro via Vercel (sem PHP direto)...')
+          lastRequestBody = ovBody
+          lastRequestUrl = '/api/omnivoice-generate'
+          res = await fetch('/api/omnivoice-generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(ovBody),
+            signal: controller.signal,
+          })
+        }
+      } else if (useTunnelGenerate) {
+        // ===== TUNNEL DIRETO: Vercel -> GPU local via cloudflared =====
+        console.log(`[VozPro] Gerando via tunnel (GPU local)... modo: ${voiceMode}`)
+
+        // Determinar instruct baseado no modo
+        let finalInstruct = instructStr
         if (voiceMode === 'design') {
           finalInstruct = voiceDesignInstruct
         }
@@ -919,7 +1270,7 @@ export default function VozProClient() {
           referenceAudioName: voiceMode !== 'clone' ? undefined : refName,
           instruct: finalInstruct,
           voiceMode,
-          useChunking: true,
+          useChunking: true,  // modo prosódia: gera frase por frase com pausas reais
         }
         res = await fetch('/api/tunnel-generate', {
           method: 'POST',
@@ -1041,7 +1392,7 @@ export default function VozProClient() {
       // ===== ASR RETRY AUTOMÁTICO (VozPro) =====
       // Valida pronúncia e refaz automaticamente se errou
       let finalAudioUrl = data.audioUrl
-      const maxAsrRetries = 0
+      const maxAsrRetries = ttsModel === 'omnivoice' ? 2 : 0 // Só VozPro faz retry (é rápido)
       const originalTextForCompare = textToSend.replace(/\[.*?\]/g, '') // Remove colchetes de pronúncia pra comparar
 
       if (maxAsrRetries > 0 && originalTextForCompare.split(/\s+/).length >= 5) {
@@ -1075,6 +1426,16 @@ export default function VozProClient() {
 
                 // Regenerar com a mesma chamada
                 const retryHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+                if (lastRequestUrl.includes('sorteiomax')) {
+                  // PHP direto precisa de token novo
+                  try {
+                    const newTokenRes = await fetch('/api/omnivoice-token')
+                    if (newTokenRes.ok) {
+                      const { token: newToken } = await newTokenRes.json()
+                      if (newToken) retryHeaders['X-Generate-Token'] = newToken
+                    }
+                  } catch { /* sem token, tenta sem */ }
+                }
 
                 const retryRes = await fetch(lastRequestUrl, {
                   method: 'POST',
@@ -1187,7 +1548,7 @@ export default function VozProClient() {
       setIsGenerating(false)
       setGeneratingTime(0)
     }
-  }, [text, selectedVariationId, language, speed, numStep, guidanceScale, trackEnabled, selectedTrackId, trackVolume, duckVolume, fadeInMs, duckFadeMs, unduckFadeMs, fadeOutMs, musicStartLeadMs, voiceMode, uploadedVoiceUrl, pronunciationOptimization, llmPreprocess])
+  }, [text, selectedVariationId, language, speed, numStep, guidanceScale, trackEnabled, selectedTrackId, trackVolume, duckVolume, fadeInMs, duckFadeMs, unduckFadeMs, fadeOutMs, musicStartLeadMs, omnivoicePhpUrl, ttsModel, voiceMode, uploadedVoiceUrl, pronunciationOptimization, llmPreprocess])
 
   // Get the active audio URL
   const activeAudioUrl = mixedAudioUrl || audioUrl
@@ -1387,6 +1748,57 @@ export default function VozProClient() {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Left Panel - Voice & Track Selection */}
           <div className="lg:col-span-3 space-y-5">
+            {/* TTS Model Selector */}
+            <Card className="bg-white/5 border-white/10 backdrop-blur">
+              <CardContent className="pt-5 space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Zap className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-lg font-bold text-white">Modelo TTS</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setTtsModel('f5tts')}
+                    className={`p-3 rounded-xl border text-center transition-all ${
+                      ttsModel === 'f5tts'
+                        ? 'border-violet-500 bg-violet-500/20 shadow-lg shadow-violet-500/10'
+                        : 'border-white/10 bg-white/5 hover:border-white/20'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">🎙️</div>
+                    <div className={`text-xs font-medium ${ttsModel === 'f5tts' ? 'text-violet-200' : 'text-slate-400'}`}>
+                      F5-TTS
+                    </div>
+                    <div className="text-[10px] text-slate-600 mt-1">Clonagem fiel, chunking</div>
+                  </button>
+                  <button
+                    onClick={() => setTtsModel('omnivoice')}
+                    disabled={!omnivoiceAvailable}
+                    className={`p-3 rounded-xl border text-center transition-all ${
+                      ttsModel === 'omnivoice'
+                        ? 'border-amber-500 bg-amber-500/20 shadow-lg shadow-amber-500/10'
+                        : omnivoiceAvailable
+                          ? 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/8'
+                          : 'border-white/5 bg-white/[0.02] opacity-40 cursor-not-allowed'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">⚡</div>
+                    <div className={`text-xs font-medium ${ttsModel === 'omnivoice' ? 'text-amber-200' : 'text-slate-400'}`}>
+                      VozPro Turbo
+                    </div>
+                    <div className="text-[10px] text-slate-600 mt-1">
+                      {omnivoiceAvailable ? 'RTF 0.025, 600+ idiomas' : 'Servidor offline'}
+                    </div>
+                  </button>
+                </div>
+                {ttsModel === 'omnivoice' && (
+                  <p className="text-[10px] text-amber-400/80">
+                    VozPro suporta: Voice Design, pronúncia CMU [B EY1 S], símbolos [laughter], e 600+ idiomas.
+                    Voice Design e Auto Voice funcionam melhor no VozPro.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Voice Selection */}
             <Card className="bg-white/5 border-white/10 backdrop-blur">
               <CardHeader className="pb-3">
@@ -1684,7 +2096,7 @@ export default function VozProClient() {
                 {voiceMode === 'auto' && (
                   <div className="pt-2 border-t border-white/10">
                     <p className="text-xs text-blue-300/70 text-center">
-                      O sistema vai criar uma voz aleatória. Cada geração será diferente!
+                      O VozPro vai criar uma voz aleatória. Cada geração será diferente!
                     </p>
                   </div>
                 )}
