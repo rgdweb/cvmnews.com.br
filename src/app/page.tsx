@@ -1321,7 +1321,7 @@ export default function VozProClient() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#0a0520] via-violet-950/90 to-slate-950 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-[#0a0520] via-violet-950/90 to-slate-950 relative">
       {/* Ambient background effects */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/3 w-[600px] h-[600px] bg-violet-600/[0.07] rounded-full blur-[200px]" />
