@@ -2299,7 +2299,7 @@ export default function VozProClient() {
             </Card>
 
             {/* Info card */}
-            <Card className="bg-white/[0.03] border-white/[0.08] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)] relative overflow-hidden">
+            <Card className="relative z-30 bg-white/[0.03] border-white/[0.08] backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)] overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
               <CardContent className="pt-5">
                 <div className="space-y-3 text-sm text-slate-400">
