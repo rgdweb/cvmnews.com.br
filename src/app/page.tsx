@@ -2124,24 +2124,26 @@ export default function VozProClient() {
               </Card>
             </details>
 
-            {/* Generate Button */}
-            <Button
-              onClick={handleGenerate}
-              disabled={isGenerating || !text.trim() || (!selectedVariationId && !uploadedVoiceUrl)}
-              className="w-full h-14 text-lg font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 hover:from-violet-500 hover:via-purple-500 hover:to-fuchsia-500 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50 transition-all duration-300 hover:shadow-violet-500/40 hover:scale-[1.01] active:scale-[0.99] ring-0 hover:ring-2 hover:ring-violet-400/20"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Gerando...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-5 h-5 mr-2" />
-                  Gerar Voz
-                </>
-              )}
-            </Button>
+            {/* Generate Button — desktop */}
+            <div className="hidden lg:block">
+              <Button
+                onClick={handleGenerate}
+                disabled={isGenerating || !text.trim() || (!selectedVariationId && !uploadedVoiceUrl)}
+                className="w-full h-14 text-lg font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 hover:from-violet-500 hover:via-purple-500 hover:to-fuchsia-500 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50 transition-all duration-300 hover:shadow-violet-500/40 hover:scale-[1.01] active:scale-[0.99] ring-0 hover:ring-2 hover:ring-violet-400/20"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Gerando...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Gerar Voz
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
 
           {/* Right Panel - Output — desktop only, mobile has fixed bottom player */}
@@ -2426,204 +2428,128 @@ export default function VozProClient() {
         </div>
       </main>
 
-      {/* ===== MOBILE FIXED BOTTOM PLAYER ===== */}
+      {/* ===== MOBILE FIXED BOTTOM BAR ===== */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50">
-        {/* Generating state — compact bar */}
-        {isGenerating && (
-          <div className="bg-slate-950/90 backdrop-blur-xl border-t border-violet-500/20 px-4 py-3">
-            <div className="flex items-center gap-3">
-              <Loader2 className="w-5 h-5 text-violet-400 animate-spin shrink-0" />
+        {/* Backdrop when expanded */}
+        {mobilePlayerExpanded && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobilePlayerExpanded(false)} style={{ zIndex: 40 }} />
+        )}
+
+        {/* Expanded audio result — slides up when there's audio */}
+        {mobilePlayerExpanded && (audioUrl || mixedAudioUrl) && (
+          <div
+            className="fixed bottom-16 left-0 right-0 bg-slate-950/95 backdrop-blur-2xl border-t border-violet-500/20 rounded-t-2xl max-h-[60vh] overflow-y-auto z-50 px-4 pb-4 pt-3 space-y-3"
+          >
+            <div className="flex justify-center">
+              <div className="w-10 h-1 rounded-full bg-white/20" />
+            </div>
+
+            {/* Audio player */}
+            <div className="bg-gradient-to-br from-violet-500/[0.08] via-purple-500/[0.05] to-transparent rounded-2xl p-4 border border-violet-500/20 ring-1 ring-violet-500/10 shadow-inner relative overflow-hidden">
+              <audio
+                ref={resultAudioRef}
+                src={mixedAudioUrl || audioUrl || undefined}
+                className="w-full relative z-10"
+                controls
+                autoPlay
+              />
+            </div>
+
+            {/* Status badges */}
+            <div className="flex flex-wrap gap-2">
+              {selectedVoice && (
+                <Badge variant="outline" className="border-violet-500/30 text-violet-300 bg-violet-500/5 text-xs">{selectedVoice.name}</Badge>
+              )}
+              {selectedVariation && (
+                <Badge variant="outline" className="border-purple-500/30 text-purple-300 bg-purple-500/5 text-xs">{selectedVariation.emoji} {selectedVariation.label}</Badge>
+              )}
+            </div>
+
+            {/* Controls */}
+            <div className="flex gap-2">
+              <Button onClick={togglePlayback} variant="outline" size="sm" className="flex-1 border-violet-500/30 bg-violet-500/10 text-violet-100 gap-1.5">
+                {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                {isPlaying ? 'Pausar' : 'Ouvir'}
+              </Button>
+              <Button onClick={stopPlayback} variant="outline" size="sm" className="border-slate-500/30 bg-slate-500/10 text-slate-200">
+                <Square className="w-4 h-4" />
+              </Button>
+              <Button onClick={handleDownload} size="sm" className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 text-white gap-1.5">
+                <Download className="w-4 h-4" />
+                Baixar
+              </Button>
+            </div>
+
+            {/* Switch voice/mixed */}
+            {isMixed && audioUrl && mixedAudioUrl && (
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
+                <Button variant="ghost" size="sm" className="h-7 px-3 text-xs" onClick={() => { const a = resultAudioRef.current; if (a) { a.src = mixedAudioUrl; a.play().catch(() => {}) } }}>Com trilha</Button>
+                <span className="text-slate-600">|</span>
+                <Button variant="ghost" size="sm" className="h-7 px-3 text-xs" onClick={() => { const a = resultAudioRef.current; if (a) { a.src = audioUrl; a.play().catch(() => {}) } }}>Somente voz</Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* FIXED BOTTOM BAR — always visible with Generate button */}
+        <div className="relative z-50 bg-slate-950/95 backdrop-blur-2xl border-t border-violet-500/20 px-4 py-3">
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/40 to-transparent" />
+
+          {/* Audio generated — compact bar with play + result indicator */}
+          {(audioUrl || mixedAudioUrl) && !isGenerating && (
+            <div
+              className="flex items-center gap-3 mb-2 pb-2 border-b border-white/[0.06] cursor-pointer"
+              onClick={() => setMobilePlayerExpanded(!mobilePlayerExpanded)}
+            >
+              <button
+                onClick={(e) => { e.stopPropagation(); togglePlayback() }}
+                className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/30 shrink-0 active:scale-95 transition-transform"
+              >
+                {isPlaying ? <Pause className="w-3.5 h-3.5 text-white" /> : <Play className="w-3.5 h-3.5 text-white ml-0.5" />}
+              </button>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-violet-300 font-medium">Gerando seu áudio...</p>
-                <p className="text-xs text-slate-500">
-                  {generatingTime < 5 ? 'Iniciando...' : `${generatingTime}s`}
+                <p className="text-xs text-white font-medium truncate">
+                  {selectedVoice?.name || 'Áudio gerado'}
+                  {selectedVariation && <span className="text-slate-400"> — {selectedVariation.label}</span>}
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  {mobilePlayerExpanded ? 'Toque para fechar' : 'Toque para ouvir'}
                 </p>
               </div>
-              <div className="flex gap-1">
-                <div className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '100ms' }} />
-                <div className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '200ms' }} />
-              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleDownload() }}
+                className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 active:scale-95 transition-transform"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
+              </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Audio generated — expandable player */}
-        {(audioUrl || mixedAudioUrl) && !isGenerating && (
-          <>
-            {/* Backdrop when expanded */}
-            {mobilePlayerExpanded && (
-              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setMobilePlayerExpanded(false)} />
+          {/* Generating indicator */}
+          {isGenerating && (
+            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/[0.06]">
+              <Loader2 className="w-4 h-4 text-violet-400 animate-spin shrink-0" />
+              <span className="text-xs text-violet-300 flex-1">Gerando áudio... {generatingTime}s</span>
+            </div>
+          )}
+
+          {/* Generate Button — always in the fixed bar on mobile */}
+          <Button
+            onClick={handleGenerate}
+            disabled={isGenerating || !text.trim() || (!selectedVariationId && !uploadedVoiceUrl)}
+            className="w-full h-12 text-base font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 hover:from-violet-500 hover:via-purple-500 hover:to-fuchsia-500 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50 transition-all duration-300 active:scale-[0.98]"
+          >
+            {isGenerating ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Gerando...</>
+            ) : (
+              <><Sparkles className="w-4 h-4 mr-2" />Gerar Voz</>
             )}
-
-            <div className={`relative z-50 bg-slate-950/95 backdrop-blur-2xl border-t border-violet-500/20 transition-all duration-300 ease-in-out ${mobilePlayerExpanded ? 'rounded-t-2xl max-h-[85vh] overflow-y-auto' : ''}`}>
-              {/* Gradient top edge */}
-              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/40 to-transparent" />
-
-              {mobilePlayerExpanded && (
-                <div className="flex justify-center pt-2 pb-1">
-                  <div className="w-10 h-1 rounded-full bg-white/20" />
-                </div>
-              )}
-
-              <div className={mobilePlayerExpanded ? 'px-4 pb-6 space-y-4' : 'px-4 py-3'}>
-                {/* Compact bar (collapsed) */}
-                {!mobilePlayerExpanded && (
-                  <div
-                    className="flex items-center gap-3 cursor-pointer"
-                    onClick={() => setMobilePlayerExpanded(true)}
-                  >
-                    {/* Play/Pause mini button */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); togglePlayback() }}
-                      className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/30 shrink-0 active:scale-95 transition-transform"
-                    >
-                      {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}
-                    </button>
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white font-medium truncate">
-                        {selectedVoice?.name || 'Áudio gerado'}
-                        {selectedVariation && <span className="text-slate-400"> — {selectedVariation.label}</span>}
-                      </p>
-                      <p className="text-xs text-slate-500">Toque para expandir</p>
-                    </div>
-
-                    {/* Download mini button */}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDownload() }}
-                      className="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0 active:scale-95 transition-transform"
-                    >
-                      <Download className="w-4 h-4 text-emerald-400" />
-                    </button>
-                  </div>
-                )}
-
-                {/* Expanded player */}
-                {mobilePlayerExpanded && (
-                  <div className="space-y-4">
-                    {/* Header */}
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-white font-semibold flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-violet-500/15 flex items-center justify-center ring-1 ring-violet-500/20">
-                          <Volume2 className="w-4 h-4 text-violet-400" />
-                        </div>
-                        Resultado
-                      </h3>
-                      <button
-                        onClick={() => setMobilePlayerExpanded(false)}
-                        className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Audio player */}
-                    <div className="bg-gradient-to-br from-violet-500/[0.08] via-purple-500/[0.05] to-transparent rounded-2xl p-4 border border-violet-500/20 ring-1 ring-violet-500/10 shadow-inner relative overflow-hidden">
-                      <div className="absolute inset-0 bg-gradient-to-t from-violet-500/5 to-transparent" />
-                      <audio
-                        src={mixedAudioUrl || audioUrl || undefined}
-                        className="w-full relative z-10"
-                        controls
-                        autoPlay
-                      />
-                    </div>
-
-                    {/* Status badges */}
-                    <div className="flex flex-wrap gap-2">
-                      {selectedVoice && (
-                        <Badge variant="outline" className="border-violet-500/30 text-violet-300 bg-violet-500/5 text-xs">
-                          {selectedVoice.name}
-                        </Badge>
-                      )}
-                      {selectedVariation && (
-                        <Badge variant="outline" className="border-purple-500/30 text-purple-300 bg-purple-500/5 text-xs">
-                          {selectedVariation.emoji} {selectedVariation.label}
-                        </Badge>
-                      )}
-                      {isMixed && selectedTrack && (
-                        <Badge variant="outline" className="border-emerald-500/30 text-emerald-300 bg-emerald-500/5 text-xs">
-                          <Music className="w-3 h-3 mr-1" />
-                          {selectedTrack.name}
-                        </Badge>
-                      )}
-                    </div>
-
-                    {/* Controls */}
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => { togglePlayback(); setMobilePlayerExpanded(false) }}
-                        variant="outline"
-                        className="flex-1 border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 text-violet-100 hover:text-white gap-1.5"
-                        size="sm"
-                      >
-                        {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                        {isPlaying ? 'Pausar' : 'Reproduzir'}
-                      </Button>
-                      <Button
-                        onClick={stopPlayback}
-                        variant="outline"
-                        className="border-slate-500/30 bg-slate-500/10 hover:bg-slate-500/20 text-slate-200"
-                        size="sm"
-                      >
-                        <Square className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={handleDownload}
-                        className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white gap-1.5 flex-1"
-                        size="sm"
-                      >
-                        <Download className="w-4 h-4" />
-                        Baixar MP3
-                      </Button>
-                    </div>
-
-                    {/* Switch voice/mixed */}
-                    {isMixed && audioUrl && mixedAudioUrl && (
-                      <div className="flex items-center justify-center gap-2 text-xs text-slate-400 pt-1">
-                        <span>Ouvindo:</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-3 text-xs"
-                          onClick={() => {
-                            const audio = document.querySelector('audio')
-                            if (audio) { audio.src = mixedAudioUrl; audio.play().catch(() => {}) }
-                          }}
-                        >
-                          Com trilha
-                        </Button>
-                        <span className="text-slate-600">|</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-3 text-xs"
-                          onClick={() => {
-                            const audio = document.querySelector('audio')
-                            if (audio) { audio.src = audioUrl; audio.play().catch(() => {}) }
-                          }}
-                        >
-                          Somente voz
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Empty state — nothing generated yet */}
-        {!audioUrl && !mixedAudioUrl && !isGenerating && (
-          <div className="bg-slate-950/80 backdrop-blur-xl border-t border-white/[0.06] px-4 py-2">
-            <p className="text-[11px] text-slate-600 text-center">Nenhum áudio gerado</p>
-          </div>
-        )}
+          </Button>
+        </div>
       </div>
 
-      {/* Mobile bottom spacing so content isn't hidden behind fixed player */}
-      <div className="lg:hidden h-16" />
+      {/* Mobile bottom spacing so content isn't hidden behind fixed bar */}
+      <div className="lg:hidden h-24" />
 
       {/* Footer — hidden on mobile (covered by fixed player) */}
       <footer className="hidden lg:block border-t border-white/[0.06] bg-slate-950/40 backdrop-blur-xl mt-auto relative">
