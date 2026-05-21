@@ -28,6 +28,11 @@ import soundfile as sf
 
 from omnivoice import OmniVoice
 import torch
+
+# LIMITAR GPU a 85% (deixa ~1.8GB livre numa RTX 3060 12GB)
+torch.cuda.set_per_process_memory_fraction(0.85)
+# Limpar cache residual da PyTorch ao iniciar
+torch.cuda.empty_cache()
 import gradio as gr
 
 # ============================================
@@ -49,7 +54,8 @@ def load_model():
     model = OmniVoice.from_pretrained(
         "k2-fsa/OmniVoice",
         device_map="cuda:0",
-        dtype=torch.float16
+        dtype=torch.float16,
+        max_memory={0: "10GiB"}
     )
 
     elapsed = time.time() - start
@@ -182,6 +188,8 @@ def generate_speech(
     # Gerar
     audio_list = m.generate(**kwargs)
     audio_array = audio_list[0]
+    # Liberar cache GPU apos geracao
+    torch.cuda.empty_cache()
 
     elapsed = time.time() - start
     duration = len(audio_array) / SAMPLE_RATE
