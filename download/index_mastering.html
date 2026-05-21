@@ -292,24 +292,28 @@ class MEngine{
 
     smartScore(){
         const a=this.analysis;let score=0;
-        // LUFS: range -16 a -8 e streaming-ready (25pts)
-        const lufsOk=a.lufs>=-16&&a.lufs<=-8;
-        const lufsNear=a.lufs>=-20&&a.lufs<=-6;
-        score+=lufsOk?25:lufsNear?16:4;
-        // True Peak: <0.95 e seguro, o limiter cuida do resto (20pts)
-        score+=a.pk<0.95?20:a.pk<0.98?10:2;
-        // DR: 4 a 12 e range saudavel para qualquer genero (20pts)
-        const drOk=a.dr>=4&&a.dr<=12;
-        const drNear=a.dr>=2&&a.dr<=14;
-        score+=drOk?20:drNear?12:3;
-        // Balanceamento espectral RELATIVO: bandas vs media (25pts)
-        // Ignora alvos fixos — se tudo esta proporcional, EQ ta boa
+        // PEAK ALTO = audio ja masterizado (indicador mais confiavel)
+        // Se peak > 0.95, o audio ja foi limitado, quase certo que ta masterizado
+        const alreadyMastered=a.pk>0.95;
+        if(alreadyMastered)score+=35; // 35 pts so por ter peak alto
+        else if(a.pk>0.85)score+=25;
+        else if(a.pk>0.7)score+=15;
+        else score+=5;
+        // LUFS: ranges largos pq o calculo e aproximado (20pts)
+        const lufsOk=a.lufs>=-20&&a.lufs<=-6;
+        score+=lufsOk?20:a.lufs>=-26&&a.lufs<=-2?12:3;
+        // DR: se alto = precisa de comp. Se baixo = ja comprimido (15pts)
+        if(alreadyMastered)score+=15; // pk alto implica DR controlado
+        else if(a.dr>=4&&a.dr<=14)score+=15;
+        else if(a.dr>=2&&a.dr<=16)score+=10;
+        else score+=3;
+        // Balanceamento espectral RELATIVO (20pts)
         const avg=a.bands.reduce((s,b)=>s+b.db,0)/a.bands.length;
         let maxDev=0;
         for(const b of a.bands)maxDev=Math.max(maxDev,Math.abs(b.db-avg));
-        score+=maxDev<3?25:maxDev<5?18:maxDev<8?10:3;
-        // Crest Factor: 5 a 20 e aceitavel (10pts)
-        score+=(a.crestFactor>=5&&a.crestFactor<=20)?10:(a.crestFactor>=3&&a.crestFactor<=22)?5:2;
+        score+=maxDev<4?20:maxDev<7?14:maxDev<10?7:2;
+        // Crest Factor (10pts)
+        score+=(a.crestFactor>=3&&a.crestFactor<=22)?10:5;
         return{score,total:100,pct:score};
     }
 
@@ -317,53 +321,61 @@ class MEngine{
         const a=this.analysis;
         const sm=this.smartScore();
         const pct=sm.pct;
-        // bf = fator de intensidade da correcao
-        // Se pct=100 (perfeito), bf=0 (nao mexe em nada)
-        // Se pct=30 (ruim), bf=0.7 (correcao forte)
-        const bf=Math.max(0,Math.min(0.7,(100-pct)/100*0.7));
-
         const c={bass:0,lowMid:0,mid:0,treble:0,comp:0,vol:0,drv:0};
 
-        // === LUFS: so ajusta se estiver fora do range seguro ===
-        if(a.lufs<-18){c.vol=Math.min(4,(-14-a.lufs)*0.4*bf)}
-        else if(a.lufs<-16){c.vol=Math.min(2,(-14-a.lufs)*0.3*bf)}
-        else if(a.lufs>-6){c.vol=Math.max(-4,(-14-a.lufs)*0.4*bf)}
-        else if(a.lufs>-8){c.vol=Math.max(-2,(-14-a.lufs)*0.3*bf)}
-        // Dentro de -16 a -8: vol = 0, nao precisa mexer
+        // ============================================
+        // PROTECAO PRINCIPAL: se peak > 0.90, NAO
+        // adiciona NENHUM ganho positivo.
+        // Audio com peak alto ja foi limitado/masterizado.
+        // ============================================
+        const hasHeadroom=a.pk<0.90;
+        const alreadyMastered=a.pk>0.95;
 
-        // === EQ: usa BALANCO ESPECTRAL RELATIVO ===
-        // Compara cada banda com a media de todas as bandas
-        const avg=a.bands.reduce((s,b)=>s+b.db,0)/a.bands.length;
-        let bassD=0,lowMidD=0,midD=0,trebD=0,maxDev=0;
-        for(const b of a.bands){
-            const dev=b.db-avg;
-            if(dev>maxDev)maxDev=dev;
-            if(b.name==='Bass')bassD+=dev;
-            else if(b.name==='LowMid')lowMidD+=dev;
-            else if(b.name==='Mid')midD+=dev;
-            else if(b.name==='HiMid'||b.name==='Brilho')trebD+=dev;
+        // Se audio ja esta masterizado (peak > 0.95), zera tudo e sai
+        if(alreadyMastered){
+            c._smartScore=pct;c._boostFactor=0;c._maxDev=0;
+            return c;
         }
-        // Corrige desbalance, escala com bf
-        // Se bf=0 (audio ja otimo), NENHUMA correcao de EQ
-        // Negativo = reduz (banda tava alta), Positivo = aumenta (banda tava baixa)
-        c.bass=Math.max(-8,Math.min(8,-bassD*0.6*bf));
-        c.lowMid=Math.max(-8,Math.min(8,-lowMidD*0.6*bf));
-        c.mid=Math.max(-8,Math.min(8,-midD*0.6*bf));
-        c.treble=Math.max(-8,Math.min(8,-trebD*0.4*bf));
 
-        // === COMPRESSAO: so se DR esta alto E peak esta seguro E precisa de correcao ===
-        if(a.dr>12&&a.pk<0.95&&pct<75){c.comp=Math.min(40,(a.dr-10)*5*bf)}
-        else if(a.dr>14&&a.pk<0.95&&pct<75){c.comp=Math.min(50,(a.dr-10)*7*bf)}
+        // bf = fator de intensidade da correcao
+        const bf=Math.max(0,Math.min(0.7,(100-pct)/100*0.7));
 
-        // === SATURACAO: so se peak esta seguro E precisa de correcao ===
-        if(a.pk<0.9&&pct<65){c.drv=Math.min(10,4*bf)}
+        // === LUFS: so ajusta se TEM HEADROOM (peak < 0.90) ===
+        if(hasHeadroom){
+            if(a.lufs<-20){c.vol=Math.min(3,(-14-a.lufs)*0.3*bf)}
+            else if(a.lufs<-16){c.vol=Math.min(1.5,(-14-a.lufs)*0.2*bf)}
+            else if(a.lufs>-6){c.vol=Math.max(-3,(-14-a.lufs)*0.3*bf)}
+            else if(a.lufs>-8){c.vol=Math.max(-1.5,(-14-a.lufs)*0.2*bf)}
+        }
+        // Sem headroom: vol fica 0, nao mexe
 
-        // === BLOQUEIO EXTRA: se audio ja esta masterizado (pct>=80), ZERA tudo que restou ===
-        if(pct>=80){c.bass=0;c.lowMid=0;c.mid=0;c.treble=0;c.comp=0;c.vol=0;c.drv=0}
+        // === EQ: so se precisa E tem headroom ===
+        if(bf>0.05){
+            const avg=a.bands.reduce((s,b)=>s+b.db,0)/a.bands.length;
+            let bassD=0,lowMidD=0,midD=0,trebD=0,maxDev=0;
+            for(const b of a.bands){
+                const dev=b.db-avg;
+                if(dev>maxDev)maxDev=dev;
+                if(b.name==='Bass')bassD+=dev;
+                else if(b.name==='LowMid')lowMidD+=dev;
+                else if(b.name==='Mid')midD+=dev;
+                else if(b.name==='HiMid'||b.name==='Brilho')trebD+=dev;
+            }
+            c.bass=Math.max(-6,Math.min(6,-bassD*0.5*bf));
+            c.lowMid=Math.max(-6,Math.min(6,-lowMidD*0.5*bf));
+            c.mid=Math.max(-6,Math.min(6,-midD*0.5*bf));
+            c.treble=Math.max(-6,Math.min(6,-trebD*0.4*bf));
+        }
+
+        // === COMPRESSAO: so se DR alto E tem headroom E precisa ===
+        if(a.dr>12&&hasHeadroom&&pct<70){c.comp=Math.min(35,(a.dr-10)*4*bf)}
+
+        // === SATURACAO: so se tem headroom E precisa de correcao ===
+        if(hasHeadroom&&pct<60){c.drv=Math.min(8,3*bf)}
 
         c._smartScore=pct;
         c._boostFactor=bf;
-        c._maxDev=maxDev;
+        c._maxDev=maxDev||0;
         return c;
     }
 
@@ -730,13 +742,16 @@ function _renderDiag(a,s){
     const action=pct>=85?'Nenhuma correcao significativa':pct>=65?'Correcao leve de balanceamento':pct>=45?'Correcao de EQ e loudness':'Correcao completa (EQ+comp+vol)';
     const badge=`<div class="smart-badge ${lvl} fade">🧠 IA: ${pct}% <span class="smart-meter">${meter}</span><div class="smart-detail">${lbl} — ${action}</div></div>`;
 
-    // Diagnostico com ranges corretos para audio masterizado
-    const lufsOk=a.lufs>=-16&&a.lufs<=-8,lufsWn=a.lufs>=-20&&a.lufs<=-6;
-    const pkOk=a.pk<0.95,pkWn=a.pk<0.98;
-    const drOk=a.dr>=4&&a.dr<=12,drWn=a.dr>=2&&a.dr<=14;
-    const cfOk=a.crestFactor>=5&&a.crestFactor<=20,cfWn=a.crestFactor>=3&&a.crestFactor<=22;
+    // Diagnostico: se peak > 0.95 = audio JA MASTERIZADO
+    const isMastered=a.pk>0.95;
+    const lufsOk=isMastered||a.lufs>=-16&&a.lufs<=-8,lufsWn=a.lufs>=-22&&a.lufs<=-4;
+    const pkOk=a.pk<0.90,pkWn=a.pk<0.95;
+    const drOk=isMastered||a.dr>=4&&a.dr<=12,drWn=a.dr>=2&&a.dr<=14;
+    const cfOk=a.crestFactor>=3&&a.crestFactor<=22,cfWn=cfOk;
+    const pkLabel=isMastered?'Ja limitado':pkOk?'Seguro':'Cuidado';
+    const pkClass=isMastered?'ok':pkOk?'ok':pkWn?'wn':'bd';
 
-    $('diagGrid').innerHTML=badge+`<div class="dcard fade"><div class="ic ${lufsOk?'ok':lufsWn?'wn':'bd'}">🔊</div><div class="inf"><div class="lb">Loudness</div><div class="vl">${a.lufs.toFixed(1)} LUFS</div></div><span class="st ${lufsOk?'ok':lufsWn?'wn':'bd'}">${lufsOk?'Otimo':lufsWn?'Ajustar':'Fora'}</span></div><div class="dcard fade"><div class="ic ${pkOk?'ok':pkWn?'wn':'bd'}">🎚️</div><div class="inf"><div class="lb">True Peak</div><div class="vl">${a.pkDb.toFixed(1)} dBTP</div></div><span class="st ${pkOk?'ok':pkWn?'wn':'bd'}">${pkOk?'Seguro':'Cuidado'}</span></div><div class="dcard fade"><div class="ic ${drOk?'ok':drWn?'wn':'bd'}">📊</div><div class="inf"><div class="lb">Dinamica</div><div class="vl">${a.dr.toFixed(1)} DR</div></div><span class="st ${drOk?'ok':drWn?'wn':'bd'}">${drOk?'OK':'Ajustar'}</span></div><div class="dcard fade"><div class="ic ${cfOk?'ok':cfWn?'wn':'bd'}">⚡</div><div class="inf"><div class="lb">Crest Factor</div><div class="vl">${a.crestFactor.toFixed(1)} dB</div></div><span class="st ${cfOk?'ok':cfWn?'wn':'bd'}">${cfOk?'OK':'Ajustar'}</span></div>`;
+    $('diagGrid').innerHTML=badge+`<div class="dcard fade"><div class="ic ${lufsOk?'ok':lufsWn?'wn':'bd'}">🔊</div><div class="inf"><div class="lb">Loudness</div><div class="vl">${a.lufs.toFixed(1)} LUFS</div></div><span class="st ${lufsOk?'ok':lufsWn?'wn':'bd'}">${lufsOk?'Otimo':lufsWn?'Ajustar':'Fora'}</span></div><div class="dcard fade"><div class="ic ${pkClass}">🎚️</div><div class="inf"><div class="lb">True Peak</div><div class="vl">${a.pkDb.toFixed(1)} dBTP</div></div><span class="st ${pkClass}">${pkLabel}</span></div><div class="dcard fade"><div class="ic ${drOk?'ok':drWn?'wn':'bd'}">📊</div><div class="inf"><div class="lb">Dinamica</div><div class="vl">${a.dr.toFixed(1)} DR</div></div><span class="st ${drOk?'ok':drWn?'wn':'bd'}">${drOk?'OK':'Ajustar'}</span></div><div class="dcard fade"><div class="ic ${cfOk?'ok':'bd'}">⚡</div><div class="inf"><div class="lb">Crest Factor</div><div class="vl">${a.crestFactor.toFixed(1)} dB</div></div><span class="st ${cfOk?'ok':'bd'}">${cfOk?'OK':'Ajustar'}</span></div>`;
     $('specGrid').innerHTML=a.bands.map(b=>{const p=Math.max(5,Math.min(100,((b.db+60)/60)*100)),cl=b.sug.t==='ok'?'var(--ok)':b.sug.t==='warn'?'var(--warn)':'var(--bad)',ic=b.sug.d==='up'?'🔺':b.sug.d==='dn'?'🔻':'✅';return`<div class="bcard fade"><div class="bh"><span class="bn">${b.icon} ${b.name}</span><span class="bv" style="color:${cl}">${b.db.toFixed(1)} dB</span></div><div class="bar"><div style="width:${p}%;background:${cl}"></div></div><div class="bs" style="color:${cl}">${ic} ${b.sug.tx}</div></div>`}).join('');
     const iaMsgs=[];if(pct>=85){iaMsgs.push({d:'ok',t:'Audio ja otimo para streaming! Nenhuma correcao necessaria.'});iaMsgs.push({d:'ok',t:'LUFS, True Peak e dinamica dentro dos padroes. Pronto para publicar.'})}else if(pct>=65){iaMsgs.push({d:'ok',t:'Audio em bom estado. Correcoes leves aplicadas.'});for(const si of s)iaMsgs.push(si)}else{iaMsgs.push({d:'up',t:'Audio precisa de masterizacao. IA aplicou correcoes.'});for(const si of s)iaMsgs.push(si)}
     $('sugList').innerHTML=iaMsgs.map(s=>`<div class="sugitem"><span class="ar ${s.d==='up'?'up':s.d==='dn'?'dn':'ok'}">${s.d==='up'?'▲':s.d==='dn'?'▼':'●'}</span><span>${s.t}</span></div>`).join('');
