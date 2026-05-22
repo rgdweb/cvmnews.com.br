@@ -754,43 +754,10 @@ export default function VozProClient() {
     loadData()
   }, [authChecked])
 
-  // Detectar duração das trilhas de forma leve (só metadados, sem baixar o áudio inteiro)
-  useEffect(() => {
-    if (tracks.length === 0) return
-    const durations = new Map<string, number>()
-    const audioEls: HTMLAudioElement[] = []
-
-    tracks.forEach(track => {
-      if (track.duration > 0 || !track.audioPath) return
-      const el = new Audio(track.audioPath)
-      el.preload = 'metadata'
-      const onLoad = () => {
-        if (el.duration && isFinite(el.duration)) {
-          durations.set(track.id, el.duration)
-        }
-        el.removeEventListener('loadedmetadata', onLoad)
-        el.onerror = null
-      }
-      el.onerror = () => { el.removeEventListener('loadedmetadata', onLoad) }
-      el.addEventListener('loadedmetadata', onLoad)
-      audioEls.push(el)
-    })
-
-    // Se encontrou durações, atualizar as trilhas
-    const checkInterval = setInterval(() => {
-      if (durations.size === 0) { clearInterval(checkInterval); return }
-      setTracks(prev => prev.map(t => {
-        const d = durations.get(t.id)
-        return d ? { ...t, duration: d } : t
-      }))
-      clearInterval(checkInterval)
-    }, 500)
-
-    return () => {
-      clearInterval(checkInterval)
-      audioEls.forEach(el => { el.pause(); el.src = '' })
-    }
-  }, [tracks.length])
+  // Detectar duração da trilha quando usuário aperta play (via VoicePreviewButton)
+  const handleTrackDurationDetected = useCallback((trackId: string, duration: number) => {
+    setTracks(prev => prev.map(t => t.id === trackId ? { ...t, duration } : t))
+  }, [])
 
   // Auto-select first variation WITH AUDIO when voice changes
   // IMPORTANTE: só auto-selecionar se a variação TEM áudio.
@@ -1906,6 +1873,7 @@ export default function VozProClient() {
                                     currentlyPlayingId={previewingTrackId}
                                     onPlayStart={setPreviewingTrackId}
                                     onPlayEnd={() => setPreviewingTrackId(null)}
+                                    onDurationDetected={handleTrackDurationDetected}
                                   />
                                 </div>
                                 <p className="text-xs text-slate-500 line-clamp-1">{track.description}</p>
@@ -1972,6 +1940,7 @@ export default function VozProClient() {
                                     currentlyPlayingId={previewingTrackId}
                                     onPlayStart={setPreviewingTrackId}
                                     onPlayEnd={() => setPreviewingTrackId(null)}
+                                    onDurationDetected={handleTrackDurationDetected}
                                   />
                                 </div>
                                 <p className="text-xs text-slate-500 line-clamp-1">{track.description}</p>
@@ -2048,6 +2017,7 @@ export default function VozProClient() {
                                 currentlyPlayingId={previewingTrackId}
                                 onPlayStart={setPreviewingTrackId}
                                 onPlayEnd={() => setPreviewingTrackId(null)}
+                                onDurationDetected={handleTrackDurationDetected}
                               />
                             </div>
                             <p className="text-xs text-slate-500 line-clamp-1">{track.description}</p>

@@ -11,6 +11,7 @@ interface VoicePreviewButtonProps {
   voiceId: string
   onPlayStart: (id: string) => void
   onPlayEnd: () => void
+  onDurationDetected?: (id: string, duration: number) => void
   className?: string
 }
 
@@ -25,6 +26,7 @@ export default function VoicePreviewButton({
   voiceId,
   onPlayStart,
   onPlayEnd,
+  onDurationDetected,
   className = '',
 }: VoicePreviewButtonProps) {
   const [loading, setLoading] = useState(false)
@@ -55,6 +57,12 @@ export default function VoicePreviewButton({
     const audio = new Audio()
     audio.preload = 'metadata'
     audio.src = audioUrl
+
+    audio.addEventListener('loadedmetadata', () => {
+      if (audio.duration && isFinite(audio.duration) && onDurationDetected) {
+        onDurationDetected(voiceId, audio.duration)
+      }
+    })
 
     audio.addEventListener('canplaythrough', () => {
       setAudioReady(true)
@@ -94,7 +102,7 @@ export default function VoicePreviewButton({
       audioRef.current = null
       setAudioReady(false)
     }
-  }, [audioUrl])
+  }, [audioUrl, voiceId, onDurationDetected])
 
   // Handle play/pause toggle
   const handleToggle = (e: React.MouseEvent) => {
