@@ -496,30 +496,12 @@ if (!$tempRefFile && !empty($refAudioPath)) {
     $audioUrl = null; // vai usar uploadToHF com path existente
 }
 
-// ===== TRIMAR AUDIO DE REFERENCIA (max 10s) para evitar CUDA OOM =====
-if ($tempRefFile && file_exists($tempRefFile)) {
-    define('MAX_REF_AUDIO_SECONDS', 10);
-    $trimScript = __DIR__ . '/trim_audio.py';
-    if (file_exists($trimScript)) {
-        $ext = strtolower(pathinfo($tempRefFile, PATHINFO_EXTENSION));
-        $trimmedFile = tempnam(sys_get_temp_dir(), 'vp_dir_trim_') . '.' . $ext;
-        $cmd = 'python3 ' . escapeshellarg($trimScript) . ' '
-             . escapeshellarg($tempRefFile) . ' '
-             . escapeshellarg($trimmedFile) . ' '
-             . escapeshellarg((string)MAX_REF_AUDIO_SECONDS);
-        $trimOutput = trim(shell_exec($cmd . ' 2>&1') ?? '');
-        if ($trimOutput === 'OK' && file_exists($trimmedFile) && filesize($trimmedFile) > 0) {
-            debugLog('Trim ref audio', 'ok', round(filesize($trimmedFile) / 1024) . 'KB (max ' . MAX_REF_AUDIO_SECONDS . 's)');
-            unlink($tempRefFile);
-            $tempRefFile = $trimmedFile;
-        } else {
-            debugLog('Trim ref audio', 'warn', 'Falha no trim, usando original: ' . $trimOutput);
-            if (file_exists($trimmedFile)) unlink($trimmedFile);
-        }
-    } else {
-        debugLog('Trim ref audio', 'warn', 'trim_audio.py nao encontrado');
-    }
-}
+// ===== TRIM DESATIVADO (22/05/2026) =====
+// OmniVoice funciona com audio de referencia longo (24s+) sem problemas.
+// O trim brusco sem fade causava alucinacoes ("ba", "to", "sao") e audio 4x mais longo.
+// A GPU RTX 3060 12GB aguenta referencias longas com empty_cache() no omnivoice_gpu.py.
+// Se precisar reativar, use trim_audio.py com FADE OUT (nao corte brusco).
+// if ($tempRefFile && file_exists($tempRefFile)) { ... trim logic ... }
 
 // Montar dados do Gradio
 $gradioData = [

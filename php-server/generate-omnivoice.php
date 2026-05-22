@@ -250,47 +250,20 @@ function downloadRefAudio($url, $name) {
 
     debugLog('Download ref audio', 'ok', round(filesize($tempFile) / 1024) . 'KB');
 
-    // ===== TRIMAR AUDIO PARA EVITAR CUDA OOM (max 10s) =====
-    $trimmedFile = trimRefAudioToMaxSeconds($tempFile, 10);
-    if ($trimmedFile && $trimmedFile !== $tempFile) {
-        if (file_exists($tempFile)) unlink($tempFile);
-        $tempFile = $trimmedFile;
-        debugLog('Trim ref audio', 'ok', round(filesize($tempFile) / 1024) . 'KB (max 10s)');
-    } elseif ($trimmedFile === false) {
-        debugLog('Trim ref audio', 'warn', 'Falha no trim, usando original');
-    }
+    // TRIM DESATIVADO (22/05/2026): OmniVoice funciona com audio de referencia longo (24s+).
+    // O trim brusco sem fade causava alucinacoes ("ba", "to", "sao") e audio 4x mais longo.
+    // A GPU RTX 3060 12GB aguenta referencias longas com empty_cache() no omnivoice_gpu.py.
 
     return $tempFile;
 }
 
-// ===================== TRIM AUDIO REF (max seconds) =====================
-define('MAX_REF_AUDIO_SECONDS', 10);
+// ===================== TRIM AUDIO REF (DESATIVADO 22/05/2026) =====================
+// O trim brusco sem fade causava alucinacoes no modelo OmniVoice.
+// Mantido como funcao de fallback caso precise reativar no futuro.
+// define('MAX_REF_AUDIO_SECONDS', 10);
 
 function trimRefAudioToMaxSeconds($filePath, $maxSeconds = 10) {
-    $trimScript = __DIR__ . '/trim_audio.py';
-
-    if (!file_exists($trimScript)) {
-        debugLog('Trim ref audio', 'warn', 'trim_audio.py nao encontrado');
-        return false;
-    }
-
-    $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
-    $trimmedFile = tempnam(sys_get_temp_dir(), 'vp_ov_trim_') . '.' . $ext;
-
-    $cmd = 'python3 ' . escapeshellarg($trimScript) . ' '
-         . escapeshellarg($filePath) . ' '
-         . escapeshellarg($trimmedFile) . ' '
-         . escapeshellarg((string)$maxSeconds);
-
-    $output = shell_exec($cmd . ' 2>&1');
-    $output = trim($output ?? '');
-
-    if ($output === 'OK' && file_exists($trimmedFile) && filesize($trimmedFile) > 0) {
-        return $trimmedFile;
-    }
-
-    if (file_exists($trimmedFile)) unlink($trimmedFile);
-    debugLog('Trim ref audio', 'warn', 'Falha: ' . $output);
+    // DESATIVADO: retornar false (usa audio original)
     return false;
 }
 
