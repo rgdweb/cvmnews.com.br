@@ -679,6 +679,13 @@ if (!$audioUrl) {
 // ===================== BAIXAR AUDIO E RETORNAR =====================
 debugLog('Download audio', 'info', 'baixando audio gerado...');
 
+// Aguardar Gradio terminar de escrever o arquivo no disco.
+// O evento SSE "complete" dispara quando a GERACAO termina, mas o Gradio
+// ainda pode estar salvando o arquivo WAV. Sem esse delay, o download pode
+// pegar um arquivo incompleto (cortando o final do audio em textos longos).
+sleep(2);
+debugLog('Download audio', 'info', 'Aguardou 2s apos SSE complete');
+
 // Detectar extensao real do audio gerado
 $ext = strtolower(pathinfo($audioUrl, PATHINFO_EXTENSION));
 if (empty($ext) || !in_array($ext, ['wav', 'mp3', 'ogg', 'flac'])) {
