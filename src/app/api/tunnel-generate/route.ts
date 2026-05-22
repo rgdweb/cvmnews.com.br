@@ -451,7 +451,7 @@ export async function POST(req: NextRequest) {
       speed || 1,
       null,   // duration
       true,   // preprocess_prompt
-      true,   // postprocess_output
+      false,  // postprocess_output — DESATIVADO (22/05/2026): cortava a ultima silaba do texto
     ]
 
     debug.log('Parametros', 'info', `lang:${language} speed:${speed} steps:${numStep} cfg:${guidanceScale} chunking:${useChunking}`)
