@@ -5,6 +5,42 @@ import { validateGeneratedAudio, shouldRetry, formatValidationLog } from '@/lib/
 import { stripSSMLForTTS } from '@/lib/ssml-parser'
 import { trimAudioBuffer } from '@/lib/audio-trimmer'
 
+// ============================================================
+// UTIL: Adicionar silêncio no final do WAV
+// ============================================================
+function appendSilence(wavBuffer: Buffer, ms: number): Buffer {
+  // Ler header WAV para pegar sample rate e bits per sample
+  if (wavBuffer.length < 44) return wavBuffer
+
+  const sampleRate = wavBuffer.readUInt32LE(24)
+  const bitsPerSample = wavBuffer.readUInt16LE(34)
+  const numChannels = wavBuffer.readUInt16LE(22)
+  const bytesPerSample = (bitsPerSample / 8) * numChannels
+  const extraSamples = Math.round(sampleRate * (ms / 1000))
+  const extraBytes = extraSamples * bytesPerSample
+
+  // Criar silêncio (zeros)
+  const silence = Buffer.alloc(extraBytes, 0)
+
+  // Construir novo WAV: header atualizado + dados originais + silêncio
+  const originalDataSize = wavBuffer.length - 44
+  const newDataSize = originalDataSize + extraBytes
+
+  const output = Buffer.concat([
+    wavBuffer.subarray(0, 4),   // 'RIFF'
+    Buffer.alloc(4),             // tamanho total (preencher abaixo)
+    wavBuffer.subarray(8, 44),   // resto do header
+    wavBuffer.subarray(44),      // dados originais
+    silence,                     // silêncio extra
+  ])
+
+  // Atualizar tamanhos no header
+  output.writeUInt32LE(output.length - 8, 4)  // RIFF chunk size
+  output.writeUInt32LE(newDataSize, 40)       // data subchunk size
+
+  return output
+}
+
 // POST /api/tunnel-generate - Geracao direta via tunnel cloudflared
 // Pipeline completo com prosódia:
 //   1. Chunking de texto (divide por pontuação com duração de pausa)
@@ -340,10 +376,12 @@ async function generateSingleShot(
   const voiceBuffer = Buffer.from(await voiceRes.arrayBuffer())
   debug.log('Download', 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB`)
 
-  // Fade-out DESATIVADO (22/05/2026): 200ms engolia a ultima silaba do texto.
-  // O OmniVoice ja gera audio com final natural, nao precisa de fade artificial.
-  // return applyFadeOut(voiceBuffer, 200)
-  return voiceBuffer
+  // Adicionar 500ms de silencio no final para proteger a ultima silaba.
+  // O postprocess_output do OmniVoice e/ou o Cloudflare Tunnel podem cortar os ultimos bytes.
+  // O silencio extra garante que a vogal final nunca seja perdida.
+  const paddedBuffer = appendSilence(voiceBuffer, 500)
+  debug.log('Padding', 'ok', `+500ms silencio final: ${(paddedBuffer.length / 1024).toFixed(1)}KB`)
+  return paddedBuffer
 }
 
 // ============================================================
