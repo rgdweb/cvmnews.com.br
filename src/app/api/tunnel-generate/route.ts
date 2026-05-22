@@ -364,7 +364,8 @@ export async function POST(req: NextRequest) {
       numStep = 32,
       guidanceScale = 2.0,
       skipASR = false,
-      useChunking = true,  // CHUNKING ativo por padrao (controle de prosódia)
+      useChunking = false,  // CHUNKING DESATIVADO (22/05/2026): causava artefatos nas juncoes.
+      // OmniVoice gera texto longo naturalmente sem necessidade de chunking.
       voiceMode = 'clone', // 'clone' (ref_audio) | 'design' (instruct only) | 'auto' (nenhum)
     } = body
 
@@ -401,14 +402,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Audio de referencia obrigatório no modo clone', debug: debug.result() }, { status: 400 })
       }
 
-      // Auto-trim: limitar a 12s para evitar CUDA OOM e melhorar qualidade
-      if (audioBuffer) {
-        const trimResult = trimAudioBuffer(audioBuffer, fileName, 12)
-        if (trimResult.trimmed) {
-          audioBuffer = trimResult.buffer
-          debug.log('Ref Audio', 'info', `Trimado: ${trimResult.originalDurationSec.toFixed(1)}s → ${trimResult.resultDurationSec.toFixed(1)}s (${trimResult.format})`)
-        }
-      }
+      // Auto-trim: DESATIVADO (22/05/2026)
+      // OmniVoice funciona com audio de referencia longo (24s+) sem problemas.
+      // O trim brusco sem fade causava alucinacoes ("ba", "to", "sao") e audio 4x mais longo.
+      // A GPU RTX 3060 12GB aguenta referencias longas com empty_cache() no omnivoice_gpu.py.
+      // if (audioBuffer) {
+      //   const trimResult = trimAudioBuffer(audioBuffer, fileName, 12)
+      //   ...
+      // }
 
       fileName = referenceAudioName || 'reference.wav'
 
@@ -458,8 +459,10 @@ export async function POST(req: NextRequest) {
     let finalBuffer: Buffer | null = null
     let chunkInfo: TextChunk[] | null = null
 
-    if (useChunking && cleanText.length > 20) {
-      // MODO CHUNKING — gera frase por frase, concatena com silêncio
+    if (false && useChunking && cleanText.length > 20) {
+      // CHUNKING DESATIVADO (22/05/2026): causava artefatos ("ba", "to", "sao") nas juncoes.
+      // OmniVoice funciona melhor com texto inteiro em uma unica chamada.
+      // Mantido como fallback caso precise reativar no futuro.
       debug.log('Pipeline', 'info', 'Modo CHUNKING ativo (prosódia explícita)')
       const chunkResult = await generateWithChunking(tunnelUrl, cleanText, gradioBaseData, debug)
       if (chunkResult) {
