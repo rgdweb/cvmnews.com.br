@@ -479,20 +479,71 @@ async function generateSingleShot(
   debug.log('Download', 'info', `Aguardou ${delayMs}ms apos SSE complete (texto: ${text.length} chars)`)
 
   // Download com retry + validação WAV (tunnel pode truncar arquivos grandes)
-  const voiceBuffer = await downloadWithRetry(result.audioUrl, 3, 2000)
+  let voiceBuffer = await downloadWithRetry(result.audioUrl, 3, 2000)
   if (!voiceBuffer) {
     debug.log('Download', 'error', 'Falha no download apos 3 tentativas')
     return { buffer: null, diagnostics: null }
   }
-  // Log de duração real
+
+  // Verificar se o final do PCM tem zeros (arquivo incompleto — Gradio pré-aloca
+  // o WAV com header + zeros, depois preenche o PCM. Se baixarmos antes de
+  // preencher, o final fica com zeros = "fade out" no audio).
+  // Checar últimos 200ms: se >80% dos samples são zero, arquivo incompleto.
   const dlSampleRate = voiceBuffer.readUInt32LE(24)
   const dlChannels = voiceBuffer.readUInt16LE(22)
   const dlBits = voiceBuffer.readUInt16LE(34)
   const dlBytesPerSample = Math.floor(dlBits / 8)
+  const dlBlockAlign = dlBytesPerSample * dlChannels
   const dlDataSize = voiceBuffer.readUInt32LE(40)
-  const dlDuration = (dlDataSize / dlChannels / dlBytesPerSample / dlSampleRate).toFixed(1)
+  const tail200msBytes = Math.floor(dlSampleRate * 0.2) * dlBlockAlign
+
+  if (dlDataSize > tail200msBytes) {
+    const pcmStart = 44
+    let zeroCount = 0
+    let totalCount = 0
+    for (let i = pcmStart + dlDataSize - tail200msBytes; i < pcmStart + dlDataSize; i += dlBlockAlign) {
+      const sample = Math.abs(voiceBuffer.readInt16LE(i))
+      totalCount++
+      if (sample === 0) zeroCount++
+    }
+    const zeroRatio = zeroCount / totalCount
+    debug.log('Download', 'info', `Tail check: ${zeroCount}/${totalCount} zeros (${(zeroRatio * 100).toFixed(0)}%) nos ultimos 200ms`)
+
+    if (zeroRatio > 0.8) {
+      debug.log('Download', 'warn', `Arquivo incompleto (${(zeroRatio * 100).toFixed(0)}% zeros no final). Aguardando +10s e baixando novamente...`)
+      await new Promise(r => setTimeout(r, 10000))
+      const retryBuffer = await downloadWithRetry(result.audioUrl, 3, 2000)
+      if (retryBuffer) {
+        // Verificar se o retry melhorou (menos zeros no final)
+        let retryZeroCount = 0
+        let retryTotalCount = 0
+        const retryDataSize = retryBuffer.readUInt32LE(40)
+        if (retryDataSize > tail200msBytes) {
+          for (let i = 44 + retryDataSize - tail200msBytes; i < 44 + retryDataSize; i += dlBlockAlign) {
+            const sample = Math.abs(retryBuffer.readInt16LE(i))
+            retryTotalCount++
+            if (sample === 0) retryZeroCount++
+          }
+          const retryZeroRatio = retryZeroCount / retryTotalCount
+          debug.log('Download', 'info', `Retry tail: ${retryZeroCount}/${retryTotalCount} zeros (${(retryZeroRatio * 100).toFixed(0)}%)`)
+          if (retryZeroRatio < zeroRatio) {
+            voiceBuffer = retryBuffer
+            debug.log('Download', 'ok', `Retry melhorou: ${(zeroRatio * 100).toFixed(0)}% → ${(retryZeroRatio * 100).toFixed(0)}% zeros`)
+          } else {
+            debug.log('Download', 'warn', `Retry nao melhorou — mantendo original`)
+          }
+        } else {
+          voiceBuffer = retryBuffer
+        }
+      }
+    }
+  }
+
+  // Log de duração real
+  const finalDataSize = voiceBuffer.readUInt32LE(40)
+  const dlDuration = (finalDataSize / dlChannels / dlBytesPerSample / dlSampleRate).toFixed(1)
   const expectedMinDuration = (text.length * 0.08).toFixed(1)
-  debug.log('Download', 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB (duracao: ${dlDuration}s, esperado >=${expectedMinDuration}s)`)
+  debug.log('Download', 'ok', `Final: ${(voiceBuffer.length / 1024).toFixed(1)}KB, ${dlDuration}s (esperado >=${expectedMinDuration}s)`)
 
   const diagnostics: AudioDiagnostics = {
     textLength: text.length,
