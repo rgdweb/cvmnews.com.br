@@ -730,8 +730,20 @@ export default function VozProClient() {
           }
         }
         if (tracksRes.ok) {
-          const tracksData = await tracksRes.json()
-          setTracks(tracksData)
+          const tracksData: Track[] = await tracksRes.json()
+          // Detectar duração das trilhas que não têm cadastrada
+          const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+          const enrichedTracks = await Promise.all(tracksData.map(async (track) => {
+            if (track.duration > 0 || !track.audioPath) return track
+            try {
+              const res = await fetch(track.audioPath)
+              const arrayBuf = await res.arrayBuffer()
+              const decoded = await audioCtx.decodeAudioData(arrayBuf)
+              return { ...track, duration: decoded.duration }
+            } catch { return track }
+          }))
+          audioCtx.close().catch(() => {})
+          setTracks(enrichedTracks)
         }
         if (configRes.ok) {
           const configData = await configRes.json()
