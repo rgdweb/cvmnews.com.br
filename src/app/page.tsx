@@ -743,6 +743,8 @@ export default function VozProClient() {
   }, [authChecked])
 
   // Auto-select first variation WITH AUDIO when voice changes
+  // IMPORTANTE: só auto-selecionar se a variação TEM áudio.
+  // Se não tem áudio, deixar selectedVariationId vazio → botão fica disabled.
   useEffect(() => {
     if (selectedVoice && selectedVoice.variations.length > 0) {
       // Priorizar variação ativa com áudio
@@ -757,8 +759,8 @@ export default function VozProClient() {
         setSelectedVariationId(withAudio.id)
         return
       }
-      // Último recurso: primeira disponível
-      setSelectedVariationId(selectedVoice.variations[0].id)
+      // SEM áudio disponível → não selecionar (botão fica disabled, pede upload)
+      setSelectedVariationId('')
     } else {
       setSelectedVariationId('')
     }
@@ -2107,11 +2109,23 @@ export default function VozProClient() {
                 onClick={handleGenerate}
                 disabled={isGenerating || !text.trim() || (!selectedVariationId && !uploadedVoiceUrl)}
                 className="w-full h-14 text-lg font-bold bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50"
+                title={
+                  !selectedVariationId && !uploadedVoiceUrl && voiceMode === 'clone'
+                    ? 'Selecione uma voz ou faça upload de um áudio de referência'
+                    : !text.trim()
+                      ? 'Digite o texto para gerar'
+                      : undefined
+                }
               >
                 {isGenerating ? (
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                     Gerando...
+                  </>
+                ) : !selectedVariationId && !uploadedVoiceUrl && voiceMode === 'clone' ? (
+                  <>
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Selecione uma Voz
                   </>
                 ) : (
                   <>
@@ -2626,9 +2640,18 @@ export default function VozProClient() {
             onClick={handleGenerate}
             disabled={isGenerating || !text.trim() || (!selectedVariationId && !uploadedVoiceUrl)}
             className="w-full h-12 text-base font-bold bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50"
+            title={
+              !selectedVariationId && !uploadedVoiceUrl && voiceMode === 'clone'
+                ? 'Selecione uma voz ou faça upload de um áudio'
+                : !text.trim()
+                  ? 'Digite o texto para gerar'
+                  : undefined
+            }
           >
             {isGenerating ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Gerando...</>
+            ) : !selectedVariationId && !uploadedVoiceUrl && voiceMode === 'clone' ? (
+              <><Sparkles className="w-4 h-4 mr-2" />Selecione uma Voz</>
             ) : (
               <><Sparkles className="w-4 h-4 mr-2" />Gerar Voz</>
             )}
