@@ -125,6 +125,22 @@ curl https://omnivoice-umber.vercel.app/api/status
 # Abrir http://localhost:7860 no PC com GPU
 ```
 
+### Baixar arquivos atualizados via chat
+
+Quando a IA atualizar arquivos PHP, voce pode baixar direto pelo chat:
+1. Peca: "deixa os arquivos disponiveis pra baixar"
+2. A IA copia os arquivos para `/download/`
+3. Os arquivos aparecem no Task do chat para download
+
+```bash
+# A IA faz isso automaticamente:
+cp php-server/generate.php /home/z/my-project/download/
+cp php-server/generate-direct.php /home/z/my-project/download/
+cp php-server/generate-omnivoice.php /home/z/my-project/download/
+```
+
+Depois basta subir no HostGator via cPanel > File Manager > public_html/omnivoice/
+
 ### Atualizar PHP Server (via FTP)
 
 ```bash
