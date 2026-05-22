@@ -259,8 +259,8 @@ async function generateChunk(
   // Substituir texto no data array
   const data = [...gradioBaseData]
   data[0] = chunkText  // índice 0 = texto
-  data[11] = false     // postprocess_output OFF para chunks — previne corte agressivo de palavras
-                         // denoise (índice 7) continua TRUE = antiruido ativo
+  // NAO mexer nos outros params — manter postprocess_output=true (padrao do Gradio)
+  // para manter antiruido e qualidade igual ao localhost demo
 
   debug.log(`Chunk ${chunkIndex + 1}/${totalChunks}`, 'info', `"${chunkText.substring(0, 50)}..." (${chunkText.length} chars)`)
 
@@ -354,19 +354,13 @@ function buildSimpleWavHeader(fmt: SimpleWavFormat, dataSize: number, pcm: Buffe
 }
 
 // ============================================================
-// PIPELINE COM CHUNKING — postprocess OFF, denoise ON
+// PIPELINE COM CHUNKING — fallback only
 // ============================================================
 
 /**
- * Gera áudio com chunking: divide texto em pedaços curtos,
- * gera cada um com postprocess_output=false (sem corte agressivo),
- * denoise=true (antiruido ativo), e splice puro de PCM.
- *
- * Por que isso funciona:
- * - postprocess_output=true corta ~29% do áudio + última palavra de cada chunk
- * - postprocess_output=false preserva o áudio completo
- * - denoise=true (separado) remove o ruído de fundo
- * - Splice puro de PCM = junção sem efeitos, sem cortes
+ * Gera áudio com chunking (só como fallback se single-shot falhar).
+ * Usa postprocess_output=true (padrão Gradio) = antiruido + qualidade.
+ * Splice puro de PCM bytes — sem processamento.
  */
 
 async function generateWithChunking(
@@ -485,79 +479,32 @@ async function generateSingleShot(
   debug.log('Download', 'info', `Aguardou ${delayMs}ms apos SSE complete (texto: ${text.length} chars)`)
 
   // Download com retry + validação WAV (tunnel pode truncar arquivos grandes)
-  let voiceBuffer = await downloadWithRetry(result.audioUrl, 3, 2000)
+  const voiceBuffer = await downloadWithRetry(result.audioUrl, 3, 2000)
   if (!voiceBuffer) {
     debug.log('Download', 'error', 'Falha no download apos 3 tentativas')
     return { buffer: null, diagnostics: null }
   }
-  // Verificar duração real vs esperada
-  const expectedMinDuration = text.length * 0.08
+  // Log de duração real
   const dlSampleRate = voiceBuffer.readUInt32LE(24)
   const dlChannels = voiceBuffer.readUInt16LE(22)
   const dlBits = voiceBuffer.readUInt16LE(34)
   const dlBytesPerSample = Math.floor(dlBits / 8)
   const dlDataSize = voiceBuffer.readUInt32LE(40)
-  const dlDuration = dlDataSize / dlChannels / dlBytesPerSample / dlSampleRate
-  debug.log('Download', 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB (duracao: ${dlDuration.toFixed(1)}s, esperado >=${expectedMinDuration.toFixed(1)}s)`)
-
-  // RETRY INTELIGENTE: se o áudio veio curto demais, esperar mais e baixar de novo.
-  // O Gradio pode ainda estar escrevendo o arquivo — o tunnel torna isso mais lento.
-  // Igual localhost:7860 — o demo local funciona porque o arquivo já está pronto.
-  if (dlDuration < expectedMinDuration) {
-    debug.log('Download', 'warn', `Audio curto: ${dlDuration.toFixed(1)}s < ${expectedMinDuration.toFixed(1)}s esperado. Retry com +10s...`)
-    await new Promise(r => setTimeout(r, 10000))
-    const retryBuffer = await downloadWithRetry(result.audioUrl, 3, 2000)
-    if (retryBuffer && retryBuffer.length > voiceBuffer.length) {
-      voiceBuffer = retryBuffer
-      const rDlDataSize = voiceBuffer.readUInt32LE(40)
-      const rDuration = rDlDataSize / dlChannels / dlBytesPerSample / dlSampleRate
-      debug.log('Download', 'ok', `Retry OK: ${(voiceBuffer.length / 1024).toFixed(1)}KB (${rDuration.toFixed(1)}s — ganhou ${rDuration.toFixed(1) - dlDuration.toFixed(1)}s)`)
-    } else {
-      debug.log('Download', 'warn', 'Retry nao mudou — arquivo pode estar realmente curto')
-    }
-  }
-
-  // Calcular duração final para diagnóstico
-  const finalDataSize = voiceBuffer.readUInt32LE(40)
-  const finalDuration = (finalDataSize / dlChannels / dlBytesPerSample / dlSampleRate).toFixed(1)
-  debug.log('Download', 'ok', `Final: ${(voiceBuffer.length / 1024).toFixed(1)}KB, ${finalDuration}s`)
-
-  // Adicionar 500ms de silêncio no final para proteção
-  const paddedBuffer = appendWavSilence(voiceBuffer, 0.5)
-  if (paddedBuffer) {
-    const sampleRate = paddedBuffer.readUInt32LE(24)
-    const channels = paddedBuffer.readUInt16LE(22)
-    const bitsPerSample = paddedBuffer.readUInt16LE(34)
-    const bytesPerSample = Math.floor(bitsPerSample / 8)
-    const dataSize = paddedBuffer.readUInt32LE(40)
-    const durationSec = (dataSize / channels / bytesPerSample / sampleRate).toFixed(1)
-    const diagnostics: AudioDiagnostics = {
-      textLength: text.length,
-      audioDurationSec: durationSec,
-      fileSizeKB: (paddedBuffer.length / 1024).toFixed(1),
-      sampleRate,
-      bitsPerSample,
-      channels,
-      delayAfterSse: delayMs,
-      silencePadSec: 0.5,
-      expectedMinDuration: expectedMinDuration.toFixed(1),
-      durationOk: parseFloat(durationSec) >= expectedMinDuration,
-      wavHeaderValid: isWavComplete(paddedBuffer),
-    }
-    return { buffer: paddedBuffer, diagnostics }
-  }
+  const dlDuration = (dlDataSize / dlChannels / dlBytesPerSample / dlSampleRate).toFixed(1)
+  const expectedMinDuration = (text.length * 0.08).toFixed(1)
+  debug.log('Download', 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB (duracao: ${dlDuration}s, esperado >=${expectedMinDuration}s)`)
 
   const diagnostics: AudioDiagnostics = {
     textLength: text.length,
-    audioDurationSec: finalDuration,
+    audioDurationSec: dlDuration,
     fileSizeKB: (voiceBuffer.length / 1024).toFixed(1),
     sampleRate: dlSampleRate,
     bitsPerSample: dlBits,
     channels: dlChannels,
     delayAfterSse: delayMs,
     silencePadSec: 0,
-    expectedMinDuration: expectedMinDuration.toFixed(1),
-    durationOk: parseFloat(finalDuration) >= expectedMinDuration,
+    expectedMinDuration: expectedMinDuration,
+    durationOk: parseFloat(dlDuration) >= parseFloat(expectedMinDuration),
     wavHeaderValid: isWavComplete(voiceBuffer),
   }
   return { buffer: voiceBuffer, diagnostics }
