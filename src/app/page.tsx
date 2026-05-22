@@ -730,20 +730,8 @@ export default function VozProClient() {
           }
         }
         if (tracksRes.ok) {
-          const tracksData: Track[] = await tracksRes.json()
-          // Detectar duração das trilhas que não têm cadastrada
-          const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
-          const enrichedTracks = await Promise.all(tracksData.map(async (track) => {
-            if (track.duration > 0 || !track.audioPath) return track
-            try {
-              const res = await fetch(track.audioPath)
-              const arrayBuf = await res.arrayBuffer()
-              const decoded = await audioCtx.decodeAudioData(arrayBuf)
-              return { ...track, duration: decoded.duration }
-            } catch { return track }
-          }))
-          audioCtx.close().catch(() => {})
-          setTracks(enrichedTracks)
+          const tracksData = await tracksRes.json()
+          setTracks(tracksData)
         }
         if (configRes.ok) {
           const configData = await configRes.json()
@@ -765,6 +753,44 @@ export default function VozProClient() {
     }
     loadData()
   }, [authChecked])
+
+  // Detectar duração das trilhas de forma leve (só metadados, sem baixar o áudio inteiro)
+  useEffect(() => {
+    if (tracks.length === 0) return
+    const durations = new Map<string, number>()
+    const audioEls: HTMLAudioElement[] = []
+
+    tracks.forEach(track => {
+      if (track.duration > 0 || !track.audioPath) return
+      const el = new Audio(track.audioPath)
+      el.preload = 'metadata'
+      const onLoad = () => {
+        if (el.duration && isFinite(el.duration)) {
+          durations.set(track.id, el.duration)
+        }
+        el.removeEventListener('loadedmetadata', onLoad)
+        el.onerror = null
+      }
+      el.onerror = () => { el.removeEventListener('loadedmetadata', onLoad) }
+      el.addEventListener('loadedmetadata', onLoad)
+      audioEls.push(el)
+    })
+
+    // Se encontrou durações, atualizar as trilhas
+    const checkInterval = setInterval(() => {
+      if (durations.size === 0) { clearInterval(checkInterval); return }
+      setTracks(prev => prev.map(t => {
+        const d = durations.get(t.id)
+        return d ? { ...t, duration: d } : t
+      }))
+      clearInterval(checkInterval)
+    }, 500)
+
+    return () => {
+      clearInterval(checkInterval)
+      audioEls.forEach(el => { el.pause(); el.src = '' })
+    }
+  }, [tracks.length])
 
   // Auto-select first variation WITH AUDIO when voice changes
   // IMPORTANTE: só auto-selecionar se a variação TEM áudio.
