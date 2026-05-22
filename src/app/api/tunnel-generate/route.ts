@@ -248,19 +248,34 @@ async function streamResult(
 /**
  * Gera um chunk de texto via Gradio (submit + stream + download)
  */
+interface ChunkResult {
+  buffer: Buffer
+  durationSec: number
+  textLength: number
+}
+
 async function generateChunk(
   tunnelUrl: string,
   chunkText: string,
   gradioBaseData: unknown[],
   debug: ReturnType<typeof createDebug>,
   chunkIndex: number,
-  totalChunks: number
-): Promise<Buffer | null> {
+  totalChunks: number,
+  disablePostprocess: boolean
+): Promise<ChunkResult | null> {
   // Substituir texto no data array
   const data = [...gradioBaseData]
   data[0] = chunkText  // índice 0 = texto
 
-  debug.log(`Chunk ${chunkIndex + 1}/${totalChunks}`, 'info', `"${chunkText.substring(0, 50)}..." (${chunkText.length} chars)`)
+  // CRÍTICO: Desativar postprocess para chunks.
+  // O postprocess_output=true corta ~29% do áudio mesmo em chunks curtos.
+  // Sem postprocess, o TTS gera áudio completo com silêncio natural no final.
+  // Isso resolve o corte de palavras no fim de cada chunk.
+  if (disablePostprocess) {
+    data[11] = false  // postprocess_output = false
+  }
+
+  debug.log(`Chunk ${chunkIndex + 1}/${totalChunks}`, 'info', `"${chunkText.substring(0, 50)}..." (${chunkText.length} chars, postprocess: ${disablePostprocess ? 'OFF' : 'ON'})`)
 
   // Submeter job
   let eventId: string | null = null
@@ -285,9 +300,10 @@ async function generateChunk(
     return null
   }
 
-  // Aguardar Gradio salvar o arquivo no disco (igual single-shot)
-  // Delay curto para chunks pequenos (< 250 chars o Gradio salva rápido)
-  const chunkDelay = Math.min(3000, 1500 + Math.floor(chunkText.length / 200) * 500)
+  // Aguardar Gradio salvar o arquivo no disco.
+  // Delay generoso: chunks gerados em sequência, Gradio precisa salvar antes do próximo.
+  // Sem postprocess, o Gradio pode salvar mais rápido, mas vamos ser conservadores.
+  const chunkDelay = Math.min(5000, 2500 + Math.floor(chunkText.length / 150) * 500)
   await new Promise(r => setTimeout(r, chunkDelay))
 
   // Download com retry
@@ -302,13 +318,10 @@ async function generateChunk(
   const ch = voiceBuffer.readUInt16LE(22)
   const bps = voiceBuffer.readUInt16LE(34)
   const ds = voiceBuffer.readUInt32LE(40)
-  const dur = (ds / ch / Math.floor(bps / 8) / sr).toFixed(1)
+  const dur = parseFloat((ds / ch / Math.floor(bps / 8) / sr).toFixed(1))
   debug.log(`Chunk ${chunkIndex + 1}/${totalChunks}`, 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB, ${dur}s, delay ${chunkDelay}ms`)
 
-  // Retornar áudio bruto do chunk — SEM padding individual.
-  // O padding no final de cada chunk causa "baixada" perceptível na junção.
-  // O postprocess do OmniVoice já gera final limpo. Só padding no áudio final concatenado.
-  return voiceBuffer
+  return { buffer: voiceBuffer, durationSec: dur, textLength: chunkText.length }
 }
 
 // ============================================================
@@ -351,31 +364,6 @@ function buildSimpleWavHeader(fmt: SimpleWavFormat, dataSize: number, pcm: Buffe
   return Buffer.concat([header, pcm])
 }
 
-/**
- * Trim silêncio morto do INÍCIO do PCM.
- * Encontra o primeiro sample acima do threshold e corta tudo antes.
- * Não corta o final — preserva a palavra final do chunk anterior intacta.
- */
-function trimPcmStart(pcm: Buffer, fmt: SimpleWavFormat): Buffer {
-  if (fmt.bitsPerSample !== 16) return pcm
-  const blockAlign = fmt.blockAlign
-  const threshold = 200 // samples abaixo = silêncio morto
-
-  let startByte = 0
-  for (let i = 0; i < pcm.length && i < pcm.length; i += blockAlign) {
-    const sample = Math.abs(pcm.readInt16LE(i))
-    if (sample > threshold) {
-      startByte = i
-      break
-    }
-  }
-
-  // Se não encontrou silêncio (começa direto com fala), retornar original
-  if (startByte === 0) return pcm
-
-  return pcm.subarray(startByte)
-}
-
 // ============================================================
 // PIPELINE COM CHUNKING (prosódia explícita)
 // ============================================================
@@ -385,7 +373,7 @@ async function generateWithChunking(
   text: string,
   gradioBaseData: unknown[],
   debug: ReturnType<typeof createDebug>
-): Promise<{ finalBuffer: Buffer; chunks: TextChunk[] } | null> {
+): Promise<{ finalBuffer: Buffer; chunks: TextChunk[]; chunkDiagnostics?: Array<{ index: number; text: string; durationSec: number; textLength: number; ok: boolean }>; failedChunks?: number } | null> {
   // 1. Chunking por limite de caracteres (anti-postprocess)
   const chunks = chunkByCharLimit(text, 250)
   if (chunks.length === 0) return null
@@ -393,19 +381,34 @@ async function generateWithChunking(
   debug.log('Chunking', 'ok', `${chunks.length} chunks (max 250 chars cada)`)  
   debug.log('Chunking', 'info', formatChunkSummary(chunks).substring(0, 500))
 
-  // 2. Gerar cada chunk
+  // 2. Gerar cada chunk (postprocess desativado para evitar corte)
   const audioChunks: AudioChunk[] = []
+  const chunkDiagnostics: Array<{ index: number; text: string; durationSec: number; textLength: number; ok: boolean }> = []
   let failedChunks = 0
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i]
 
-    const buffer = await generateChunk(tunnelUrl, chunk.text, gradioBaseData, debug, i, chunks.length)
+    const result = await generateChunk(tunnelUrl, chunk.text, gradioBaseData, debug, i, chunks.length, true)
 
-    if (buffer) {
-      audioChunks.push({ buffer, pauseAfterMs: chunk.pauseAfterMs })
+    if (result) {
+      audioChunks.push({ buffer: result.buffer, pauseAfterMs: chunk.pauseAfterMs })
+      chunkDiagnostics.push({
+        index: i + 1,
+        text: chunk.text.substring(0, 60),
+        durationSec: result.durationSec,
+        textLength: result.textLength,
+        ok: true,
+      })
     } else {
       failedChunks++
+      chunkDiagnostics.push({
+        index: i + 1,
+        text: chunk.text.substring(0, 60),
+        durationSec: 0,
+        textLength: chunk.text.length,
+        ok: false,
+      })
       debug.log('Chunking', 'warn', `Chunk ${i + 1} falhou, pulando (${failedChunks} falhas)`)
     }
   }
@@ -419,12 +422,10 @@ async function generateWithChunking(
     debug.log('Chunking', 'warn', `${failedChunks}/${chunks.length} chunks falharam, continuando com ${audioChunks.length}`)
   }
 
-  // 3. Splice PCM com micro-trim no início dos chunks subsequentes
-  // O postprocess do OmniVoice corta o final de cada chunk muito em cima.
-  // Solução: trimar o silêncio morto do INÍCIO de cada chunk (exceto o primeiro).
-  // Isso avança o ponto de junção alguns milissegundos para dentro do próximo chunk,
-  // sem cortar o final do chunk anterior. O resultado: corte imperceptível.
-  debug.log('Concatenacao', 'info', `Splice PCM com micro-trim: ${audioChunks.length} chunks...`)
+  // 3. Concatenação PCM pura (sem trim, sem processamento)
+  // Sem postprocess, cada chunk tem áudio completo + silêncio natural no final.
+  // O silêncio natural entre chunks funciona como pausa — sem artefatos.
+  debug.log('Concatenacao', 'info', `Splice PCM puro: ${audioChunks.length} chunks (${failedChunks} falhas)...`)
   
   const pcmParts: Buffer[] = []
   let totalPcmBytes = 0
@@ -435,28 +436,21 @@ async function generateWithChunking(
     if (buf.length < 44) continue
     const dataSize = buf.readUInt32LE(40)
     const actualDataEnd = Math.min(44 + dataSize, buf.length)
-    let pcm = buf.subarray(44, actualDataEnd)
+    const pcm = buf.subarray(44, actualDataEnd)
     
-    // Chunks subsequentes: trimar silêncio morto do início (threshold 200 = silêncio real)
-    // Primeiro chunk: NÃO trimar (manter início natural)
-    if (i > 0) {
-      const trimmed = trimPcmStart(pcm, firstFormat)
-      pcmParts.push(trimmed)
-      totalPcmBytes += trimmed.length
-    } else {
-      pcmParts.push(pcm)
-      totalPcmBytes += pcm.length
-    }
+    pcmParts.push(pcm)
+    totalPcmBytes += pcm.length
   }
   
   // Montar WAV final: header + PCM concatenado
   const finalPcm = Buffer.concat(pcmParts)
   const finalBuffer = buildSimpleWavHeader(firstFormat, totalPcmBytes, finalPcm)
 
+  const totalDurationSec = (totalPcmBytes / firstFormat.numChannels / Math.floor(firstFormat.bitsPerSample / 8) / firstFormat.sampleRate).toFixed(1)
   debug.log('Concatenacao', 'ok',
-    `PCM: ${totalPcmBytes} bytes, ${audioChunks.length} chunks, ${(finalBuffer.length / 1024).toFixed(1)}KB`)
+    `PCM: ${totalPcmBytes} bytes, ${audioChunks.length} chunks, ${totalDurationSec}s total, ${(finalBuffer.length / 1024).toFixed(1)}KB`)
 
-  return { finalBuffer, chunks }
+  return { finalBuffer, chunks, chunkDiagnostics, failedChunks }
 }
 
 // ============================================================
@@ -733,17 +727,21 @@ export async function POST(req: NextRequest) {
     let finalBuffer: Buffer | null = null
     let chunkInfo: TextChunk[] | null = null
     let audioDiagnostics: AudioDiagnostics | null = null
+    let chunkDiag: Array<{ index: number; text: string; durationSec: number; textLength: number; ok: boolean }> | null = null
+    let failedChunkCount = 0
 
     // AUTO-CHUNKING para textos longos (>280 chars)
     // Motivação: OmniVoice com postprocess_output=true corta ~29% do áudio para textos >280 chars.
-    // Solução: dividir em chunks de ~250 chars (onde postprocess não corta) e concatenar.
+    // Solução: dividir em chunks de ~200 chars com postprocess=false e concatenar.
     const shouldChunk = cleanText.length > 280 || useChunking
     if (shouldChunk && cleanText.length > 20) {
-      debug.log('Pipeline', 'info', `Modo CHUNKING ativo (texto: ${cleanText.length} chars > 280 threshold)`)      
+      debug.log('Pipeline', 'info', `Modo CHUNKING ativo (texto: ${cleanText.length} chars > 280 threshold, postprocess: OFF)`)      
       const chunkResult = await generateWithChunking(tunnelUrl, cleanText, gradioBaseData, debug)
       if (chunkResult) {
         finalBuffer = chunkResult.finalBuffer
         chunkInfo = chunkResult.chunks
+        chunkDiag = chunkResult.chunkDiagnostics || null
+        failedChunkCount = chunkResult.failedChunks || 0
         // Diagnóstico para chunking
         const sr = finalBuffer.readUInt32LE(24)
         const ch = finalBuffer.readUInt16LE(22)
@@ -813,11 +811,15 @@ export async function POST(req: NextRequest) {
     if (chunkInfo) {
       response.chunking = {
         totalChunks: chunkInfo.length,
+        succeededChunks: chunkInfo.length - failedChunkCount,
+        failedChunks: failedChunkCount,
+        postprocessDisabled: true,
         chunks: chunkInfo.map(c => ({
           text: c.text.substring(0, 50),
           pauseAfterMs: c.pauseAfterMs,
           punctuation: c.punctuation,
         })),
+        chunkDurations: chunkDiag,
       }
     }
 
@@ -837,7 +839,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    debug.log('FINAL', 'ok', `Total: ${(debug.result().totalDuration / 1000).toFixed(1)}s | modo: ${chunkInfo ? 'chunking' : 'single-shot'}`)
+    debug.log('FINAL', 'ok', `Total: ${(debug.result().totalDuration / 1000).toFixed(1)}s | modo: ${chunkInfo ? `chunking (${chunkInfo.length} chunks, ${failedChunkCount} falhas, postprocess: OFF)` : 'single-shot'}`)
 
     return NextResponse.json(response)
   } catch (error) {

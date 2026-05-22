@@ -2304,26 +2304,46 @@ export default function VozProClient() {
                           const c = (lastGenResponse as Record<string, unknown>).chunking as Record<string, unknown>
                           const mode = (lastGenResponse as Record<string, unknown>).mode as string
                           const chunks = c.chunks as Array<{ text: string; pauseAfterMs: number; punctuation: string }> || []
+                          const durations = c.chunkDurations as Array<{ index: number; text: string; durationSec: number; textLength: number; ok: boolean }> | undefined
+                          const totalC = c.totalChunks as number
+                          const succeeded = c.succeededChunks as number
+                          const failed = c.failedChunks as number
+                          const ppOff = c.postprocessDisabled as boolean
                           return (
                             <>
-                              <div className="flex items-center gap-2 mb-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
                                 <span className="font-semibold text-blue-400">
-                                  {c.totalChunks} chunks — modo: {mode}
+                                  {totalC} chunks — modo: {mode}
                                 </span>
+                                {ppOff && <span className="text-[10px] bg-green-500/20 text-green-300 px-1.5 py-0.5 rounded">postprocess: OFF</span>}
+                                {failed > 0 && <span className="text-[10px] bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded">{failed} falha(s)</span>}
                               </div>
                               <div className="text-blue-300/80 text-[11px] mb-1.5">
-                                Texto dividido em {c.totalChunks} partes (max 250 chars) para contornar corte do postprocess.
-                                Cada chunk gerado separadamente e concatenado com silêncio.
+                                Texto dividido em {totalC} partes (max 250 chars). Postprocess desativado para evitar corte.
+                                {succeeded !== undefined && ` ${succeeded}/${totalC} chunks gerados com sucesso.`}
                               </div>
                               <div className="space-y-1">
-                                {chunks.map((chunk, i) => (
-                                  <div key={i} className="flex items-center gap-2 text-[11px] text-slate-400">
-                                    <span className="text-blue-400 font-mono w-12">[{i + 1}/{c.totalChunks}]</span>
-                                    <span className="truncate flex-1">{chunk.text}</span>
-                                    <span className="text-slate-500">{chunk.pauseAfterMs}ms</span>
-                                  </div>
-                                ))}
+                                {chunks.map((chunk, i) => {
+                                  const diag = durations?.find(d => d.index === i + 1)
+                                  const isFailed = diag ? !diag.ok : false
+                                  return (
+                                    <div key={i} className={`flex items-center gap-2 text-[11px] ${isFailed ? 'text-red-400 bg-red-500/10 rounded px-1.5 py-0.5' : 'text-slate-400'}`}>
+                                      <span className="text-blue-400 font-mono w-12">[{i + 1}/{totalC}]</span>
+                                      <span className="truncate flex-1">{chunk.text}</span>
+                                      {diag && (
+                                        <span className={`font-mono ${isFailed ? 'text-red-400' : 'text-slate-500'}`}>
+                                          {isFailed ? 'FALHOU' : `${diag.durationSec}s`}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )
+                                })}
                               </div>
+                              {durations && durations.filter(d => d.ok).length > 0 && (
+                                <div className="text-[11px] text-slate-500 mt-1 border-t border-white/5 pt-1">
+                                  Total áudio: {durations.filter(d => d.ok).reduce((sum, d) => sum + d.durationSec, 0).toFixed(1)}s ({durations.filter(d => d.ok).reduce((sum, d) => sum + d.textLength, 0)} chars)
+                                </div>
+                              )}
                             </>
                           )
                         })()}
