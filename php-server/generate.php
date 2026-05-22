@@ -591,7 +591,7 @@ if (!$audioUrl) {
     returnError($userMsg, 504);
 }
 
-// ===================== BAIXAR AUDIO GERADO =====================
+// ===================== BAIXAR AUDIO GERADO (COM RETRY + VALIDACAO) =====================
 debugLog('Download audio gerado', 'info', 'baixando...');
 
 // Aguardar Gradio terminar de escrever o arquivo no disco.
@@ -605,28 +605,95 @@ if (empty($ext) || !in_array($ext, ['wav', 'mp3', 'ogg', 'flac'])) {
 }
 $tempAudioFile = tempnam(sys_get_temp_dir(), 'vp_gen_') . '.' . $ext;
 
-$ch = curl_init($audioUrl);
-$fp = fopen($tempAudioFile, 'w');
-curl_setopt_array($ch, [
-    CURLOPT_FILE => $fp,
-    CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_TIMEOUT => 120,
-    CURLOPT_ENCODING => '',  // BLOQUEIA compressao (corrompe audio WAV via tunnel!)
-    CURLOPT_SSL_VERIFYPEER => false,
-]);
-$dlOk = curl_exec($ch);
-$dlCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-fclose($fp);
+// Funcao: valida se o header WAV bate com o tamanho real do arquivo
+// Retorna true se OK, false se truncado
+function isWavComplete($filepath) {
+    if (!file_exists($filepath) || filesize($filepath) < 44) return false;
+    $f = fopen($filepath, 'rb');
+    if (!$f) return false;
+    $header = fread($f, 44);
+    fclose($f);
+    // Verificar assinaturas RIFF e WAVE
+    if (substr($header, 0, 4) !== 'RIFF' || substr($header, 8, 4) !== 'WAVE') return false;
+    // Ler tamanho declarado no header RIFF (offset 4, 4 bytes, little-endian)
+    $declaredSize = unpack('V', substr($header, 4, 4))[1];
+    $actualSize = filesize($filepath);
+    // RIFF size = filesize - 8 (os 8 bytes de "RIFF" + size)
+    $expectedRiffSize = $actualSize - 8;
+    if ($expectedRiffSize < $declaredSize) {
+        // Arquivo truncado: tem menos bytes que o header declara
+        return false;
+    }
+    return true;
+}
+
+// Download com retry: ate 3 tentativas, validando tamanho e header WAV
+$dlOk = false;
+$dlCode = 0;
+$maxRetries = 3;
+$minFileSize = 50000; // 50KB minimo para qualquer audio gerado
+
+for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+    if (file_exists($tempAudioFile)) unlink($tempAudioFile);
+    $tempAudioFile = tempnam(sys_get_temp_dir(), 'vp_gen_') . '.' . $ext;
+    
+    $ch = curl_init($audioUrl);
+    $fp = fopen($tempAudioFile, 'w');
+    curl_setopt_array($ch, [
+        CURLOPT_FILE => $fp,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 120,
+        CURLOPT_CONNECTTIMEOUT => 30,
+        CURLOPT_ENCODING => '',  // BLOQUEIA compressao (corrompe audio WAV via tunnel!)
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $dlOk = curl_exec($ch);
+    $dlCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    fclose($fp);
+    clearstatcache();
+    
+    $fileSize = filesize($tempAudioFile);
+    debugLog('Download audio', 'info', "Tentativa $attempt/$maxRetries: " . round($fileSize / 1024) . "KB (HTTP $dlCode)");
+    
+    // Validação 1: download OK e HTTP 200
+    if (!$dlOk || $dlCode != 200 || $fileSize == 0) {
+        debugLog('Download audio', 'warn', "Falha no download (HTTP $dlCode)");
+        if ($attempt < $maxRetries) { sleep(2); }
+        continue;
+    }
+    
+    // Validação 2: tamanho minimo (arquivo parcial do Gradio costuma ter poucos KB)
+    if ($fileSize < $minFileSize) {
+        debugLog('Download audio', 'warn', "Arquivo muito pequeno ($fileSize bytes < $minFileSize min), possivel Gradio ainda escrevendo");
+        if ($attempt < $maxRetries) { sleep(3); }
+        continue;
+    }
+    
+    // Validação 3: se WAV, verificar se header bate com tamanho real (detecta truncacao via tunnel)
+    if ($ext === 'wav') {
+        if (isWavComplete($tempAudioFile)) {
+            debugLog('Download audio', 'ok', "WAV completo (header OK)");
+            break; // Sucesso!
+        } else {
+            debugLog('Download audio', 'warn', "WAV truncado (header declara mais bytes que o arquivo tem)");
+            if ($attempt < $maxRetries) { sleep(3); }
+            continue;
+        }
+    }
+    
+    // MP3/OGG/FLAC: sem validacao de header, confia no tamanho minimo
+    break;
+}
 
 if (!$dlOk || $dlCode != 200 || filesize($tempAudioFile) == 0) {
     if (file_exists($tempAudioFile)) unlink($tempAudioFile);
     monitorEndGen($monitorFile, $genId, false);
-    returnError("Falha ao baixar audio gerado (HTTP $dlCode)");
+    returnError("Falha ao baixar audio apos $maxRetries tentativas (HTTP $dlCode)");
 }
 
 $audioSize = filesize($tempAudioFile);
-debugLog('Download audio gerado', 'ok', round($audioSize / 1024) . 'KB' . ($ext !== 'wav' ? " ($ext)" : ''));
+debugLog('Download audio gerado', 'ok', round($audioSize / 1024) . 'KB' . ($ext !== 'wav' ? " ($ext)" : '') . " (tentativa $attempt/$maxRetries)");
 
 // ===================== CONVERTER PARA BASE64 =====================
 debugLog('Base64 encode', 'info', 'convertendo...');
