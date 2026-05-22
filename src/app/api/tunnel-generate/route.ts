@@ -305,9 +305,10 @@ async function generateChunk(
   const dur = (ds / ch / Math.floor(bps / 8) / sr).toFixed(1)
   debug.log(`Chunk ${chunkIndex + 1}/${totalChunks}`, 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB, ${dur}s, delay ${chunkDelay}ms`)
 
-  // Adicionar 300ms de silêncio ao final de cada chunk para proteção
-  const padded = appendWavSilence(voiceBuffer, 0.3)
-  return padded || voiceBuffer
+  // Retornar áudio bruto do chunk — SEM padding individual.
+  // O padding no final de cada chunk causa "baixada" perceptível na junção.
+  // O postprocess do OmniVoice já gera final limpo. Só padding no áudio final concatenado.
+  return voiceBuffer
 }
 
 // ============================================================
