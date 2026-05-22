@@ -352,8 +352,52 @@ function buildSimpleWavHeader(fmt: SimpleWavFormat, dataSize: number, pcm: Buffe
 }
 
 // ============================================================
-// PIPELINE COM CHUNKING — OVERLAP BUFFER
+// PIPELINE COM CHUNKING — DAW CUT (trim ao fim da fala)
 // ============================================================
+
+/**
+ * Scaneia PCM de trás pra frente e encontra o último sample de fala.
+ * Retorna a posição (em bytes) onde a fala termina + cauda em ms.
+ * Igual DAW: olha a onda, acha onde a voz acaba, corta ali.
+ */
+function findSpeechEnd(pcm: Buffer, fmt: SimpleWavFormat, tailMs: number): Buffer {
+  const blockAlign = fmt.blockAlign
+  const tailBytes = Math.floor(fmt.sampleRate * tailMs / 1000) * blockAlign
+  const silenceThreshold = 150 // samples abaixo disso = silêncio
+
+  // Scannear de trás pra frente: procurar o último sample acima do threshold
+  let lastVoiceByte = pcm.length - blockAlign // padrão: manter tudo
+  let silenceRun = 0
+  const minSilenceRun = Math.floor(fmt.sampleRate * 0.008) * blockAlign // 8ms mínimo de silêncio confirmado
+
+  for (let i = pcm.length - blockAlign; i >= 0; i -= blockAlign) {
+    const sample = Math.abs(pcm.readInt16LE(i))
+    if (sample > silenceThreshold) {
+      // Encontrou voz — mas verificar se é realmente o fim (não um pico isolado)
+      // Continuar scaneando pra trás pra confirmar que tem silêncio depois
+      lastVoiceByte = i
+      silenceRun = 0
+      break
+    } else {
+      silenceRun += blockAlign
+      // Só considerar "fim de fala" se o silêncio é contínuo por minSilenceRun
+      if (silenceRun >= minSilenceRun) {
+        lastVoiceByte = i + silenceRun + tailBytes
+        break
+      }
+    }
+  }
+
+  // Se não encontrou silêncio suficiente (fala vai até o fim), manter com cauda
+  if (silenceRun < minSilenceRun) {
+    lastVoiceByte = pcm.length
+  }
+
+  // Limitar ao tamanho do PCM
+  lastVoiceByte = Math.min(lastVoiceByte, pcm.length)
+
+  return pcm.subarray(0, lastVoiceByte)
+}
 
 async function generateWithChunking(
   tunnelUrl: string,
@@ -368,38 +412,18 @@ async function generateWithChunking(
   debug.log('Chunking', 'ok', `${chunks.length} chunks (max 250 chars cada)`)
   debug.log('Chunking', 'info', formatChunkSummary(chunks).substring(0, 500))
 
-  // 2. Gerar cada chunk COM BUFFER DE OVERLAP
-  // Cada chunk (exceto último) recebe as primeiras 5 palavras do próximo chunk.
-  // O postprocess come o buffer ao invés da última palavra real.
-  // Depois cortamos o buffer do áudio.
-  const OVERLAP_WORDS = 5
+  // 2. Gerar cada chunk
   const audioChunks: AudioChunk[] = []
-  const overlapMsList: number[] = []
   let failedChunks = 0
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i]
-    let textToSend = chunk.text
-
-    if (i < chunks.length - 1) {
-      const nextWords = chunks[i + 1].text
-        .split(/\s+/).filter(w => w.length > 0)
-        .slice(0, OVERLAP_WORDS)
-        .join(' ')
-      textToSend = chunk.text + ' ' + nextWords
-      overlapMsList.push(nextWords.length * 80)
-      debug.log(`Chunk ${i + 1}`, 'info', `+buffer: "${nextWords.substring(0, 40)}" (${nextWords.length} chars)`)
-    } else {
-      overlapMsList.push(0)
-    }
-
-    const buffer = await generateChunk(tunnelUrl, textToSend, gradioBaseData, debug, i, chunks.length)
+    const buffer = await generateChunk(tunnelUrl, chunk.text, gradioBaseData, debug, i, chunks.length)
 
     if (buffer) {
       audioChunks.push({ buffer, pauseAfterMs: chunk.pauseAfterMs })
     } else {
       failedChunks++
-      overlapMsList[i] = 0
       debug.log('Chunking', 'warn', `Chunk ${i + 1} falhou, pulando (${failedChunks} falhas)`)
     }
   }
@@ -413,17 +437,14 @@ async function generateWithChunking(
     debug.log('Chunking', 'warn', `${failedChunks}/${chunks.length} chunks falharam, continuando com ${audioChunks.length}`)
   }
 
-  // 3. Concatenação: trim buffer + crossfade 3ms nas junções
-  debug.log('Concatenacao', 'info', `Overlap splice: ${audioChunks.length} chunks...`)
+  // 3. DAW CUT: scannar cada chunk, achar onde a voz termina, cortar ali
+  // Igual DAW: olhar a onda, encontrar o silêncio após a última palavra,
+  // manter 20ms de cauda natural, cortar o resto. Sem efeito, sem fade, sem nada.
+  debug.log('Concatenacao', 'info', `DAW cut: ${audioChunks.length} chunks...`)
 
   const firstFormat = parseWavHeaderSimple(audioChunks[0].buffer)
-  const blockAlign = firstFormat.blockAlign
-  const crossfadeSamples = Math.floor(firstFormat.sampleRate * 0.003) // 3ms
-  const crossfadeBytes = crossfadeSamples * blockAlign
-  const bytesPerMs = firstFormat.sampleRate * firstFormat.numChannels * Math.floor(firstFormat.bitsPerSample / 8) / 1000
+  const pcmParts: Buffer[] = []
 
-  // Extrair PCM e trimar buffer do final
-  const pcmList: Buffer[] = []
   for (let i = 0; i < audioChunks.length; i++) {
     const buf = audioChunks[i].buffer
     if (buf.length < 44) continue
@@ -431,62 +452,24 @@ async function generateWithChunking(
     const actualDataEnd = Math.min(44 + dataSize, buf.length)
     let pcm = buf.subarray(44, actualDataEnd)
 
-    const trimMs = overlapMsList[i] || 0
-    if (trimMs > 0 && i < chunks.length - 1) {
-      // Estimativa do buffer em bytes, menos 200ms de margem de segurança
-      const trimBytes = Math.floor(trimMs * bytesPerMs) - Math.floor(200 * bytesPerMs)
-      const safeTrim = Math.max(0, trimBytes)
-      if (safeTrim > 0 && safeTrim < pcm.length * 0.5) {
-        pcm = pcm.subarray(0, pcm.length - safeTrim)
-        debug.log(`Chunk ${i + 1}`, 'info', `trim: ${trimMs - 200}ms (${safeTrim} bytes)`)
-      }
+    // Chunks intermediários: DAW cut (achar fim da fala + 20ms cauda)
+    // Último chunk: manter intacto (pode ter silêncio natural no final)
+    if (i < chunks.length - 1) {
+      const trimmed = findSpeechEnd(pcm, firstFormat, 0.020) // 20ms cauda
+      const removedMs = ((pcm.length - trimmed.length) / firstFormat.blockAlign / firstFormat.sampleRate * 1000).toFixed(0)
+      debug.log(`Chunk ${i + 1}`, 'info', `DAW cut: removeu ${removedMs}ms de silêncio pós-fala`)
+      pcmParts.push(trimmed)
+    } else {
+      pcmParts.push(pcm)
     }
-
-    pcmList.push(pcm)
   }
 
-  if (pcmList.length === 1) {
-    const finalBuffer = buildSimpleWavHeader(firstFormat, pcmList[0].length, pcmList[0])
-    return { finalBuffer, chunks }
-  }
-
-  // Crossfade 3ms nas junções
-  let finalPcm: Buffer = pcmList[0]
-  for (let i = 1; i < pcmList.length; i++) {
-    const prev = finalPcm
-    const next = pcmList[i]
-
-    if (prev.length < crossfadeBytes * 3 || next.length < crossfadeBytes * 3) {
-      finalPcm = Buffer.concat([prev, next])
-      continue
-    }
-
-    const prevTail = prev.subarray(prev.length - crossfadeBytes)
-    const nextHead = next.subarray(0, crossfadeBytes)
-
-    const xfade = Buffer.alloc(crossfadeBytes)
-    for (let s = 0; s < crossfadeSamples; s++) {
-      const t = s / crossfadeSamples
-      for (let ch = 0; ch < firstFormat.numChannels; ch++) {
-        const off = (s * firstFormat.numChannels + ch) * 2
-        xfade.writeInt16LE(
-          Math.round(prevTail.readInt16LE(off) * (1 - t) + nextHead.readInt16LE(off) * t),
-          off
-        )
-      }
-    }
-
-    finalPcm = Buffer.concat([
-      prev.subarray(0, prev.length - crossfadeBytes),
-      xfade,
-      next.subarray(crossfadeBytes),
-    ])
-  }
-
+  // Splice puro: juntar os bytes sem nenhum processamento
+  const finalPcm = Buffer.concat(pcmParts)
   const finalBuffer = buildSimpleWavHeader(firstFormat, finalPcm.length, finalPcm)
 
   debug.log('Concatenacao', 'ok',
-    `PCM: ${finalPcm.length} bytes, ${pcmList.length} chunks, crossfade 3ms, ${(finalBuffer.length / 1024).toFixed(1)}KB`)
+    `PCM: ${finalPcm.length} bytes, ${pcmParts.length} chunks, ${(finalBuffer.length / 1024).toFixed(1)}KB`)
 
   return { finalBuffer, chunks }
 }
