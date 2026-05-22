@@ -50,83 +50,6 @@ async function downloadWithRetry(
   return null
 }
 
-/**
- * Aplica fade-in/fade-out suave (10ms) nas bordas do WAV.
- * Evita estalinhos/crackling sem cortar nenhuma sílaba (diferente do postprocess_output).
- */
-function applyEdgeFades(wavBuffer: Buffer, fadeInMs = 10, fadeOutMs = 10): Buffer {
-  if (wavBuffer.length < 44) return wavBuffer
-
-  const sampleRate = wavBuffer.readUInt32LE(24)
-  const bitsPerSample = wavBuffer.readUInt16LE(34)
-  const numChannels = wavBuffer.readUInt16LE(22)
-  const bytesPerSample = (bitsPerSample / 8) * numChannels
-  const dataStart = 44
-  const dataEnd = wavBuffer.length
-  const totalSamples = (dataEnd - dataStart) / bytesPerSample
-
-  const fadeInSamples = Math.round(sampleRate * (fadeInMs / 1000))
-  const fadeOutSamples = Math.round(sampleRate * (fadeOutMs / 1000))
-
-  // Clonar buffer para não mutar o original
-  const output = Buffer.from(wavBuffer)
-
-  // Fade-in: primeiros fadeInSamples samples
-  for (let i = 0; i < fadeInSamples && i < totalSamples; i++) {
-    const gain = i / fadeInSamples // 0.0 → 1.0
-    for (let ch = 0; ch < numChannels; ch++) {
-      const offset = dataStart + (i * numChannels + ch) * (bitsPerSample / 8)
-      if (offset + 2 <= dataEnd) {
-        const sample = output.readInt16LE(offset)
-        output.writeInt16LE(Math.round(sample * gain), offset)
-      }
-    }
-  }
-
-  // Fade-out: últimos fadeOutSamples samples
-  for (let i = 0; i < fadeOutSamples && i < totalSamples; i++) {
-    const sampleIndex = totalSamples - 1 - i
-    const gain = i / fadeOutSamples // 0.0 → 1.0 (do fim pro começo)
-    for (let ch = 0; ch < numChannels; ch++) {
-      const offset = dataStart + (sampleIndex * numChannels + ch) * (bitsPerSample / 8)
-      if (offset + 2 <= dataEnd) {
-        const sample = output.readInt16LE(offset)
-        output.writeInt16LE(Math.round(sample * gain), offset)
-      }
-    }
-  }
-
-  return output
-}
-
-/**
- * Adiciona silêncio no final do WAV para proteger a última sílaba.
- */
-function appendSilence(wavBuffer: Buffer, ms: number): Buffer {
-  if (wavBuffer.length < 44) return wavBuffer
-
-  const sampleRate = wavBuffer.readUInt32LE(24)
-  const bitsPerSample = wavBuffer.readUInt16LE(34)
-  const numChannels = wavBuffer.readUInt16LE(22)
-  const bytesPerSample = (bitsPerSample / 8) * numChannels
-  const extraSamples = Math.round(sampleRate * (ms / 1000))
-  const extraBytes = extraSamples * bytesPerSample
-  const silence = Buffer.alloc(extraBytes, 0)
-  const originalDataSize = wavBuffer.length - 44
-  const newDataSize = originalDataSize + extraBytes
-
-  const output = Buffer.concat([
-    wavBuffer.subarray(0, 4),
-    Buffer.alloc(4),
-    wavBuffer.subarray(8, 44),
-    wavBuffer.subarray(44),
-    silence,
-  ])
-
-  output.writeUInt32LE(output.length - 8, 4)
-  output.writeUInt32LE(newDataSize, 40)
-  return output
-}
 
 // POST /api/tunnel-generate - Geracao direta via tunnel cloudflared
 // Pipeline completo com prosódia:
@@ -464,10 +387,9 @@ async function generateSingleShot(
   }
   debug.log('Download', 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB (WAV completo)`)
 
-  // Adicionar 500ms de silencio no final para proteger a ultima silaba.
-  const paddedBuffer = appendSilence(voiceBuffer, 500)
-  debug.log('Padding', 'ok', `+500ms silencio final: ${(paddedBuffer.length / 1024).toFixed(1)}KB`)
-  return paddedBuffer
+  // SEM pós-processamento. Passa o áudio exatamente como o Gradio/OmniVoice gera.
+  // Mesma coisa que ouvir direto no localhost:7860.
+  return voiceBuffer
 }
 
 // ============================================================
@@ -575,7 +497,7 @@ export async function POST(req: NextRequest) {
       speed || 1,
       null,   // duration
       true,   // preprocess_prompt
-      false,  // postprocess_output DESATIVADO: cortava a ultima silaba em textos longos.
+      true,   // postprocess_output (padrao do Gradio — funciona igual localhost:7860)
     ]
 
     debug.log('Parametros', 'info', `lang:${language} speed:${speed} steps:${numStep} cfg:${guidanceScale} chunking:${useChunking}`)
