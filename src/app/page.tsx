@@ -721,13 +721,7 @@ export default function VozProClient() {
             })),
           }))
           setVoices(filteredVoices)
-          // Auto-selecionar primeira voz COM áudio disponível
-          const firstWithAudio = filteredVoices.find((v: Voice) => v.variations.some((vr: VoiceVariation) => vr.hasAudio))
-          if (firstWithAudio) {
-            setSelectedVoiceId(firstWithAudio.id)
-          } else if (filteredVoices.length > 0) {
-            setSelectedVoiceId(filteredVoices[0].id)
-          }
+          // NÃO auto-selecionar voz — usuário deve escolher explicitamente
         }
         if (tracksRes.ok) {
           const tracksData = await tracksRes.json()
