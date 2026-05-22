@@ -383,8 +383,10 @@ async function generateSingleShot(
   // O evento SSE "complete" dispara quando a GERACAO termina, mas o Gradio
   // ainda pode estar salvando o arquivo WAV. Sem esse delay, o download pode
   // pegar um arquivo incompleto (cortando o final do audio em textos longos).
-  await new Promise(r => setTimeout(r, 2000))
-  debug.log('Download', 'info', 'Aguardou 2s apos SSE complete')
+  // Delay dinamico: texto longo precisa de mais tempo.
+  const delayMs = Math.min(5000, 2000 + Math.floor(text.length / 200) * 1000)
+  await new Promise(r => setTimeout(r, delayMs))
+  debug.log('Download', 'info', `Aguardou ${delayMs}ms apos SSE complete (texto: ${text.length} chars)`)
 
   // Download com retry + validação WAV (tunnel pode truncar arquivos grandes)
   const voiceBuffer = await downloadWithRetry(result.audioUrl, 3, 2000)
@@ -394,9 +396,56 @@ async function generateSingleShot(
   }
   debug.log('Download', 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB (WAV completo)`)
 
+  // Adicionar 500ms de silêncio no final do WAV para proteger a última sílaba.
+  // O postprocess_output do OmniVoice pode cortar a última sílaba junto com o silêncio.
+  const paddedBuffer = appendWavSilence(voiceBuffer, 0.5)
+  if (paddedBuffer) {
+    debug.log('Silence Pad', 'ok', `+500ms silêncio (${(paddedBuffer.length / 1024).toFixed(1)}KB final)`)
+    return paddedBuffer
+  }
+
   // SEM pós-processamento. Passa o áudio exatamente como o Gradio/OmniVoice gera.
   // Mesma coisa que ouvir direto no localhost:7860.
   return voiceBuffer
+}
+
+// ============================================================
+// APPEND WAV SILENCE - Adiciona silêncio PCM no final de um WAV
+// ============================================================
+
+function appendWavSilence(wavBuffer: Buffer, durationSec: number): Buffer | null {
+  if (wavBuffer.length < 44) return null
+
+  // Verificar assinatura RIFF/WAVE
+  const riff = wavBuffer.subarray(0, 4).toString('ascii')
+  const wave = wavBuffer.subarray(8, 12).toString('ascii')
+  if (riff !== 'RIFF' || wave !== 'WAVE') return null
+
+  // Ler parâmetros do WAV header
+  const sampleRate = wavBuffer.readUInt32LE(24)
+  const bitsPerSample = wavBuffer.readUInt16LE(34)
+  const channels = wavBuffer.readUInt16LE(22)
+  const bytesPerSample = Math.floor(bitsPerSample / 8)
+
+  // Calcular bytes de silêncio
+  const silenceSamples = Math.floor(sampleRate * durationSec)
+  const silenceBytes = silenceSamples * channels * bytesPerSample
+
+  // Criar novo buffer: WAV original + zeros + header atualizado
+  const newBuffer = Buffer.alloc(wavBuffer.length + silenceBytes)
+  wavBuffer.copy(newBuffer)
+
+  // Preencher silêncio (zeros) no final dos dados PCM
+  newBuffer.fill(0, wavBuffer.length)
+
+  // Atualizar RIFF ChunkSize (offset 4) = total - 8
+  newBuffer.writeUInt32LE(newBuffer.length - 8, 4)
+
+  // Atualizar Subchunk2Size (offset 40) = dados antigos + silêncio
+  const oldDataSize = wavBuffer.readUInt32LE(40)
+  newBuffer.writeUInt32LE(oldDataSize + silenceBytes, 40)
+
+  return newBuffer
 }
 
 // ============================================================
