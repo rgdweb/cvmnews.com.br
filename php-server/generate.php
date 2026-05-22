@@ -594,6 +594,10 @@ if (!$audioUrl) {
 // ===================== BAIXAR AUDIO GERADO =====================
 debugLog('Download audio gerado', 'info', 'baixando...');
 
+// Aguardar Gradio terminar de escrever o arquivo no disco.
+sleep(2);
+debugLog('Download audio gerado', 'info', 'Aguardou 2s apos SSE complete');
+
 // Detectar extensao real do audio gerado (Gradio pode retornar WAV ou MP3)
 $ext = strtolower(pathinfo($audioUrl, PATHINFO_EXTENSION));
 if (empty($ext) || !in_array($ext, ['wav', 'mp3', 'ogg', 'flac'])) {

@@ -379,6 +379,13 @@ async function generateSingleShot(
   const result = await streamResult(tunnelUrl, eventId, debug, 180000)
   if (!result.audioUrl) return null
 
+  // Aguardar Gradio terminar de escrever o arquivo no disco.
+  // O evento SSE "complete" dispara quando a GERACAO termina, mas o Gradio
+  // ainda pode estar salvando o arquivo WAV. Sem esse delay, o download pode
+  // pegar um arquivo incompleto (cortando o final do audio em textos longos).
+  await new Promise(r => setTimeout(r, 2000))
+  debug.log('Download', 'info', 'Aguardou 2s apos SSE complete')
+
   // Download com retry + validação WAV (tunnel pode truncar arquivos grandes)
   const voiceBuffer = await downloadWithRetry(result.audioUrl, 3, 2000)
   if (!voiceBuffer) {
