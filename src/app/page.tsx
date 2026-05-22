@@ -2281,6 +2281,42 @@ export default function VozProClient() {
               </summary>
               <Card className="mt-2 bg-white/5 border-white/10 backdrop-blur">
                 <CardContent className="pt-5 space-y-3">
+                  {/* === CHUNKING INFO === */}
+                  {(lastGenResponse as Record<string, unknown>)?.chunking && (
+                    <div className="space-y-2">
+                      <span className="text-xs font-semibold text-blue-300">Chunking Ativo (Anti-Postprocess)</span>
+                      <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-2.5 text-xs">
+                        {(() => {
+                          const c = (lastGenResponse as Record<string, unknown>).chunking as Record<string, unknown>
+                          const mode = (lastGenResponse as Record<string, unknown>).mode as string
+                          const chunks = c.chunks as Array<{ text: string; pauseAfterMs: number; punctuation: string }> || []
+                          return (
+                            <>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold text-blue-400">
+                                  {c.totalChunks} chunks — modo: {mode}
+                                </span>
+                              </div>
+                              <div className="text-blue-300/80 text-[11px] mb-1.5">
+                                Texto dividido em {c.totalChunks} partes (max 250 chars) para contornar corte do postprocess.
+                                Cada chunk gerado separadamente e concatenado com silêncio.
+                              </div>
+                              <div className="space-y-1">
+                                {chunks.map((chunk, i) => (
+                                  <div key={i} className="flex items-center gap-2 text-[11px] text-slate-400">
+                                    <span className="text-blue-400 font-mono w-12">[{i + 1}/{c.totalChunks}]</span>
+                                    <span className="truncate flex-1">{chunk.text}</span>
+                                    <span className="text-slate-500">{chunk.pauseAfterMs}ms</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
                   {/* === DIAGNÓSTICO DO ÁUDIO === */}
                   {(lastGenResponse as Record<string, unknown>)?.audioDiagnostics && (
                     <div className="space-y-2">
