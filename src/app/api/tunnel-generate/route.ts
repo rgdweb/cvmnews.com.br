@@ -51,6 +51,55 @@ async function downloadWithRetry(
 }
 
 /**
+ * Aplica fade-in/fade-out suave (10ms) nas bordas do WAV.
+ * Evita estalinhos/crackling sem cortar nenhuma sílaba (diferente do postprocess_output).
+ */
+function applyEdgeFades(wavBuffer: Buffer, fadeInMs = 10, fadeOutMs = 10): Buffer {
+  if (wavBuffer.length < 44) return wavBuffer
+
+  const sampleRate = wavBuffer.readUInt32LE(24)
+  const bitsPerSample = wavBuffer.readUInt16LE(34)
+  const numChannels = wavBuffer.readUInt16LE(22)
+  const bytesPerSample = (bitsPerSample / 8) * numChannels
+  const dataStart = 44
+  const dataEnd = wavBuffer.length
+  const totalSamples = (dataEnd - dataStart) / bytesPerSample
+
+  const fadeInSamples = Math.round(sampleRate * (fadeInMs / 1000))
+  const fadeOutSamples = Math.round(sampleRate * (fadeOutMs / 1000))
+
+  // Clonar buffer para não mutar o original
+  const output = Buffer.from(wavBuffer)
+
+  // Fade-in: primeiros fadeInSamples samples
+  for (let i = 0; i < fadeInSamples && i < totalSamples; i++) {
+    const gain = i / fadeInSamples // 0.0 → 1.0
+    for (let ch = 0; ch < numChannels; ch++) {
+      const offset = dataStart + (i * numChannels + ch) * (bitsPerSample / 8)
+      if (offset + 2 <= dataEnd) {
+        const sample = output.readInt16LE(offset)
+        output.writeInt16LE(Math.round(sample * gain), offset)
+      }
+    }
+  }
+
+  // Fade-out: últimos fadeOutSamples samples
+  for (let i = 0; i < fadeOutSamples && i < totalSamples; i++) {
+    const sampleIndex = totalSamples - 1 - i
+    const gain = i / fadeOutSamples // 0.0 → 1.0 (do fim pro começo)
+    for (let ch = 0; ch < numChannels; ch++) {
+      const offset = dataStart + (sampleIndex * numChannels + ch) * (bitsPerSample / 8)
+      if (offset + 2 <= dataEnd) {
+        const sample = output.readInt16LE(offset)
+        output.writeInt16LE(Math.round(sample * gain), offset)
+      }
+    }
+  }
+
+  return output
+}
+
+/**
  * Adiciona silêncio no final do WAV para proteger a última sílaba.
  */
 function appendSilence(wavBuffer: Buffer, ms: number): Buffer {
@@ -526,7 +575,7 @@ export async function POST(req: NextRequest) {
       speed || 1,
       null,   // duration
       true,   // preprocess_prompt
-      true,   // postprocess_output (NECESSARIO: remove estalinhos/artefatos do audio gerado)
+      false,  // postprocess_output DESATIVADO: cortava a ultima silaba em textos longos.
     ]
 
     debug.log('Parametros', 'info', `lang:${language} speed:${speed} steps:${numStep} cfg:${guidanceScale} chunking:${useChunking}`)
