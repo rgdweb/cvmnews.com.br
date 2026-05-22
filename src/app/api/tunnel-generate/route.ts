@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { chunkText, formatChunkSummary, type TextChunk } from '@/lib/tts-chunker'
+import { chunkText, chunkByCharLimit, formatChunkSummary, type TextChunk } from '@/lib/tts-chunker'
 import { concatenateAudioBuffers, applyFadeOut, type AudioChunk } from '@/lib/audio-concatenator'
 import { validateGeneratedAudio, shouldRetry, formatValidationLog } from '@/lib/asr-validator'
 import { stripSSMLForTTS } from '@/lib/ssml-parser'
@@ -260,7 +260,7 @@ async function generateChunk(
   const data = [...gradioBaseData]
   data[0] = chunkText  // índice 0 = texto
 
-  debug.log(`Chunk ${chunkIndex + 1}/${totalChunks}`, 'info', `"${chunkText.substring(0, 50)}..."`)
+  debug.log(`Chunk ${chunkIndex + 1}/${totalChunks}`, 'info', `"${chunkText.substring(0, 50)}..." (${chunkText.length} chars)`)
 
   // Submeter job
   let eventId: string | null = null
@@ -285,16 +285,29 @@ async function generateChunk(
     return null
   }
 
-  // Download
-  const voiceRes = await fetch(result.audioUrl)
-  if (!voiceRes.ok) {
-    debug.log(`Chunk ${chunkIndex + 1}`, 'error', 'Falha no download')
+  // Aguardar Gradio salvar o arquivo no disco (igual single-shot)
+  // Delay curto para chunks pequenos (< 250 chars o Gradio salva rápido)
+  const chunkDelay = Math.min(3000, 1500 + Math.floor(chunkText.length / 200) * 500)
+  await new Promise(r => setTimeout(r, chunkDelay))
+
+  // Download com retry
+  const voiceBuffer = await downloadWithRetry(result.audioUrl, 3, 1500)
+  if (!voiceBuffer) {
+    debug.log(`Chunk ${chunkIndex + 1}`, 'error', 'Falha no download apos retry')
     return null
   }
 
-  const voiceBuffer = Buffer.from(await voiceRes.arrayBuffer())
-  debug.log(`Chunk ${chunkIndex + 1}/${totalChunks}`, 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB`)
-  return voiceBuffer
+  // Calcular duração do chunk para diagnóstico
+  const sr = voiceBuffer.readUInt32LE(24)
+  const ch = voiceBuffer.readUInt16LE(22)
+  const bps = voiceBuffer.readUInt16LE(34)
+  const ds = voiceBuffer.readUInt32LE(40)
+  const dur = (ds / ch / Math.floor(bps / 8) / sr).toFixed(1)
+  debug.log(`Chunk ${chunkIndex + 1}/${totalChunks}`, 'ok', `${(voiceBuffer.length / 1024).toFixed(1)}KB, ${dur}s, delay ${chunkDelay}ms`)
+
+  // Adicionar 300ms de silêncio ao final de cada chunk para proteção
+  const padded = appendWavSilence(voiceBuffer, 0.3)
+  return padded || voiceBuffer
 }
 
 // ============================================================
@@ -307,11 +320,11 @@ async function generateWithChunking(
   gradioBaseData: unknown[],
   debug: ReturnType<typeof createDebug>
 ): Promise<{ finalBuffer: Buffer; chunks: TextChunk[] } | null> {
-  // 1. Chunking de texto
-  const chunks = chunkText(text)
+  // 1. Chunking por limite de caracteres (anti-postprocess)
+  const chunks = chunkByCharLimit(text, 250)
   if (chunks.length === 0) return null
 
-  debug.log('Chunking', 'ok', `${chunks.length} frases identificadas`)
+  debug.log('Chunking', 'ok', `${chunks.length} chunks (max 250 chars cada)`)  
   debug.log('Chunking', 'info', formatChunkSummary(chunks).substring(0, 500))
 
   // 2. Gerar cada chunk
@@ -340,14 +353,25 @@ async function generateWithChunking(
     debug.log('Chunking', 'warn', `${failedChunks}/${chunks.length} chunks falharam, continuando com ${audioChunks.length}`)
   }
 
-  // 3. Concatenar com silêncio real
-  debug.log('Concatenacao', 'info', `Juntando ${audioChunks.length} chunks com silencio...`)
-  const concatenated = concatenateAudioBuffers(audioChunks)
+  // 3. Concatenar com config LEVE (sem trim, sem normalize, sem crossfade)
+  // Por quê leve? O OmniVoice já normaliza bem, e trim/normalize causavam artefatos nas junções
+  debug.log('Concatenacao', 'info', `Juntando ${audioChunks.length} chunks (config leve: sem trim, sem normalize)...`)
+  const concatenated = concatenateAudioBuffers(audioChunks, {
+    crossfadeMs: 0,
+    trimSilenceMs: 0,       // SEM trim — OmniVoice já corta silêncio via postprocess
+    normalizeVolume: false,  // SEM normalize — OmniVoice já normaliza; evitar saltos de volume
+    fadeOutMs: 0,            // SEM fade-out — engolía última sílaba
+    targetRmsDb: -16,
+  })
+
+  // 4. Adicionar 500ms de silêncio no final do áudio concatenado
+  const padded = appendWavSilence(concatenated.buffer, 0.5)
+  const finalBuffer = padded || concatenated.buffer
 
   debug.log('Concatenacao', 'ok',
-    `${concatenated.totalDurationMs}ms total (${concatenated.chunkCount} chunks, ${(concatenated.buffer.length / 1024).toFixed(1)}KB)`)
+    `${concatenated.totalDurationMs}ms fala + ${(audioChunks.length - 1) * 300}ms pausas + 500ms pad = total ~${(finalBuffer.length / 96000 / 1.5).toFixed(1)}s (${concatenated.chunkCount} chunks, ${(finalBuffer.length / 1024).toFixed(1)}KB)`)
 
-  return { finalBuffer: concatenated.buffer, chunks }
+  return { finalBuffer, chunks }
 }
 
 // ============================================================
@@ -530,8 +554,7 @@ export async function POST(req: NextRequest) {
       numStep = 32,
       guidanceScale = 2.0,
       skipASR = false,
-      useChunking = false,  // CHUNKING DESATIVADO (22/05/2026): causava artefatos nas juncoes.
-      // OmniVoice gera texto longo naturalmente sem necessidade de chunking.
+      useChunking = false,  // AUTO: chunking ativa automaticamente para texto >280 chars
       voiceMode = 'clone', // 'clone' (ref_audio) | 'design' (instruct only) | 'auto' (nenhum)
     } = body
 
@@ -626,15 +649,36 @@ export async function POST(req: NextRequest) {
     let chunkInfo: TextChunk[] | null = null
     let audioDiagnostics: AudioDiagnostics | null = null
 
-    if (false && useChunking && cleanText.length > 20) {
-      // CHUNKING DESATIVADO (22/05/2026): causava artefatos ("ba", "to", "sao") nas juncoes.
-      // OmniVoice funciona melhor com texto inteiro em uma unica chamada.
-      // Mantido como fallback caso precise reativar no futuro.
-      debug.log('Pipeline', 'info', 'Modo CHUNKING ativo (prosódia explícita)')
+    // AUTO-CHUNKING para textos longos (>280 chars)
+    // Motivação: OmniVoice com postprocess_output=true corta ~29% do áudio para textos >280 chars.
+    // Solução: dividir em chunks de ~250 chars (onde postprocess não corta) e concatenar.
+    const shouldChunk = cleanText.length > 280 || useChunking
+    if (shouldChunk && cleanText.length > 20) {
+      debug.log('Pipeline', 'info', `Modo CHUNKING ativo (texto: ${cleanText.length} chars > 280 threshold)`)      
       const chunkResult = await generateWithChunking(tunnelUrl, cleanText, gradioBaseData, debug)
       if (chunkResult) {
         finalBuffer = chunkResult.finalBuffer
         chunkInfo = chunkResult.chunks
+        // Diagnóstico para chunking
+        const sr = finalBuffer.readUInt32LE(24)
+        const ch = finalBuffer.readUInt16LE(22)
+        const bps = finalBuffer.readUInt16LE(34)
+        const ds = finalBuffer.readUInt32LE(40)
+        const dur = (ds / ch / Math.floor(bps / 8) / sr).toFixed(1)
+        const expDur = (cleanText.length * 0.08).toFixed(1)
+        audioDiagnostics = {
+          textLength: cleanText.length,
+          audioDurationSec: dur,
+          fileSizeKB: (finalBuffer.length / 1024).toFixed(1),
+          sampleRate: sr,
+          bitsPerSample: bps,
+          channels: ch,
+          delayAfterSse: 0,
+          silencePadSec: 0.5,
+          expectedMinDuration: expDur,
+          durationOk: parseFloat(dur) >= parseFloat(expDur),
+          wavHeaderValid: isWavComplete(finalBuffer),
+        }
       } else {
         // Fallback para single-shot se chunking falhar completamente
         debug.log('Pipeline', 'warn', 'Chunking falhou, tentando single-shot como fallback...')
@@ -643,8 +687,8 @@ export async function POST(req: NextRequest) {
         audioDiagnostics = ssResult.diagnostics
       }
     } else {
-      // MODO SINGLE-SHOT — texto curto ou chunking desativado
-      debug.log('Pipeline', 'info', `Modo SINGLE-SHOT (${!useChunking ? 'desativado' : 'texto curto'})`)
+      // MODO SINGLE-SHOT — texto curto (<=280 chars, postprocess não corta)
+      debug.log('Pipeline', 'info', `Modo SINGLE-SHOT (texto: ${cleanText.length} chars <= 280)`)
       const ssResult = await generateSingleShot(tunnelUrl, cleanText, gradioBaseData, debug)
       finalBuffer = ssResult.buffer
       audioDiagnostics = ssResult.diagnostics

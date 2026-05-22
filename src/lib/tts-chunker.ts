@@ -504,6 +504,152 @@ function limitChunkCount(chunks: TextChunk[], maxChunks: number): TextChunk[] {
   return result
 }
 
+// ============================================================
+// CHUNKING POR LIMITE DE CARACTERES (Anti-Postprocess)
+// ============================================================
+
+/**
+ * Divide texto em chunks com limite de caracteres (~250).
+ * Quebra preferencialmente em: vírgulas → pontuação forte → conjunções → espaços.
+ * 
+ * Motivação: O OmniVoice com postprocess_output=true corta ~29% do áudio para 
+ * textos longos (>280 chars). Cada chunk curto é gerado separadamente e depois 
+ * concatenado, contornando o problema do postprocess agressivo.
+ * 
+ * Regras:
+ * - Cada chunk: máx `maxChars` caracteres
+ * - Ponto de quebra mínimo: 30% do maxChars (evita chunks minúsculos)
+ * - Último chunk herda pontuação forte (., !, ?)
+ * - Pausas entre chunks: 350ms (ponto), 250ms (vírgula/conjunção)
+ */
+export function chunkByCharLimit(text: string, maxChars = 250): TextChunk[] {
+  if (!text || !text.trim()) return []
+  
+  const normalized = text.replace(/\s+/g, ' ').trim()
+
+  // Texto curto: um chunk só
+  if (normalized.length <= maxChars) {
+    return [{ text: normalized, pauseAfterMs: 0, punctuation: '.', index: 0 }]
+  }
+
+  const chunks: TextChunk[] = []
+  let remaining = normalized
+  let idx = 0
+  const minBreak = Math.floor(maxChars * 0.3) // ponto de quebra mínimo (30%)
+
+  while (remaining.length > maxChars) {
+    let breakPos = -1
+    let breakPause = 350
+    let breakPunct = ','
+
+    // Prioridade 1: vírgula + espaço (", ")
+    // O TTS respeita vírgulas naturalmente, e a vírgula já está no texto do chunk
+    const commaSearch = remaining.substring(0, maxChars)
+    const lastComma = commaSearch.lastIndexOf(', ')
+    if (lastComma > minBreak) {
+      breakPos = lastComma + 2 // incluir vírgula e espaço no primeiro chunk
+      breakPause = 200
+      breakPunct = ','
+    }
+
+    // Prioridade 2: pontuação forte (. ! ?) + espaço
+    if (breakPos === -1) {
+      for (const [punct, pause] of [['. ', 350], ['! ', 400], ['? ', 450]] as [string, number][]) {
+        const pos = commaSearch.lastIndexOf(punct)
+        if (pos > minBreak) {
+          breakPos = pos + 2
+          breakPause = pause
+          breakPunct = punct.trim()
+          break
+        }
+      }
+    }
+
+    // Prioridade 3: conjunções comuns PT-BR
+    if (breakPos === -1) {
+      const conjunctions = [
+        ' e ', ' mas ', ' porem ', ' contudo ', ' porque ', ' quando ',
+        ' como ', ' para ', ' ou ', ' que ', ' nao ', ' se ', ' mais ',
+        ' tambem ', ' alem ', ' entretanto ', ' porem ', ' portanto ',
+        ' enfim ', ' afinal ', ' entao ',
+      ]
+      for (const conj of conjunctions) {
+        const pos = commaSearch.lastIndexOf(conj)
+        if (pos > minBreak) {
+          breakPos = pos + conj.length
+          breakPause = 250
+          breakPunct = ','
+          break
+        }
+      }
+    }
+
+    // Prioridade 4: qualquer espaço
+    if (breakPos === -1) {
+      const lastSpace = commaSearch.lastIndexOf(' ')
+      if (lastSpace > minBreak) {
+        breakPos = lastSpace + 1
+        breakPause = 250
+        breakPunct = ','
+      }
+    }
+
+    // Fallback: corte duro no maxChars
+    if (breakPos === -1) {
+      breakPos = maxChars
+      breakPause = 250
+      breakPunct = ','
+    }
+
+    const chunkText = remaining.substring(0, breakPos).trim()
+    if (chunkText.length >= 3) {
+      // Garantir que o chunk tem pontuação no final para o TTS finalizar frase
+      const endsWithPunct = /[,.!?;:]$/.test(chunkText)
+      const finalText = endsWithPunct ? chunkText : chunkText + ','
+
+      chunks.push({
+        text: finalText,
+        pauseAfterMs: breakPause,
+        punctuation: breakPunct,
+        index: idx++,
+      })
+    }
+
+    remaining = remaining.substring(breakPos).trim()
+  }
+
+  // Último chunk (restante)
+  if (remaining.length >= 3) {
+    // Garantir pontuação forte no último chunk
+    const hasStrongPunct = /[.!?]$/.test(remaining)
+    chunks.push({
+      text: hasStrongPunct ? remaining : remaining + '.',
+      pauseAfterMs: 0,
+      punctuation: hasStrongPunct ? remaining.match(/[.!?]$/)?.[0] || '.' : '.',
+      index: idx++,
+    })
+  }
+
+  // Se só restou texto muito curto, mesclar com o penúltimo
+  if (chunks.length >= 2) {
+    const last = chunks[chunks.length - 1]
+    if (last.text.length < 15) {
+      const prev = chunks[chunks.length - 2]
+      prev.text = prev.text + ', ' + last.text.replace(/^[,;:\s]+/, '')
+      prev.punctuation = last.punctuation
+      prev.pauseAfterMs = 0
+      chunks.pop()
+      // Garantir pontuação forte no novo último
+      if (!/[.!?]$/.test(prev.text)) {
+        prev.text = prev.text.replace(/[,;:]$/, '.')
+        prev.punctuation = '.'
+      }
+    }
+  }
+
+  return chunks.length > 0 ? chunks : [{ text: normalized, pauseAfterMs: 0, punctuation: '.', index: 0 }]
+}
+
 /** Resumo dos chunks para debug */
 export function formatChunkSummary(chunks: TextChunk[]): string {
   return chunks.map((c, i) =>
