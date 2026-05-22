@@ -1,12 +1,21 @@
 <?php
-// generate-omnivoice.php - Geracao de voz TTS via VozPro (PHP direto do browser)
+// generate-omnivoice.php - Geracao de voz TTS via OmniVoice (PHP direto do browser)
 // Suporta 3 modos: clone (_clone_fn), design (_design_fn), auto (_design_fn com Auto)
 // Usa o mesmo padrao HMAC do generate.php
 // Bypassa o Vercel completamente - zero gasto de serverless
+//
+// CORRECOES (15/05/2026):
+// - Adicionada cleanText() para remover caracteres de controle invisiveis
+// - memory_limit 256M -> 512M (base64 de audio longo precisa mais memoria)
+// - SSE timeout 300s -> 600s (textos longos nao estouram)
+// - po (postprocess) mantido true (limpa artefatos/estalos do audio gerado)
+// - CURLOPT_ENCODING => '' adicionado no fetch da tunnel URL
+// - Timeout submit job 60s -> 90s
+// - Timeout download audio 120s -> 180s
 
 set_time_limit(0);
 ini_set('max_input_time', 0);
-ini_set('memory_limit', '256M');
+ini_set('memory_limit', '512M');
 
 require_once __DIR__ . '/config.php';
 
@@ -99,6 +108,30 @@ function returnError($msg, $code = 500) {
     exit;
 }
 
+// ===================== STRIP SSML (defesa) =====================
+// Se o frontend enviar SSML, remove tudo. TTS nao entende tags.
+function stripSSML($text) {
+    if (!is_string($text)) return '';
+    if (!preg_match('/<[a-z][^>]*>/i', $text)) return $text;
+    $r = preg_replace('/<[^>]+>/', '', $text);
+    $r = html_entity_decode($r, ENT_QUOTES | ENT_XML1, 'UTF-8');
+    return trim(preg_replace('/\s+/', ' ', $r));
+}
+
+// ===================== LIMPAR TEXTO (defesa extra) =====================
+// Remove caracteres de controle invisiveis que podem causar garbling
+function cleanText($text) {
+    if (!is_string($text)) return '';
+    $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
+    $text = str_replace(["\r\n", "\r"], "\n", $text);
+    $text = preg_replace('/\n{3,}/', "\n\n", $text);
+    return trim($text);
+}
+
+// DICIONARIO DE PRONUNCIA: REMOVIDO PARA TESTE LIMPO (19/05/2026)
+// O OmniVoice local fala corretamente sem regras.
+// Testando se as regras causavam mais problemas que solucoes.
+
 // ===================== LER INPUT JSON =====================
 $rawInput = file_get_contents('php://input');
 $input = json_decode($rawInput, true);
@@ -110,15 +143,21 @@ if (!$input) {
 $texto = $input['text'] ?? '';
 $mode = $input['mode'] ?? 'clone';       // clone | design | auto
 $idioma = $input['language'] ?? 'Auto';
+// FORCAR PORTUGUES DESATIVADO PARA TESTE
+// if (empty($idioma) || $idioma === 'Auto' || strtolower($idioma) === 'auto') {
+//     $idioma = 'Portuguese';
+// }
 $refAudioUrl = $input['referenceAudioUrl'] ?? '';
 $refAudioName = $input['referenceAudioName'] ?? 'ref_audio.wav';
 $instruct = $input['instruct'] ?? '';
+// DETECCAO DE IDIOMA DESATIVADA PARA TESTE
+// $isPortuguese = in_array(strtolower($idioma), ['portuguese', 'portugues', 'pt', 'pt-br', 'pt_br']);
 $speed = $input['speed'] ?? 1.0;
+// Clamp velocidade: modelo OmniVoice/GPT-SoVITS fica distorcido fora desta faixa
+// < 0.8 = audio reverso/garbled ("lingua dos anjos") | > 1.3 = acelera demais/engole palavras
+$speedOriginal = $speed;
+$speed = max(0.8, min(1.3, (float)$speed));
 $numStep = $input['numStep'] ?? 32;
-$guidanceScale = $input['guidanceScale'] ?? 2.0;
-$denoise = isset($input['denoise']) ? ($input['denoise'] === true || $input['denoise'] === 'true' || $input['denoise'] === 1) : true;
-$preprocess = isset($input['preprocess']) ? ($input['preprocess'] === true || $input['preprocess'] === 'true' || $input['preprocess'] === 1) : true;
-$postprocess = isset($input['postprocess']) ? ($input['postprocess'] === true || $input['postprocess'] === 'true' || $input['postprocess'] === 1) : true;
 
 // Voice Design params (usados no _design_fn)
 $gender = $input['gender'] ?? 'Auto';
@@ -127,7 +166,12 @@ $pitch = $input['pitch'] ?? 'Auto';
 $style = $input['style'] ?? 'Auto';
 $accent = $input['accent'] ?? 'Auto';
 
-debugLog('Input', 'info', "modo: $mode | texto: " . mb_substr($texto, 0, 50) . " | lang: $idioma | steps: $numStep | cfg: $guidanceScale | dn: " . ($denoise ? '1' : '0') . " | pp: " . ($preprocess ? '1' : '0') . " | po: " . ($postprocess ? '1' : '0'));
+// ===================== DEFESA: STRIP SSML + CLEAN TEXTO =====================
+$texto = stripSSML($texto);
+$texto = cleanText($texto);
+// PRONUNCIA: Sem dicionario - teste limpo (19/05/2026)
+
+debugLog('Input', 'info', "modo: $mode | texto: " . mb_substr($texto, 0, 50) . " | lang: $idioma | steps: $numStep");
 
 if (empty(trim($texto))) {
     returnError('Texto e obrigatorio', 400);
@@ -141,31 +185,39 @@ if ($mode === 'clone' && empty($refAudioUrl)) {
 debugLog('Tunnel', 'info', 'Descobrindo URL do tunnel...');
 
 $tunnelUrl = null;
-$tunnelCh = curl_init(BASE_URL . '/get_tunnel.php');
-curl_setopt_array($tunnelCh, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT => 15,
-    CURLOPT_CONNECTTIMEOUT => 10,
-    CURLOPT_SSL_VERIFYPEER => false,
-]);
-$tunnelResp = curl_exec($tunnelCh);
-$tunnelCode = curl_getinfo($tunnelCh, CURLINFO_HTTP_CODE);
-curl_close($tunnelCh);
+// Primeiro tenta a constante TUNNEL_URL do config (atualizada pelo start_tunnel.ps1)
+if (defined('TUNNEL_URL') && !empty(TUNNEL_URL)) {
+    $tunnelUrl = TUNNEL_URL;
+    debugLog('Tunnel', 'info', 'Usando TUNNEL_URL do config');
+} else {
+    // Fallback: tenta via get_tunnel.php
+    $tunnelCh = curl_init(BASE_URL . '/get_tunnel.php');
+    curl_setopt_array($tunnelCh, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 15,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_ENCODING => '',
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $tunnelResp = curl_exec($tunnelCh);
+    $tunnelCode = curl_getinfo($tunnelCh, CURLINFO_HTTP_CODE);
+    curl_close($tunnelCh);
 
-if ($tunnelCode == 200 && $tunnelResp) {
-    $tunnelData = json_decode($tunnelResp, true);
-    if (($tunnelData['status'] ?? '') === 'online' && !empty($tunnelData['tunnelUrl'])) {
-        $tunnelUrl = $tunnelData['tunnelUrl'];
+    if ($tunnelCode == 200 && $tunnelResp) {
+        $tunnelData = json_decode($tunnelResp, true);
+        if (($tunnelData['status'] ?? '') === 'online' && !empty($tunnelData['tunnelUrl'])) {
+            $tunnelUrl = $tunnelData['tunnelUrl'];
+        }
     }
 }
 
 if (!$tunnelUrl) {
-    // Fallback para HF_SPACE_URL do config
+    // Fallback final para HF_SPACE_URL
     $tunnelUrl = defined('HF_SPACE_URL') ? HF_SPACE_URL : '';
 }
 
 if (empty($tunnelUrl)) {
-    returnError('Servidor VozPro offline - tunnel nao disponivel', 503);
+    returnError('Servidor OmniVoice offline - tunnel nao disponivel', 503);
 }
 
 debugLog('Tunnel', 'ok', mb_substr($tunnelUrl, 0, 60) . '...');
@@ -197,7 +249,22 @@ function downloadRefAudio($url, $name) {
     }
 
     debugLog('Download ref audio', 'ok', round(filesize($tempFile) / 1024) . 'KB');
+
+    // TRIM DESATIVADO (22/05/2026): OmniVoice funciona com audio de referencia longo (24s+).
+    // O trim brusco sem fade causava alucinacoes ("ba", "to", "sao") e audio 4x mais longo.
+    // A GPU RTX 3060 12GB aguenta referencias longas com empty_cache() no omnivoice_gpu.py.
+
     return $tempFile;
+}
+
+// ===================== TRIM AUDIO REF (DESATIVADO 22/05/2026) =====================
+// O trim brusco sem fade causava alucinacoes no modelo OmniVoice.
+// Mantido como funcao de fallback caso precise reativar no futuro.
+// define('MAX_REF_AUDIO_SECONDS', 10);
+
+function trimRefAudioToMaxSeconds($filePath, $maxSeconds = 10) {
+    // DESATIVADO: retornar false (usa audio original)
+    return false;
 }
 
 function uploadToGradio($filePath, $fileName, $baseUrl) {
@@ -237,7 +304,7 @@ function submitJob($baseUrl, $endpoint, $gradioData) {
         CURLOPT_POSTFIELDS => json_encode(['data' => $gradioData]),
         CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 60,
+        CURLOPT_TIMEOUT => 90,
         CURLOPT_CONNECTTIMEOUT => 20,
         CURLOPT_ENCODING => '',
         CURLOPT_SSL_VERIFYPEER => false,
@@ -263,8 +330,8 @@ function submitJob($baseUrl, $endpoint, $gradioData) {
     return $eventId;
 }
 
-function streamResult($baseUrl, $endpoint, $eventId, $timeoutSec = 300) {
-    debugLog('SSE Stream', 'info', "Abrindo conexao para $eventId...");
+function streamResult($baseUrl, $endpoint, $eventId, $timeoutSec = 600) {
+    debugLog('SSE Stream', 'info', "Abrindo conexao para $eventId (timeout: {$timeoutSec}s)...");
 
     $audioUrl = null;
     $error = null;
@@ -303,15 +370,24 @@ function streamResult($baseUrl, $endpoint, $eventId, $timeoutSec = 300) {
 
             if ($eventType === 'complete' && !empty($eventData)) {
                 debugLog('SSE Stream', 'ok', 'Evento COMPLETE recebido!');
+                debugLog('SSE Raw Data', 'info', mb_substr($eventData, 0, 500));
                 $resultData = json_decode($eventData, true);
+                debugLog('SSE Parsed', 'info', 'type=' . gettype($resultData) . (is_array($resultData) ? ' count=' . count($resultData) : '') . ' | keys=' . (is_array($resultData) ? implode(',', array_keys($resultData)) : 'N/A'));
                 // Gradio retorna [audio_output(FileData), status_text]
                 if (is_array($resultData) && count($resultData) >= 2) {
                     $output = $resultData[0];
+                    debugLog('SSE Output[0]', 'info', 'type=' . gettype($output) . ' | ' . mb_substr(json_encode($output), 0, 300));
                     if (isset($output['url'])) {
                         $audioUrl = $output['url'];
                     } elseif (isset($output['path'])) {
                         $audioUrl = $baseUrl . '/gradio_api/file=' . $output['path'];
+                    } else {
+                        debugLog('SSE Output[0]', 'warn', 'Sem url nem path! Conteudo: ' . mb_substr(json_encode($output), 0, 500));
                     }
+                } elseif (is_array($resultData) && count($resultData) === 1) {
+                    debugLog('SSE Parsed', 'warn', 'Apenas 1 elemento no resultado: ' . mb_substr(json_encode($resultData[0]), 0, 300));
+                } else {
+                    debugLog('SSE Parsed', 'warn', 'Formato inesperado! rawData: ' . mb_substr($eventData, 0, 500));
                 }
                 if ($audioUrl) {
                     debugLog('SSE Stream', 'ok', 'Audio: ' . mb_substr($audioUrl, 0, 80));
@@ -409,12 +485,12 @@ if ($mode === 'clone') {
         '',                                // ref_text (vazio = auto Whisper)
         $instruct ?: null,                 // instruct
         (int)$numStep,                     // ns
-        (float)$guidanceScale,             // gs (CFG)
-        $denoise,                          // dn (denoise)
+        2.0,                               // gs (CFG)
+        true,                              // dn (denoise)
         (float)$speed,                     // sp (speed)
         null,                              // du (duration, null = auto)
-        $preprocess,                       // pp (preprocess)
-        $postprocess                       // po (postprocess)
+        true,                              // pp (preprocess)
+        true                               // po (postprocess) - limpa estalos/artefatos do audio
     ];
 
 } else {
@@ -434,12 +510,12 @@ if ($mode === 'clone') {
         $texto,                            // text
         $idioma,                           // lang
         (int)$numStep,                     // ns
-        (float)$guidanceScale,             // gs (CFG)
-        $denoise,                          // dn (denoise)
+        2.0,                               // gs (CFG)
+        true,                              // dn (denoise)
         (float)$speed,                     // sp (speed)
         null,                              // du (duration)
-        $preprocess,                       // pp (preprocess)
-        $postprocess,                      // po (postprocess)
+        true,                              // pp (preprocess)
+        true,                              // po (postprocess) - limpa estalos/artefatos
         $gender,                           // gender
         $age,                              // age
         $pitch,                            // pitch
@@ -450,6 +526,67 @@ if ($mode === 'clone') {
 }
 
 debugLog('Modo', 'info', "endpoint: $endpoint | gender: $gender | pitch: $pitch");
+
+// ===================== QUEUE MONITOR =====================
+$monitorFile = sys_get_temp_dir() . '/vp_queue_monitor.json';
+$genId = uniqid('ov_');
+$genStartTime = time();
+
+function monitorStart($file, $id, $model, $mode, $text) {
+    $data = ['active' => [], 'history' => [], 'total_today' => 0];
+    if (file_exists($file)) {
+        $data = json_decode(file_get_contents($file), true) ?: $data;
+    }
+    // Contar total de hoje
+    $today = date('Y-m-d');
+    if (!isset($data['today_date']) || $data['today_date'] !== $today) {
+        $data['total_today'] = 0;
+        $data['today_date'] = $today;
+        $data['history'] = [];
+    }
+    $data['total_today']++;
+    // Limpar ativos expirados (>10min)
+    $now = time();
+    $data['active'] = array_values(array_filter($data['active'], function($g) use ($now) {
+        return ($now - $g['started_at']) < 600;
+    }));
+    // Adicionar geracao ativa
+    $data['active'][] = [
+        'id' => $id,
+        'model' => $model,
+        'mode' => $mode,
+        'text' => $text,
+        'started_at' => time(),
+        'ip' => $_SERVER['REMOTE_ADDR'] ?? '?',
+    ];
+    file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT), LOCK_EX);
+}
+
+function monitorEnd($file, $id, $success) {
+    if (!file_exists($file)) return;
+    $data = json_decode(file_get_contents($file), true) ?: ['active' => [], 'history' => []];
+    $now = time();
+    // Mover de active para history
+    $finished = null;
+    $data['active'] = array_values(array_filter($data['active'], function($g) use ($id, $now, &$finished) {
+        if ($g['id'] === $id) {
+            $finished = $g;
+            $finished['ended_at'] = $now;
+            $finished['success'] = $success;
+            return false;
+        }
+        return true;
+    }));
+    if ($finished) {
+        $data['history'][] = $finished;
+        if (count($data['history']) > 100) $data['history'] = array_slice($data['history'], -100);
+    }
+    file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT), LOCK_EX);
+}
+
+// Registrar inicio
+monitorStart($monitorFile, $genId, 'omnivoice', $mode, $texto);
+debugLog('Monitor', 'info', "Gen ID: $genId | Ativas: " . count(json_decode(file_get_contents($monitorFile), true)['active'] ?? []));
 
 // ===================== FLUXO COM RETRY =====================
 
@@ -463,7 +600,7 @@ for ($attempt = 0; $attempt < $maxRetries && !$audioUrl; $attempt++) {
         debugLog('Retry', 'warn', "Tentativa " . ($attempt + 1) . "/$maxRetries - aguardando ${waitSec}s...");
         sleep($waitSec);
     } else {
-        debugLog('Geracao', 'info', "Iniciando VozPro via PHP DIRECT ($endpoint)...");
+        debugLog('Geracao', 'info', "Iniciando OmniVoice via PHP DIRECT ($endpoint)...");
     }
 
     // Upload audio de referencia (clone mode only)
@@ -491,12 +628,12 @@ for ($attempt = 0; $attempt < $maxRetries && !$audioUrl; $attempt++) {
     }
 
     if (!$eventId) {
-        $lastError = 'Falha ao submeter job ao VozPro';
+        $lastError = 'Falha ao submeter job ao OmniVoice';
         continue;
     }
 
-    // Stream resultado
-    $result = streamResult($tunnelUrl, $endpoint, $eventId, 300);
+    // Stream resultado (timeout 600s para textos longos)
+    $result = streamResult($tunnelUrl, $endpoint, $eventId, 600);
 
     if ($result['audioUrl']) {
         $audioUrl = $result['audioUrl'];
@@ -527,51 +664,123 @@ for ($attempt = 0; $attempt < $maxRetries && !$audioUrl; $attempt++) {
 if ($tempRefFile && file_exists($tempRefFile)) unlink($tempRefFile);
 
 if (!$audioUrl) {
-    $userMsg = 'VozPro falhou: ' . $lastError;
+    $userMsg = 'OmniVoice falhou: ' . $lastError;
     if ($lastError === 'null') {
-        $userMsg = 'VozPro instavel. Tente novamente em instantes.';
+        $userMsg = 'OmniVoice instavel. Tente novamente em instantes.';
     } elseif ($lastError === '404') {
-        $userMsg = 'VozPro reiniciou. Tente novamente.';
+        $userMsg = 'OmniVoice reiniciou. Tente novamente.';
     } elseif ($lastError === 'timeout') {
-        $userMsg = 'VozPro demorou demais. Tente um texto mais curto.';
+        $userMsg = 'OmniVoice demorou demais. Tente um texto mais curto.';
     }
+    monitorEnd($monitorFile, $genId, false);
     returnError($userMsg, 504);
 }
 
-// ===================== BAIXAR AUDIO E RETORNAR =====================
+// ===================== BAIXAR AUDIO E RETORNAR (COM RETRY + VALIDACAO) =====================
 debugLog('Download audio', 'info', 'baixando audio gerado...');
-$tempAudioFile = tempnam(sys_get_temp_dir(), 'vp_ov_gen_') . '.wav';
 
-$ch = curl_init($audioUrl);
-$fp = fopen($tempAudioFile, 'w');
-curl_setopt_array($ch, [
-    CURLOPT_FILE => $fp,
-    CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_TIMEOUT => 120,
-    CURLOPT_ENCODING => '',
-    CURLOPT_SSL_VERIFYPEER => false,
-]);
-$dlOk = curl_exec($ch);
-$dlCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-fclose($fp);
+// Aguardar Gradio terminar de escrever o arquivo no disco.
+// O evento SSE "complete" dispara quando a GERACAO termina, mas o Gradio
+// ainda pode estar salvando o arquivo WAV. Sem esse delay, o download pode
+// pegar um arquivo incompleto (cortando o final do audio em textos longos).
+sleep(2);
+debugLog('Download audio', 'info', 'Aguardou 2s apos SSE complete');
+
+// Detectar extensao real do audio gerado
+$ext = strtolower(pathinfo($audioUrl, PATHINFO_EXTENSION));
+if (empty($ext) || !in_array($ext, ['wav', 'mp3', 'ogg', 'flac'])) {
+    $ext = 'wav';
+}
+$tempAudioFile = tempnam(sys_get_temp_dir(), 'vp_ov_gen_') . '.' . $ext;
+
+// Funcao: valida se o header WAV bate com o tamanho real do arquivo
+function isWavCompleteOv($filepath) {
+    if (!file_exists($filepath) || filesize($filepath) < 44) return false;
+    $f = fopen($filepath, 'rb');
+    if (!$f) return false;
+    $header = fread($f, 44);
+    fclose($f);
+    if (substr($header, 0, 4) !== 'RIFF' || substr($header, 8, 4) !== 'WAVE') return false;
+    $declaredSize = unpack('V', substr($header, 4, 4))[1];
+    $actualSize = filesize($filepath);
+    $expectedRiffSize = $actualSize - 8;
+    if ($expectedRiffSize < $declaredSize) return false;
+    return true;
+}
+
+// Download com retry: ate 3 tentativas, validando tamanho e header WAV
+$dlOk = false;
+$dlCode = 0;
+$maxRetries = 3;
+$minFileSize = 50000;
+
+for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+    if (file_exists($tempAudioFile)) unlink($tempAudioFile);
+    $tempAudioFile = tempnam(sys_get_temp_dir(), 'vp_ov_gen_') . '.' . $ext;
+    
+    $ch = curl_init($audioUrl);
+    $fp = fopen($tempAudioFile, 'w');
+    curl_setopt_array($ch, [
+        CURLOPT_FILE => $fp,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 180,
+        CURLOPT_CONNECTTIMEOUT => 30,
+        CURLOPT_ENCODING => '',
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $dlOk = curl_exec($ch);
+    $dlCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    fclose($fp);
+    clearstatcache();
+    
+    $fileSize = filesize($tempAudioFile);
+    debugLog('Download audio', 'info', "Tentativa $attempt/$maxRetries: " . round($fileSize / 1024) . "KB (HTTP $dlCode)");
+    
+    if (!$dlOk || $dlCode != 200 || $fileSize == 0) {
+        debugLog('Download audio', 'warn', "Falha no download (HTTP $dlCode)");
+        if ($attempt < $maxRetries) { sleep(2); }
+        continue;
+    }
+    
+    if ($fileSize < $minFileSize) {
+        debugLog('Download audio', 'warn', "Arquivo muito pequeno ($fileSize bytes < $minFileSize)");
+        if ($attempt < $maxRetries) { sleep(3); }
+        continue;
+    }
+    
+    if ($ext === 'wav') {
+        if (isWavCompleteOv($tempAudioFile)) {
+            debugLog('Download audio', 'ok', "WAV completo (header OK)");
+            break;
+        } else {
+            debugLog('Download audio', 'warn', "WAV truncado (header vs tamanho real)");
+            if ($attempt < $maxRetries) { sleep(3); }
+            continue;
+        }
+    }
+    break;
+}
 
 if (!$dlOk || $dlCode != 200 || filesize($tempAudioFile) == 0) {
     if (file_exists($tempAudioFile)) unlink($tempAudioFile);
-    returnError("Falha ao baixar audio gerado (HTTP $dlCode)");
+    returnError("Falha ao baixar audio apos $maxRetries tentativas (HTTP $dlCode)");
 }
 
-debugLog('Download audio', 'ok', round(filesize($tempAudioFile) / 1024) . 'KB');
+debugLog('Download audio', 'ok', round(filesize($tempAudioFile) / 1024) . 'KB' . ($ext !== 'wav' ? " ($ext)" : '') . " (tentativa $attempt/$maxRetries)");
 
 // Base64
 $audioBase64 = base64_encode(file_get_contents($tempAudioFile));
-$ext = strtolower(pathinfo($audioUrl, PATHINFO_EXTENSION));
+
 $mimeType = ($ext === 'mp3') ? 'audio/mpeg' : 'audio/wav';
 $dataUri = 'data:' . $mimeType . ';base64,' . $audioBase64;
 
 if ($tempAudioFile && file_exists($tempAudioFile)) unlink($tempAudioFile);
 
-debugLog('FINAL', 'ok', 'VozPro via PHP DIRECT - zero Vercel');
+// Registrar sucesso no monitor
+monitorEnd($monitorFile, $genId, true);
+
+debugLog('FINAL', 'ok', 'OmniVoice via PHP DIRECT - zero Vercel');
 
 echo json_encode([
     'audioUrl' => $dataUri,
