@@ -70,7 +70,7 @@ echo   TUDO PRONTO!
 echo ============================================
 echo.
 echo   Janela 1: OmniVoice GPU (porta 7860)
-echo   Janela 2: Localtunnel
+echo   Janela 2: Tunnel (Cloudflare)
 echo   Janela 3: Monitor + Auto-Restart
 echo.
 echo   NAO FECHE NENHUMA JANELA!
