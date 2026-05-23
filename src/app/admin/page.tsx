@@ -17,7 +17,7 @@ import {
   AudioWaveform, LogOut, Plus, Trash2, Edit, Upload, Music, Mic,
   Loader2, RefreshCw, Volume2, FileAudio, CheckCircle2, Settings2,
   FolderOpen, ChevronLeft, FolderPlus, Folder, Play, Pause, Users, UserPlus, Shield,
-  UploadCloud, X, Download, VolumeX, CreditCard, Chrome, DollarSign
+  UploadCloud, X, Download, VolumeX, CreditCard, Chrome, DollarSign, List
 } from 'lucide-react'
 import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
@@ -815,6 +815,8 @@ export default function AdminDashboard() {
   const [voiceCategories, setVoiceCategories] = useState<CategoryInfo[]>([])
   const [selectedTrackCategory, setSelectedTrackCategory] = useState<string | null>(null)
   const [selectedVoiceCategory, setSelectedVoiceCategory] = useState<string | null>(null)
+  const [showAllVoices, setShowAllVoices] = useState(false)
+  const [showAllTracks, setShowAllTracks] = useState(false)
 
   // Managed categories state (from SystemSetting)
   const [managedTrackCategories, setManagedTrackCategories] = useState<ManagedCategory[]>([])
@@ -2714,6 +2716,49 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
               </div>
+            ) : showAllVoices ? (
+              /* FLAT LIST - ALL VOICES */
+              <div>
+                <button
+                  onClick={() => setShowAllVoices(false)}
+                  className="flex items-center gap-2 text-sm text-violet-400 hover:text-violet-300 mb-4 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Pastas &gt; <span className="font-semibold">Todas as Vozes ({voices.length})</span>
+                </button>
+                <div className="space-y-3">
+                  {voices.map((voice) => (
+                    <Card key={voice.id} className="bg-slate-800/50 border-slate-700">
+                      <CardContent className="py-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => {
+                                const firstActiveVar = voice.variations.find(v => v.active !== false && v.refAudioPath)
+                                if (firstActiveVar) toggleVoicePreview(firstActiveVar)
+                              }}
+                              className={`w-8 h-8 rounded-full bg-violet-500/20 flex items-center justify-center shrink-0 transition-all duration-200 ${voice.variations.some(v => v.id === previewingVoiceVarId) ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/30' : 'hover:bg-violet-500/30'}`}
+                            >
+                              {voice.variations.some(v => v.id === previewingVoiceVarId) ? <Pause className="w-4 h-4" /> : <Mic className="w-4 h-4 text-violet-400" />}
+                            </button>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm text-white">{voice.name}</span>
+                                <Badge variant={voice.active ? 'default' : 'secondary'} className={voice.active ? 'bg-emerald-600' : 'bg-slate-600'}>{voice.active ? 'Ativa' : 'Inativa'}</Badge>
+                              </div>
+                              <p className="text-xs text-slate-500">{voice.variations.length} variação(ões){voice.category ? ' · ' + voice.category : ''}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => { setEditingVoiceId(voice.id); setVoiceForm({ name: voice.name, description: voice.description, gender: voice.gender, age: voice.age, accent: voice.accent, pitch: voice.pitch, category: voice.category || '' }); setVoiceDialogOpen(true) }} className="text-slate-400 hover:text-white h-8 w-8"><Edit className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteVoice(voice.id)} className="text-slate-400 hover:text-red-400 h-8 w-8"><Trash2 className="w-3.5 h-3.5" /></Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
             ) : selectedVoiceCategory ? (
               /* INSIDE A VOICE CATEGORY */
               <div>
@@ -2826,6 +2871,20 @@ export default function AdminDashboard() {
             ) : (
               /* FOLDER GRID VIEW */
               <div>
+                {/* "Ver todas" button */}
+                {voices.length > 0 && (
+                  <div className="mb-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAllVoices(true)}
+                      className="border-violet-600/50 text-violet-400 hover:text-violet-300 hover:bg-violet-900/20 gap-2"
+                    >
+                      <List className="w-4 h-4" />
+                      Ver todas as vozes ({voices.length})
+                    </Button>
+                  </div>
+                )}
                 {/* Uncategorized voices without a folder */}
                 {voices.filter(v => !v.category).length > 0 && (
                   <div className="mb-6">
@@ -3363,6 +3422,50 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
               </div>
+            ) : showAllTracks ? (
+              /* FLAT LIST - ALL TRACKS */
+              <div>
+                <button
+                  onClick={() => setShowAllTracks(false)}
+                  className="flex items-center gap-2 text-sm text-violet-400 hover:text-violet-300 mb-4 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Pastas &gt; <span className="font-semibold">Todas as Trilhas ({tracks.length})</span>
+                </button>
+                <div className="space-y-3">
+                  {tracks.map((track) => (
+                    <Card key={track.id} className="bg-slate-800/50 border-slate-700">
+                      <CardContent className="py-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => toggleTrackPreview(track)}
+                              className={`w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center shrink-0 transition-all duration-200 ${previewingTrackId === track.id ? 'bg-violet-500 text-white shadow-lg shadow-violet-500/30' : 'hover:bg-violet-500/20 hover:text-violet-300'}`}
+                            >
+                              {previewingTrackId === track.id ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+                            </button>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{track.emoji || '🎵'}</span>
+                                <span className="font-medium text-sm text-white">{track.name}</span>
+                                <Badge variant={track.active ? 'default' : 'secondary'} className={track.active ? 'bg-emerald-600' : 'bg-slate-600'}>{track.active ? 'Ativa' : 'Inativa'}</Badge>
+                              </div>
+                              <p className="text-xs text-slate-500">{track.description || 'Sem descrição'}{track.category ? ' · ' + track.category : ''}{track.duration > 0 ? ' · ' + Math.floor(track.duration / 60) + ':' + String(Math.floor(track.duration % 60)).padStart(2, '0') : ''}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {track.audioPath && (
+                              <a href={track.audioPath} download={track.name || undefined} target="_blank" rel="noopener noreferrer" className="h-8 w-8 rounded-full flex items-center justify-center text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 transition-colors"><Download className="w-3.5 h-3.5" /></a>
+                            )}
+                            <Button variant="ghost" size="icon" onClick={() => { setEditingTrackId(track.id); setTrackForm({ name: track.name, description: track.description || '', emoji: track.emoji || '', category: track.category || '' }); setTrackFilePath(''); setTrackDuration(track.duration); setPendingTrackFile(null); setTrackDialogOpen(true) }} className="text-slate-400 hover:text-white h-8 w-8"><Edit className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteTrack(track.id)} className="text-slate-400 hover:text-red-400 h-8 w-8"><Trash2 className="w-3.5 h-3.5" /></Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
             ) : selectedTrackCategory ? (
               /* INSIDE A TRACK CATEGORY */
               <div>
@@ -3438,6 +3541,20 @@ export default function AdminDashboard() {
             ) : (
               /* FOLDER GRID VIEW */
               <div>
+                {/* "Ver todas" button */}
+                {tracks.length > 0 && (
+                  <div className="mb-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAllTracks(true)}
+                      className="border-violet-600/50 text-violet-400 hover:text-violet-300 hover:bg-violet-900/20 gap-2"
+                    >
+                      <List className="w-4 h-4" />
+                      Ver todas as trilhas ({tracks.length})
+                    </Button>
+                  </div>
+                )}
                 {/* Uncategorized tracks */}
                 {tracks.filter(t => !t.category).length > 0 && (
                   <div className="mb-6">
