@@ -295,6 +295,55 @@ function getVoicePreviewUrl(voice: Voice, selectedVarId?: string): string | unde
 }
 
 /**
+ * Mix marca d'água no áudio da voz (client-side).
+ * Repete o watermark ao longo do áudio a cada N segundos.
+ * Retorna data URI do áudio com watermark.
+ */
+async function applyWatermark(
+  voiceDataUri: string,
+  watermarkUrl: string,
+  volume: number = 0.08
+): Promise<string> {
+  const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+
+  // Decode voice audio
+  const voiceRes = await fetch(voiceDataUri)
+  const voiceBuf = await voiceRes.arrayBuffer()
+  const voiceBuffer = await audioCtx.decodeAudioData(voiceBuf)
+
+  // Decode watermark audio
+  const wmRes = await fetch(watermarkUrl)
+  const wmBuf = await wmRes.arrayBuffer()
+  const wmBuffer = await audioCtx.decodeAudioData(wmBuf)
+
+  const totalDuration = voiceBuffer.duration + 0.5
+  const sampleRate = voiceBuffer.sampleRate
+  const length = Math.round(totalDuration * sampleRate)
+  const offlineCtx = new OfflineAudioContext(1, length, sampleRate)
+
+  // Voice source (full volume)
+  const voiceSource = offlineCtx.createBufferSource()
+  voiceSource.buffer = voiceBuffer
+  voiceSource.connect(offlineCtx.destination)
+  voiceSource.start(0)
+
+  // Watermark source (loop, low volume)
+  const wmSource = offlineCtx.createBufferSource()
+  wmSource.buffer = wmBuffer
+  const wmGain = offlineCtx.createGain()
+  wmGain.gain.value = Math.max(0.01, Math.min(0.5, volume))
+  wmSource.connect(wmGain)
+  wmGain.connect(offlineCtx.destination)
+  wmSource.loop = true
+  wmSource.start(0)
+
+  const mixedBuffer = await offlineCtx.startRendering()
+  const wavDataUri = audioBufferToWav(mixedBuffer)
+  await audioCtx.close()
+  return wavDataUri
+}
+
+/**
  * Mix voice audio (base64 data URI) with track audio (URL) using Web Audio API.
  * Com DUCKING: música começa alta, reduz quando a voz entra, volta alta, fade-out final.
  * Returns a base64 data URI of the mixed audio.
@@ -637,6 +686,8 @@ export default function VozProClient() {
   const [selectedTrackId, setSelectedTrackId] = useState<string>('')
   const [trackShowLimit, setTrackShowLimit] = useState(15)
   const [language, setLanguage] = useState('Auto')
+  const [watermarkAudioPath, setWatermarkAudioPath] = useState('')
+  const [watermarkVolume, setWatermarkVolume] = useState(0.08)
 
   // Settings
   const [text, setText] = useState('')
@@ -657,6 +708,7 @@ export default function VozProClient() {
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null) // audio com marca d'água para preview
   const [mixedAudioUrl, setMixedAudioUrl] = useState<string | null>(null)
   const [isMixed, setIsMixed] = useState(false)
   const [audioDuration, setAudioDuration] = useState<number | null>(null)
@@ -735,6 +787,8 @@ export default function VozProClient() {
         if (settingsRes.ok) {
           const settingsData = await settingsRes.json()
           setEnableFrontendUpload(!!settingsData.enableVoiceUpload)
+          setWatermarkAudioPath(settingsData.watermarkAudioPath || '')
+          setWatermarkVolume(settingsData.watermarkVolume ? parseFloat(settingsData.watermarkVolume) : 0.08)
         }
         if (trackCatRes.ok) setTrackCategories(await trackCatRes.json())
         if (voiceCatRes.ok) setVoiceCategories(await voiceCatRes.json())
@@ -804,6 +858,7 @@ export default function VozProClient() {
     }
     setIsGenerating(true)
     setAudioUrl(null)
+    setPreviewUrl(null)
     setMixedAudioUrl(null)
     setIsMixed(false)
     setAudioDuration(null)
@@ -1090,18 +1145,43 @@ export default function VozProClient() {
             trackVolume,
             { duckVolume, fadeInMs, duckFadeMs, unduckFadeMs, fadeOutMs, musicStartLeadMs }
           )
-          setAudioUrl(finalAudioUrl)
-          setMixedAudioUrl(mixedDataUri)
+          setAudioUrl(finalAudioUrl) // limpo (pra download)
+          // Aplicar watermark no preview se tiver marca d'água configurada
+          if (watermarkAudioPath) {
+            try {
+              const previewWithWm = await applyWatermark(mixedDataUri, watermarkAudioPath, watermarkVolume)
+              setPreviewUrl(previewWithWm)
+              setMixedAudioUrl(previewWithWm)
+            } catch { setMixedAudioUrl(mixedDataUri) }
+          } else {
+            setMixedAudioUrl(mixedDataUri)
+          }
           setIsMixed(true)
           toast.success(`Audio gerado com trilha "${selectedTrack.name}"!${data.viaDirectPhp ? ' (PHP direto)' : data.viaPhp ? ' (via PHP)' : ''}`)
         } catch (mixErr) {
           console.error('[VozPro] Client-side mixing failed:', mixErr)
           setAudioUrl(finalAudioUrl)
+          // Aplicar watermark no preview se tiver marca d'água configurada
+          if (watermarkAudioPath) {
+            try {
+              const previewWithWm = await applyWatermark(finalAudioUrl, watermarkAudioPath, watermarkVolume)
+              setPreviewUrl(previewWithWm)
+            } catch {}
+          }
           toast.warning('Não foi possível mixar a trilha. Reproduzindo apenas a voz.')
         }
       } else {
         // No track - just voice
-        setAudioUrl(finalAudioUrl)
+        setAudioUrl(finalAudioUrl) // limpo (pra download)
+        // Aplicar watermark no preview se tiver marca d'água configurada
+        if (watermarkAudioPath) {
+          try {
+            const previewWithWm = await applyWatermark(finalAudioUrl, watermarkAudioPath, watermarkVolume)
+            setPreviewUrl(previewWithWm)
+          } catch (wmErr) {
+            console.warn('[VozPro] Watermark failed:', wmErr)
+          }
+        }
 
         if (data.mixedAudio) {
           setMixedAudioUrl(data.mixedAudio)
@@ -1168,7 +1248,7 @@ export default function VozProClient() {
   }, [text, selectedVariationId, language, speed, numStep, guidanceScale, trackEnabled, selectedTrackId, trackVolume, duckVolume, fadeInMs, duckFadeMs, unduckFadeMs, fadeOutMs, musicStartLeadMs, voiceMode, uploadedVoiceUrl])
 
   // Get the active audio URL
-  const activeAudioUrl = mixedAudioUrl || audioUrl
+  const activeAudioUrl = previewUrl || mixedAudioUrl || audioUrl
 
   // Detectar duração do áudio quando carregar
   useEffect(() => {
