@@ -711,9 +711,10 @@ export default function VozProClient() {
 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false)
-  const [audioUrl, setAudioUrl] = useState<string | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null) // audio com marca d'água para preview
-  const [mixedAudioUrl, setMixedAudioUrl] = useState<string | null>(null)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null) // voz limpa (sem trilha, sem watermark)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null) // audio com marca d'água para preview (só voz)
+  const [mixedAudioUrl, setMixedAudioUrl] = useState<string | null>(null) // voz + trilha + watermark (preview)
+  const [cleanMixedUrl, setCleanMixedUrl] = useState<string | null>(null) // voz + trilha SEM watermark (para download)
   const [isMixed, setIsMixed] = useState(false)
   const [audioDuration, setAudioDuration] = useState<number | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)

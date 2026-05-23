@@ -906,10 +906,10 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<Array<{ id: string; name: string; email: string; role: string; active: boolean; createdAt: string }>>([])
   const [usersLoaded, setUsersLoaded] = useState(false)
 
-  // Check auth
+  // Check auth — SOMENTE admin pode acessar
   useEffect(() => {
     fetch('/api/auth/verify').then(res => res.json()).then(data => {
-      if (!data.authenticated) {
+      if (!data.authenticated || data.role !== 'admin') {
         router.push('/admin/login')
       } else {
         setAuthChecked(true)
