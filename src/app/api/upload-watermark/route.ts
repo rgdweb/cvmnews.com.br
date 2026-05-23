@@ -28,10 +28,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Upload to PHP hosting
+    // Upload to PHP hosting (usa 'ref' como tipo para compatibilidade com config do servidor)
     const ext = file.name.match(/\.(mp3|wav|ogg|m4a|flac|webm)$/i)?.[0] || '.mp3'
     const uniqueName = `watermark-${Date.now()}${ext}`
-    const result = await uploadToAudioServer(file, uniqueName, 'watermark')
+    const result = await uploadToAudioServer(file, uniqueName, 'ref')
 
     return NextResponse.json({
       path: result.url,

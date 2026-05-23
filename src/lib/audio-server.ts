@@ -7,7 +7,7 @@
  */
 
 const AUDIO_SERVER_URL = process.env.AUDIO_SERVER_URL || 'https://sorteiomax.com.br/omnivoice'
-const AUDIO_SERVER_API_KEY = process.env.AUDIO_SERVER_API_KEY || ''
+const AUDIO_SERVER_API_KEY = process.env.AUDIO_SERVER_API_KEY || 'vozpro_2024_a8f7d9e2b4c1m6n3p5q0r9s2t8u1'
 
 export interface AudioUploadResult {
   success: boolean
