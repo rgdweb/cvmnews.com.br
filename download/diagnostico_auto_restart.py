@@ -8,7 +8,7 @@ VERIFICA:
   1. GPU NVIDIA (VRAM, temperatura, uso, drivers)
   2. Modelo OmniVoice carregado na memoria
   3. Servidor Gradio rodando (porta 7860)
-  4. Localtunnel ativo e respondendo
+  4. Tunnel ativo e respondendo (cloudflared ou localtunnel)
   5. URL do tunnel registrada no servidor PHP
   6. Disco livre (C: e D:)
   7. Memoria RAM disponivel
@@ -51,8 +51,8 @@ CONFIG = {
     "gradio_port": 7860,
     "gradio_host": "127.0.0.1",
 
-    # Tunnel (localtunnel)
-    "tunnel_process_name": "node",       # localtunnel roda via node/npx
+    # Tunnel (cloudflared ou localtunnel)
+    "tunnel_process_name": "cloudflared", # cloudflared (prioridade) ou node
     "tunnel_register_url": "https://sorteiomax.com.br/omnivoice/update_tunnel.php",
     "tunnel_auth": "vozpro_tunnel_2024",
     "tunnel_check_url": "https://sorteiomax.com.br/omnivoice/get_tunnel.php",
@@ -265,25 +265,34 @@ def check_gradio_server() -> Dict:
     return result
 
 def check_tunnel() -> Dict:
-    """Verifica status do Localtunnel."""
-    log("Verificando Localtunnel...")
+    """Verifica status do Tunnel (cloudflared ou localtunnel)."""
+    log("Verificando Tunnel...")
     result = {
         "ok": False,
+        "tunnel_type": None,
         "process_running": False,
         "pid": None,
         "tunnel_url": None,
         "registered_on_server": False,
     }
 
-    # Verificar processo node/npx (localtunnel roda via node)
-    code, output = run_cmd('tasklist | findstr /I "node.exe"')
-    if "node" in output.lower():
+    # Verificar cloudflared PRIMEIRO (prioridade)
+    code, output = run_cmd('tasklist | findstr /I "cloudflared"')
+    if "cloudflared" in output.lower():
         result["process_running"] = True
-        log("  Processo Node ativo (localtunnel usa node)", "OK")
+        result["tunnel_type"] = "cloudflared"
+        log("  Cloudflared ativo", "OK")
     else:
-        log("  Node NAO esta rodando! Localtunnel nao funciona sem node.", "ERROR")
-        log("  Para iniciar: execute start_tunnel.ps1", "ERROR")
-        return result
+        # Verificar node/npx (localtunnel)
+        code2, output2 = run_cmd('tasklist | findstr /I "node.exe"')
+        if "node" in output2.lower():
+            result["process_running"] = True
+            result["tunnel_type"] = "localtunnel"
+            log("  Localtunnel ativo (via node)", "OK")
+        else:
+            log("  Nenhum tunnel rodando! (nem cloudflared, nem localtunnel/node)", "ERROR")
+            log("  Para iniciar: execute iniciar_com_monitor.bat", "ERROR")
+            return result
 
     # Verificar se o tunnel esta registrado no PHP
     status, body = http_get(CONFIG["tunnel_check_url"] + "?auth=" + CONFIG["tunnel_auth"], 10)
@@ -628,10 +637,11 @@ def check_future_issues() -> List[str]:
     if python_count > 3:
         issues.append(f"{python_count} processos Python rodando! Pode haver processos zumbis. Execute iniciar.bat.")
 
-    # 6. Localtunnel instavel
-    code, output = run_cmd('tasklist | findstr /I "node"')
-    if "node" not in output.lower():
-        issues.append("Localtunnel (node) nao esta rodando! Tunnel nao funciona sem ele.")
+    # 6. Tunnel nao rodando
+    code, output = run_cmd('tasklist | findstr /I "cloudflared"')
+    code2, output2 = run_cmd('tasklist | findstr /I "node"')
+    if "cloudflared" not in output.lower() and "node" not in output2.lower():
+        issues.append("Nenhum tunnel rodando! (nem cloudflared, nem node/localtunnel). Execute iniciar_com_monitor.bat.")
 
     # 7. Conda ativa
     conda_check = os.environ.get("CONDA_PREFIX", "")
@@ -691,8 +701,9 @@ def do_restart():
     log("Limpando arquivos temporarios...", "RESTART")
     check_temp_files()
 
-    # 2. Matar node (localtunnel)
-    log("Parando Localtunnel (node)...", "RESTART")
+    # 2. Matar tunnels
+    log("Parando tunnels (cloudflared + node)...", "RESTART")
+    run_cmd("taskkill /F /IM cloudflared.exe", 10)
     run_cmd("taskkill /F /IM node.exe", 10)
     time.sleep(3)
 
@@ -738,7 +749,7 @@ def do_restart():
     # 7. Reiniciar tunnel
     tunnel_script = os.path.join(script_dir, "start_tunnel.ps1")
     if os.path.exists(tunnel_script):
-        log("Reiniciando Localtunnel...", "RESTART")
+        log("Reiniciando Tunnel...", "RESTART")
         subprocess.Popen(
             f'cmd /k "powershell -ExecutionPolicy Bypass -File start_tunnel.ps1"',
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
@@ -749,11 +760,13 @@ def do_restart():
         )
         time.sleep(15)
 
-        code, output = run_cmd('tasklist | findstr /I "node"')
-        if "node" in output.lower():
-            log("Localtunnel esta rodando!", "OK")
+        code_cf, output_cf = run_cmd('tasklist | findstr /I "cloudflared"')
+        code_nd, output_nd = run_cmd('tasklist | findstr /I "node"')
+        if "cloudflared" in output_cf.lower() or "node" in output_nd.lower():
+            tunnel_type = "Cloudflared" if "cloudflared" in output_cf.lower() else "Localtunnel (node)"
+            log(f"Tunnel {tunnel_type} esta rodando!", "OK")
         else:
-            log("Localtunnel NAO subiu! Verifique se node/npx esta instalado.", "ERROR")
+            log("Tunnel NAO subiu! Verifique se cloudflared ou node esta instalado.", "ERROR")
     else:
         log(f"Script start_tunnel.ps1 NAO encontrado: {tunnel_script}", "ERROR")
 
@@ -826,7 +839,7 @@ def monitor_loop():
     log(f"  Intervalo: {CONFIG['check_interval_seconds']}s | Idle para restart: {CONFIG['idle_minutes_before_restart']}min")
     log(f"  Max restarts/dia: {CONFIG['max_restarts_per_day']}")
     log(f"  Porta Gradio: {CONFIG['gradio_port']}")
-    log(f"  Tunnel: Localtunnel via start_tunnel.ps1")
+    log(f"  Tunnel: cloudflared ou localtunnel via start_tunnel.ps1")
     log("")
 
     while True:
@@ -870,7 +883,7 @@ def main():
 +----------------------------------------------+
 |   VozPro - DIAGNOSTICO + AUTO-RESTART        |
 |   Servidor Local GPU (Windows)               |
-|   OmniVoice GPU + Localtunnel                |
+|   OmniVoice GPU + Tunnel (Cloudflare/Local)  |
 +----------------------------------------------+
     """)
 
@@ -894,7 +907,7 @@ CONFIGURACAO:
 
 SEU SETUP:
   - Servidor: omnivoice_gpu.py (porta 7860)
-  - Tunnel: localtunnel via start_tunnel.ps1
+  - Tunnel: cloudflared ou localtunnel via start_tunnel.ps1
   - Registro: sorteiomax.com.br/omnivoice/update_tunnel.php
 
 SCRIPTS:

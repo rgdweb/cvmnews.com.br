@@ -56,8 +56,8 @@ goto health_check
 
 :start_tunnel
 echo.
-echo [4/5] Iniciando Localtunnel...
-start "Tunnel Auto" cmd /k "powershell -ExecutionPolicy Bypass -File start_tunnel.ps1"
+echo [4/5] Iniciando Tunnel...
+start "Tunnel" cmd /k "powershell -ExecutionPolicy Bypass -File start_tunnel.ps1"
 timeout /t 8 /nobreak >nul
 
 echo.
