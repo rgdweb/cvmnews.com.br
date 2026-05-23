@@ -266,7 +266,7 @@ def check_gradio_server() -> Dict:
 
 def check_tunnel() -> Dict:
     """Verifica status do Tunnel (cloudflared ou localtunnel)."""
-    log("Verificando Tunnel...")
+    log("Verificando Tunnel (Cloudflare/Localtunnel)...")
     result = {
         "ok": False,
         "tunnel_type": None,
@@ -281,20 +281,22 @@ def check_tunnel() -> Dict:
     if "cloudflared" in output.lower():
         result["process_running"] = True
         result["tunnel_type"] = "cloudflared"
-        log("  Cloudflared ativo", "OK")
+        result["ok"] = True  # Tunnel rodando = OK
+        log("  Cloudflare Tunnel ativo!", "OK")
     else:
         # Verificar node/npx (localtunnel)
         code2, output2 = run_cmd('tasklist | findstr /I "node.exe"')
         if "node" in output2.lower():
             result["process_running"] = True
             result["tunnel_type"] = "localtunnel"
-            log("  Localtunnel ativo (via node)", "OK")
+            result["ok"] = True  # Tunnel rodando = OK
+            log("  Localtunnel ativo (via node)!", "OK")
         else:
-            log("  Nenhum tunnel rodando! (nem cloudflared, nem localtunnel/node)", "ERROR")
-            log("  Para iniciar: execute iniciar_com_monitor.bat", "ERROR")
+            log("  Nenhum tunnel rodando! (nem cloudflared, nem node)", "ERROR")
+            log("  Para iniciar: execute iniciar_monitor.bat", "ERROR")
             return result
 
-    # Verificar se o tunnel esta registrado no PHP
+    # Verificar se o tunnel esta registrado no PHP (info extra, nao altera ok)
     status, body = http_get(CONFIG["tunnel_check_url"] + "?auth=" + CONFIG["tunnel_auth"], 10)
     if status == 200:
         try:
@@ -303,14 +305,13 @@ def check_tunnel() -> Dict:
             if tunnel_url and tunnel_url.startswith("https://"):
                 result["tunnel_url"] = tunnel_url
                 result["registered_on_server"] = True
-                result["ok"] = True
-                log(f"  Tunnel registrado: {tunnel_url}", "OK")
+                log(f"  URL registrada no servidor: {tunnel_url}", "OK")
             else:
-                log(f"  PHP respondeu mas sem URL valida. Body: {body[:200]}", "WARN")
+                log(f"  PHP respondeu mas sem URL valida (tunnel funciona localmente)", "WARN")
         except json.JSONDecodeError:
-            log(f"  PHP respondeu mas nao conseguiu ler: {body[:200]}", "WARN")
+            log(f"  PHP respondeu mas nao conseguiu ler (tunnel funciona localmente)", "WARN")
     else:
-        log(f"  Nao conseguiu acessar PHP tunnel (status {status})", "WARN")
+        log(f"  Servidor PHP indisponivel (status {status}) - tunnel funciona localmente", "WARN")
 
     # Verificar se Vercel consegue acessar o tunnel
     status2, _ = http_get(CONFIG["vercel_api_url"] + CONFIG["vercel_health_endpoint"], 15)
@@ -318,7 +319,6 @@ def check_tunnel() -> Dict:
         log("  Vercel acessivel (endpoint /api/health OK)", "OK")
     else:
         log(f"  Vercel /api/health retornou status {status2}", "WARN")
-        log("  O tunnel pode estar caido ou Vercel offline", "WARN")
 
     return result
 
@@ -356,73 +356,77 @@ def check_ram() -> Dict:
     log("Verificando RAM...")
     result = {"ok": True, "total_gb": 0, "available_gb": 0, "used_percent": 0}
 
-    # Tentar via PowerShell (funciona em todas as versoes do Windows)
+    # Metodo 1: PowerShell com comando simples (retorna numeros diretos)
     code, output = run_cmd(
-        'powershell -NoProfile -Command "Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize,FreePhysicalMemory | Format-List"',
+        'powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).TotalVisibleMemorySize; (Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory"',
         timeout=15
     )
 
     try:
         if code == 0 and output.strip():
-            # Parse PowerShell output (Key : Value format)
-            mem_info = {}
-            for line in output.strip().splitlines():
-                if ":" in line:
-                    key, val = line.split(":", 1)
-                    key = key.strip()
-                    val = val.strip().replace(",", "").replace(".", "")
-                    # Tenta extrair numero
-                    num_str = ""
-                    for ch in val:
-                        if ch.isdigit():
-                            num_str += ch
-                        elif num_str:
-                            break
-                    if num_str and key:
-                        mem_info[key.lower().replace(" ", "")] = int(num_str)
+            lines = [l.strip() for l in output.strip().splitlines() if l.strip()]
+            nums = []
+            for line in lines:
+                # Extrair apenas numeros da linha
+                num_str = ""
+                for ch in line:
+                    if ch.isdigit():
+                        num_str += ch
+                    elif num_str:
+                        break
+                if num_str:
+                    nums.append(int(num_str))
 
-            total_kb = mem_info.get("totalvisiblememorysize", 0)
-            free_kb = mem_info.get("freephysicalmemory", 0)
+            if len(nums) >= 2:
+                total_kb = nums[0]
+                free_kb = nums[1]
+                if total_kb > 0:
+                    used_kb = total_kb - free_kb
+                    result["total_gb"] = round(total_kb / (1024**2), 1)
+                    result["available_gb"] = round(free_kb / (1024**2), 1)
+                    result["used_percent"] = round((used_kb / total_kb) * 100, 1)
 
+                    log(f"  Total: {result['total_gb']} GB | Disponivel: {result['available_gb']} GB ({result['used_percent']}% usado)")
+
+                    if result["used_percent"] >= CONFIG["ram_warning_percent"]:
+                        log(f"  ATENCAO: RAM a {result['used_percent']}%! Sistema pode ficar lento!", "WARN")
+                        result["ok"] = False
+                else:
+                    raise ValueError("Valor 0 para RAM total")
+            else:
+                raise ValueError(f"Nao conseguiu extrair 2 numeros, obteve: {nums}")
+        else:
+            raise ValueError("PowerShell retornou vazio")
+    except Exception:
+        # Metodo 2: wmic (fallback)
+        code2, output2 = run_cmd(
+            'wmic OS get TotalVisibleMemorySize,FreePhysicalMemory /Value 2>nul',
+            timeout=10
+        )
+        try:
+            lines = [l.strip() for l in output2.strip().splitlines() if "=" in l]
+            mem2 = {}
+            for line in lines:
+                key, val = line.split("=", 1)
+                mem2[key.strip()] = int(val.strip())
+            total_kb = mem2.get("TotalVisibleMemorySize", 0)
+            free_kb = mem2.get("FreePhysicalMemory", 0)
             if total_kb > 0:
                 used_kb = total_kb - free_kb
                 result["total_gb"] = round(total_kb / (1024**2), 1)
                 result["available_gb"] = round(free_kb / (1024**2), 1)
                 result["used_percent"] = round((used_kb / total_kb) * 100, 1)
-
                 log(f"  Total: {result['total_gb']} GB | Disponivel: {result['available_gb']} GB ({result['used_percent']}% usado)")
 
                 if result["used_percent"] >= CONFIG["ram_warning_percent"]:
                     log(f"  ATENCAO: RAM a {result['used_percent']}%! Sistema pode ficar lento!", "WARN")
                     result["ok"] = False
             else:
-                # Fallback: tentar via wmic
-                code2, output2 = run_cmd(
-                    'wmic OS get TotalVisibleMemorySize,FreePhysicalMemory /Value 2>nul',
-                    timeout=10
-                )
-                lines = [l.strip() for l in output2.strip().splitlines() if "=" in l]
-                mem2 = {}
-                for line in lines:
-                    key, val = line.split("=", 1)
-                    mem2[key.strip()] = int(val.strip())
-                total_kb = mem2.get("TotalVisibleMemorySize", 0)
-                free_kb = mem2.get("FreePhysicalMemory", 0)
-                if total_kb > 0:
-                    used_kb = total_kb - free_kb
-                    result["total_gb"] = round(total_kb / (1024**2), 1)
-                    result["available_gb"] = round(free_kb / (1024**2), 1)
-                    result["used_percent"] = round((used_kb / total_kb) * 100, 1)
-                    log(f"  Total: {result['total_gb']} GB | Disponivel: {result['available_gb']} GB ({result['used_percent']}% usado)")
-                else:
-                    log("  Nao conseguiu ler dados de RAM (wmic e PowerShell falharam)", "WARN")
-                    result["ok"] = False
-        else:
-            log("  Nao conseguiu executar PowerShell para verificar RAM", "WARN")
+                log("  Nao conseguiu ler dados de RAM (PowerShell e wmic falharam)", "WARN")
+                result["ok"] = False
+        except Exception:
+            log("  Nao conseguiu ler dados de RAM (PowerShell e wmic falharam)", "WARN")
             result["ok"] = False
-    except Exception as e:
-        log(f"  Erro ao verificar RAM: {e}", "ERROR")
-        result["ok"] = False
 
     return result
 

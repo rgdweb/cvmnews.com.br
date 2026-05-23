@@ -62,7 +62,7 @@ timeout /t 8 /nobreak >nul
 
 echo.
 echo [5/5] Iniciando Monitor Automatico...
-start "Monitor VozPro" cmd /k "call C:\Users\Administrador\Miniconda3\Scripts\activate.bat && python diagnostico_auto_restart.py --monitor"
+start "Monitor VozPro" cmd /k "call C:\Users\Administrador\Miniconda3\Scripts\activate.bat && python diagnostico.py --monitor"
 
 echo.
 echo ============================================
