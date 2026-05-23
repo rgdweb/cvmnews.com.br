@@ -691,6 +691,7 @@ export default function VozProClient() {
   const [watermarkAudioPath, setWatermarkAudioPath] = useState('')
   const [watermarkVolume, setWatermarkVolume] = useState(0.08)
   const [paywallEnabled, setPaywallEnabled] = useState(false)
+  const [paymentAmount, setPaymentAmount] = useState('1.00')
 
   // Settings
   const [text, setText] = useState('')
@@ -734,6 +735,7 @@ export default function VozProClient() {
 
   // Payment dialog state
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+  const [freeDownloads, setFreeDownloads] = useState(0)
 
   // Queue state
   const [queueId, setQueueId] = useState<string | null>(null)
@@ -773,6 +775,10 @@ export default function VozProClient() {
           fetch('/api/track-categories'),
           fetch('/api/voice-categories'),
         ])
+        // Carregar downloads grátis do usuário (não bloqueante)
+        fetch('/api/free-download').then(res => res.json()).then(data => {
+          if (typeof data.freeDownloads === 'number') setFreeDownloads(data.freeDownloads)
+        }).catch(() => {})
         if (voicesRes.ok) {
           const voicesData = await voicesRes.json()
           // Manter todas as vozes — mesmo sem variação ativa ou sem áudio
@@ -802,6 +808,7 @@ export default function VozProClient() {
           setWatermarkAudioPath(settingsData.watermarkAudioPath || '')
           setWatermarkVolume(settingsData.watermarkVolume ? parseFloat(settingsData.watermarkVolume) : 0.08)
           setPaywallEnabled(!!settingsData.paywallEnabled && settingsData.paywallEnabled !== 'false')
+          setPaymentAmount(settingsData.paymentAmount || '1.00')
         }
         if (trackCatRes.ok) setTrackCategories(await trackCatRes.json())
         if (voiceCatRes.ok) setVoiceCategories(await voiceCatRes.json())
@@ -1475,16 +1482,30 @@ export default function VozProClient() {
     }
   }, [audioUrl])
 
-  // Abre o dialog de pagamento (paywall) ou baixa direto se desativado
-  const handleDownloadClick = useCallback(() => {
+  // Abre o dialog de pagamento (paywall) ou baixa direto
+  // Se tem downloads grátis e paywall ativo, usa um download grátis
+  const handleDownloadClick = useCallback(async () => {
     const url = audioUrl
     if (!url) return
     if (paywallEnabled) {
+      if (freeDownloads > 0) {
+        // Usar download grátis
+        try {
+          const res = await fetch('/api/free-download', { method: 'POST' })
+          const data = await res.json()
+          if (data.hasFree) {
+            setFreeDownloads(data.remaining)
+            toast.success(`Download grátis! Restam ${data.remaining}`, { duration: 3000 })
+            handlePaymentApproved('mp3')
+            return
+          }
+        } catch { /* fallback to paywall */ }
+      }
       setPaymentDialogOpen(true)
     } else {
       handlePaymentApproved('mp3')
     }
-  }, [audioUrl, paywallEnabled, handlePaymentApproved])
+  }, [audioUrl, paywallEnabled, freeDownloads, handlePaymentApproved])
 
   if (loading) {
     return (
@@ -2428,7 +2449,11 @@ export default function VozProClient() {
                         className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white gap-1.5"
                       >
                         <Download className="w-4 h-4" />
-                        {paywallEnabled ? 'Baixar R$1' : 'Baixar'}
+                        {paywallEnabled
+                          ? (freeDownloads > 0
+                            ? `Baixar (${freeDownloads} grátis)`
+                            : `Baixar R$${paymentAmount}`)
+                          : 'Baixar'}
                       </Button>
                     </div>
 
@@ -2943,6 +2968,7 @@ export default function VozProClient() {
         onOpenChange={setPaymentDialogOpen}
         onPaymentApproved={handlePaymentApproved}
         audioUrl={audioUrl || ''}
+        amount={paymentAmount}
       />
     </div>
   )

@@ -126,6 +126,11 @@ export default function LoginPage() {
             if (res.ok && data.success) {
               toast.success(`Bem-vindo, ${data.name || 'Usuário'}!`)
               router.push('/')
+            } else if (data.needsApproval) {
+              toast.error('Conta aguardando aprovação', { 
+                description: 'Seu cadastro foi recebido e está aguardando aprovação do administrador.',
+                duration: 6000,
+              })
             } else {
               toast.error(data.error || 'Erro no login Google')
             }

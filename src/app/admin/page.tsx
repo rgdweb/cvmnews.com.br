@@ -17,7 +17,7 @@ import {
   AudioWaveform, LogOut, Plus, Trash2, Edit, Upload, Music, Mic,
   Loader2, RefreshCw, Volume2, FileAudio, CheckCircle2, Settings2,
   FolderOpen, ChevronLeft, FolderPlus, Folder, Play, Pause, Users, UserPlus, Shield,
-  UploadCloud, X, Download, VolumeX, CreditCard, Chrome, DollarSign
+  UploadCloud, X, Download, VolumeX, CreditCard, Chrome, DollarSign, Tag
 } from 'lucide-react'
 import { toast } from 'sonner'
 import AudioPlayer from '@/components/audio-player'
@@ -3636,9 +3636,68 @@ export default function AdminDashboard() {
                   </div>
                   <p className="text-xs text-slate-400">
                     {adminSettings.paywallEnabled === 'true'
-                      ? 'Ativado: clientes precisam pagar R$1 via MercadoPago para baixar áudio limpo.'
+                      ? 'Ativado: clientes precisam pagar via MercadoPago para baixar áudio limpo.'
                       : 'Desativado: clientes baixam áudio limpo gratuitamente.'}
                   </p>
+                  {/* Downloads grátis por nova conta */}
+                  <div className="space-y-2">
+                    <Label className="text-xs text-slate-400">Downloads grátis por nova conta</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="5"
+                      defaultValue={adminSettings.freeDownloadsPerAccount || '5'}
+                      className="h-9 bg-slate-800 border-slate-700 text-sm w-32"
+                      onChange={async (e) => {
+                        const val = parseInt(e.target.value, 10)
+                        if (isNaN(val) || val < 0) return
+                        try {
+                          await fetch('/api/admin/settings', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ key: 'freeDownloadsPerAccount', value: String(val) }),
+                          })
+                          setAdminSettings(prev => ({ ...prev, freeDownloadsPerAccount: String(val) }))
+                        } catch {}
+                      }}
+                    />
+                    <p className="text-[10px] text-slate-500">0 = sem downloads grátis</p>
+                  </div>
+                </div>
+
+                {/* Valor do Download */}
+                <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-emerald-400" />
+                    <Label className="text-sm font-medium text-white">Valor do Download</Label>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Defina o valor cobrado por download de áudio via PIX.
+                  </p>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-slate-400">Valor (R$)</Label>
+                    <Input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="1.00"
+                      defaultValue={adminSettings.paymentAmount || '1.00'}
+                      className="h-9 bg-slate-800 border-slate-700 text-sm w-32"
+                      onChange={async (e) => {
+                        const val = parseFloat(e.target.value)
+                        if (isNaN(val) || val < 0.01) return
+                        try {
+                          await fetch('/api/admin/settings', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ key: 'paymentAmount', value: val.toFixed(2) }),
+                          })
+                          setAdminSettings(prev => ({ ...prev, paymentAmount: val.toFixed(2) }))
+                        } catch {}
+                      }}
+                    />
+                  </div>
                 </div>
 
                 {/* MercadoPago Config */}
@@ -3648,7 +3707,7 @@ export default function AdminDashboard() {
                     <Label className="text-sm font-medium text-white">MercadoPago (Pagamento)</Label>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Configure o token de acesso do MercadoPago para gerar QR de pagamento (R$1 por download).
+                    Configure o token de acesso do MercadoPago para gerar QR de pagamento.
                   </p>
                   <div className="space-y-2">
                     <Label className="text-xs text-slate-400">Access Token</Label>

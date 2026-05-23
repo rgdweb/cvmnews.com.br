@@ -14,6 +14,7 @@ interface PaymentDialogProps {
   onOpenChange: (open: boolean) => void
   onPaymentApproved: (format: 'mp3' | 'wav') => void
   audioUrl: string // URL do áudio limpo (data URI)
+  amount?: string // valor configurado no admin, ex: '1.00'
 }
 
 type PaymentFormat = 'mp3' | 'wav'
@@ -24,7 +25,13 @@ export default function PaymentDialog({
   onOpenChange,
   onPaymentApproved,
   audioUrl,
+  amount = '1.00',
 }: PaymentDialogProps) {
+
+  const formatCurrency = (val: string) => {
+    const num = parseFloat(val)
+    return isNaN(num) ? '1,00' : num.toFixed(2).replace('.', ',')
+  }
   const [format, setFormat] = useState<PaymentFormat>('mp3')
   const [status, setStatus] = useState<PaymentStatus>('idle')
   const [paymentId, setPaymentId] = useState<string | null>(null)
@@ -176,7 +183,7 @@ export default function PaymentDialog({
             Baixar Áudio
           </DialogTitle>
           <DialogDescription className="text-slate-400">
-            Escolha o formato e pague R$1 para baixar seu áudio sem marca d&apos;água
+            Escolha o formato e pague R${formatCurrency(amount)} para baixar seu áudio sem marca d&apos;água
           </DialogDescription>
         </DialogHeader>
 
@@ -216,7 +223,7 @@ export default function PaymentDialog({
             {/* Price */}
             <div className="flex items-center justify-center py-3">
               <div className="text-center">
-                <p className="text-3xl font-bold text-emerald-400">R$ 1,00</p>
+                <p className="text-3xl font-bold text-emerald-400">R$ {formatCurrency(amount)}</p>
                 <p className="text-xs text-slate-500 mt-1">pagamento único via MercadoPago</p>
               </div>
             </div>

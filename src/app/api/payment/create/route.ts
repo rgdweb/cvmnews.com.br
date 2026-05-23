@@ -5,7 +5,7 @@ import { createHash, randomUUID } from 'crypto'
 
 export const maxDuration = 30
 
-// POST /api/payment/create - Cria pagamento MercadoPago (R$1)
+// POST /api/payment/create - Cria pagamento MercadoPago
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession()
@@ -18,6 +18,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Formato inválido' }, { status: 400 })
     }
 
+    // Buscar valor configurado no admin (padrão R$1)
+    const amountSetting = await db.systemSetting.findUnique({ where: { key: 'paymentAmount' } })
+    const amount = amountSetting ? parseFloat(amountSetting.value) : 1.0
+    const validAmount = isNaN(amount) || amount < 0.01 ? 1.0 : amount
+
     const mpAccessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
     if (!mpAccessToken) {
       // Modo sandbox: gerar pagamento simulado para testes
@@ -27,7 +32,7 @@ export async function POST(req: NextRequest) {
           userId: session.userId,
           externalRef,
           status: 'pending',
-          amount: 1.0,
+          amount: validAmount,
           format,
         },
       })
@@ -59,7 +64,7 @@ export async function POST(req: NextRequest) {
           description: settingsMap.mpDescription || `Download de áudio ${format.toUpperCase()} - Sintetizador de voz VozPro`,
           quantity: 1,
           currency_id: 'BRL',
-          unit_price: 1.0,
+          unit_price: validAmount,
         },
       ],
       external_reference: externalRef,
@@ -100,7 +105,7 @@ export async function POST(req: NextRequest) {
         userId: session.userId,
         externalRef,
         status: 'pending',
-        amount: 1.0,
+        amount: validAmount,
         format,
       },
     })

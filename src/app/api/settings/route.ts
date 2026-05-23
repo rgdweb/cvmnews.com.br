@@ -6,11 +6,11 @@ export async function GET() {
   try {
     const settings = await db.systemSetting.findMany({
       where: {
-        key: { in: ['enableVoiceUpload', 'watermarkAudioPath', 'watermarkVolume', 'googleClientId', 'paywallEnabled'] },
+        key: { in: ['enableVoiceUpload', 'watermarkAudioPath', 'watermarkVolume', 'googleClientId', 'paywallEnabled', 'paymentAmount'] },
       },
     })
 
-    const config: Record<string, string | boolean> = { enableVoiceUpload: false, googleClientId: '', paywallEnabled: false }
+    const config: Record<string, string | boolean> = { enableVoiceUpload: false, googleClientId: '', paywallEnabled: false, paymentAmount: '1.00' }
     for (const s of settings) {
       if (s.key === 'enableVoiceUpload') {
         config[s.key] = s.value === 'true'
@@ -22,6 +22,6 @@ export async function GET() {
     return NextResponse.json(config)
   } catch (error) {
     console.error('Error getting public settings:', error)
-    return NextResponse.json({ enableVoiceUpload: false, watermarkAudioPath: '', watermarkVolume: '0.08', googleClientId: '' })
+    return NextResponse.json({ enableVoiceUpload: false, watermarkAudioPath: '', watermarkVolume: '0.08', googleClientId: '', paymentAmount: '1.00' })
   }
 }

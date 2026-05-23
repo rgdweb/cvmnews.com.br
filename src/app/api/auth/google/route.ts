@@ -26,7 +26,12 @@ export async function POST(req: NextRequest) {
         })
       }
     } else {
-      // Criar novo usuário via Google
+      // Criar novo usuário via Google - aguardando aprovação admin
+      // Buscar configuração de downloads grátis por nova conta
+      const freeDlSetting = await db.systemSetting.findUnique({ where: { key: 'freeDownloadsPerAccount' } })
+      const freeDownloads = freeDlSetting ? parseInt(freeDlSetting.value, 10) : 5
+      const validFreeDownloads = isNaN(freeDownloads) ? 5 : Math.max(0, freeDownloads)
+
       user = await db.user.create({
         data: {
           name: clientName,
@@ -34,12 +39,18 @@ export async function POST(req: NextRequest) {
           password: '', // sem senha para Google OAuth
           googleId,
           role: 'user',
+          active: false, // precisa de aprovação do admin
+          freeDownloads: validFreeDownloads,
         },
       })
     }
 
     if (!user.active) {
-      return NextResponse.json({ error: 'Conta desativada' }, { status: 403 })
+      return NextResponse.json({ 
+        success: false, 
+        needsApproval: true,
+        error: 'Conta aguardando aprovação do administrador' 
+      }, { status: 403 })
     }
 
     // Criar sessão (mesmo sistema de sessão existente)

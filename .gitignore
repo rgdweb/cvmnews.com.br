@@ -84,3 +84,4 @@ backups/
 *.db
 *.sqlite
 *.sqlite3
+download/omnivoice-backup-20260523-183242-full.tar.gz
