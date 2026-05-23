@@ -347,30 +347,69 @@ def check_ram() -> Dict:
     log("Verificando RAM...")
     result = {"ok": True, "total_gb": 0, "available_gb": 0, "used_percent": 0}
 
+    # Tentar via PowerShell (funciona em todas as versoes do Windows)
     code, output = run_cmd(
-        'wmic OS get TotalVisibleMemorySize,FreePhysicalMemory /Value 2>nul',
-        timeout=10
+        'powershell -NoProfile -Command "Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize,FreePhysicalMemory | Format-List"',
+        timeout=15
     )
 
     try:
-        lines = [l.strip() for l in output.strip().splitlines() if "=" in l]
-        mem_info = {}
-        for line in lines:
-            key, val = line.split("=", 1)
-            mem_info[key.strip()] = int(val.strip())
+        if code == 0 and output.strip():
+            # Parse PowerShell output (Key : Value format)
+            mem_info = {}
+            for line in output.strip().splitlines():
+                if ":" in line:
+                    key, val = line.split(":", 1)
+                    key = key.strip()
+                    val = val.strip().replace(",", "").replace(".", "")
+                    # Tenta extrair numero
+                    num_str = ""
+                    for ch in val:
+                        if ch.isdigit():
+                            num_str += ch
+                        elif num_str:
+                            break
+                    if num_str and key:
+                        mem_info[key.lower().replace(" ", "")] = int(num_str)
 
-        total_kb = mem_info.get("TotalVisibleMemorySize", 0)
-        free_kb = mem_info.get("FreePhysicalMemory", 0)
-        used_kb = total_kb - free_kb
+            total_kb = mem_info.get("totalvisiblememorysize", 0)
+            free_kb = mem_info.get("freephysicalmemory", 0)
 
-        result["total_gb"] = round(total_kb / (1024**2), 2)
-        result["available_gb"] = round(free_kb / (1024**2), 2)
-        result["used_percent"] = round((used_kb / total_kb) * 100, 1) if total_kb > 0 else 0
+            if total_kb > 0:
+                used_kb = total_kb - free_kb
+                result["total_gb"] = round(total_kb / (1024**2), 1)
+                result["available_gb"] = round(free_kb / (1024**2), 1)
+                result["used_percent"] = round((used_kb / total_kb) * 100, 1)
 
-        log(f"  Total: {result['total_gb']} GB | Disponivel: {result['available_gb']} GB ({result['used_percent']}% usado)")
+                log(f"  Total: {result['total_gb']} GB | Disponivel: {result['available_gb']} GB ({result['used_percent']}% usado)")
 
-        if result["used_percent"] >= CONFIG["ram_warning_percent"]:
-            log(f"  ATENCAO: RAM a {result['used_percent']}%! Sistema pode ficar lento!", "WARN")
+                if result["used_percent"] >= CONFIG["ram_warning_percent"]:
+                    log(f"  ATENCAO: RAM a {result['used_percent']}%! Sistema pode ficar lento!", "WARN")
+                    result["ok"] = False
+            else:
+                # Fallback: tentar via wmic
+                code2, output2 = run_cmd(
+                    'wmic OS get TotalVisibleMemorySize,FreePhysicalMemory /Value 2>nul',
+                    timeout=10
+                )
+                lines = [l.strip() for l in output2.strip().splitlines() if "=" in l]
+                mem2 = {}
+                for line in lines:
+                    key, val = line.split("=", 1)
+                    mem2[key.strip()] = int(val.strip())
+                total_kb = mem2.get("TotalVisibleMemorySize", 0)
+                free_kb = mem2.get("FreePhysicalMemory", 0)
+                if total_kb > 0:
+                    used_kb = total_kb - free_kb
+                    result["total_gb"] = round(total_kb / (1024**2), 1)
+                    result["available_gb"] = round(free_kb / (1024**2), 1)
+                    result["used_percent"] = round((used_kb / total_kb) * 100, 1)
+                    log(f"  Total: {result['total_gb']} GB | Disponivel: {result['available_gb']} GB ({result['used_percent']}% usado)")
+                else:
+                    log("  Nao conseguiu ler dados de RAM (wmic e PowerShell falharam)", "WARN")
+                    result["ok"] = False
+        else:
+            log("  Nao conseguiu executar PowerShell para verificar RAM", "WARN")
             result["ok"] = False
     except Exception as e:
         log(f"  Erro ao verificar RAM: {e}", "ERROR")
