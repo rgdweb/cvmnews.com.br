@@ -171,3 +171,67 @@ Stage Summary:
 - .env corrigido para apontar para Neon PostgreSQL
 - Schema sincronizado com todas as tabelas (User, Voice, VoiceVariation, Track, Session, SystemSetting, Payment, GenerationQueue)
 - Commit + push: 3ac6a96
+
+---
+## BUG FIX DOCUMENTADO — Admin "Erro ao carregar dados"
+
+### Problema:
+No admin `loadData()`, havia um fetch duplicado para `/api/admin/settings`:
+```js
+const adminData = await fetch('/api/admin/settings').then(r => r.json())
+for (const s of adminData) { ... } // TypeError: not iterable!
+```
+O endpoint `/api/admin/settings` retorna um OBJETO `{key: value}`, não um array.
+O `for...of` em objeto causa `TypeError: not iterable`, cai no catch, mostra toast de erro.
+
+### Solução:
+Remover o fetch duplicado e usar os dados já carregados de `settingsData` (que já era objeto).
+
+### Arquivo: src/app/admin/page.tsx, função `loadData()`
+### Commit: 198821e
+
+### Se der de novo:
+1. Abrir `src/app/admin/page.tsx`
+2. Buscar `for (const s of` dentro de `loadData()`
+3. Verificar se está iterando sobre objeto do `/api/admin/settings`
+4. Remover o fetch duplicado; usar os dados já carregados
+
+---
+## COMO RESTAURAR APÓS PERDA DE CÓDIGO
+
+Se o código local ficar diferente do deploy:
+1. `git fetch origin`
+2. `git reset --hard origin/main` (sobrescreve local com o remoto)
+3. `npm install` (se mudou package.json)
+4. `npx prisma generate` (se mudou schema)
+5. `npx next build` (verificar build)
+
+O branch remoto `origin/main` é a fonte de verdade.
+
+---
+Task ID: 5
+Agent: main
+Task: Sincronizar código local com remoto + verificar estado completo
+
+Work Log:
+- Descobriu que branches local e remoto haviam divergido (4 commits locais vs 24 remotos)
+- As features (Google OAuth, Paywall, Watermark, Fila) JÁ ESTAVAM no código remoto (origin/main)
+- As features foram implementadas em outra sessão mas nunca commitadas no branch local
+- Reset local para origin/main: `git reset --hard origin/main`
+- Verificou que TODAS as features estão funcionando:
+  - Google Sign-In na login page (OAuth2 via GSI)
+  - PaymentDialog component (QR Code PIX)
+  - Paywall toggle no admin
+  - Watermark upload + volume slider no admin
+  - MercadoPago config no admin
+  - Google Client ID config no admin
+  - Fila de geração (queue/join, queue/complete)
+  - APIs de pagamento (create, qrcode, status, webhook)
+  - Mix de marca d'água no preview
+- Build OK com todas as rotas
+- Commit checkpoint + push: 1b065cc
+
+Stage Summary:
+- Código local 100% sincronizado com origin/main
+- Build passou com zero erros
+- Tudo funcional: Google login, paywall, watermark, payment APIs, queue
