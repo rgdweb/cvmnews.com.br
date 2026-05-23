@@ -151,3 +151,23 @@ Stage Summary:
 - Campo novo no User: googleId
 - Para deploy: rodar `npx prisma db push` ou `npx prisma migrate dev` no servidor
 - Configurar: MERCADOPAGO_ACCESS_TOKEN e GOOGLE_CLIENT_ID no .env ou painel admin
+
+---
+Task ID: 1
+Agent: Main
+Task: Corrigir erro "Erro ao carregar dados" no admin
+
+Work Log:
+- Verificou que admin chama /api/admin/voices e /api/admin/tracks que usam Prisma
+- Descobriu que .env tinha DATABASE_URL=file:/home/z/my-project/db/custom.db (SQLite) mas schema usa postgresql
+- Encontrou a URL Neon PostgreSQL no git history: postgresql://neondb_owner:npg_...@ep-blue-band-ac85wa8e-pooler.sa-east-1.aws.neon.tech/neondb
+- Variável de ambiente do shell sobrescrevia o .env (DATABASE_URL=file:...)
+- Corrigiu googleId duplicados (valores vazios) via prisma db execute
+- Rodou prisma db push --accept-data-loss para sincronizar schema
+- Confirmou banco conectado: 3 vozes, 3 trilhas, 3 usuários, 4 settings
+- Build passou
+
+Stage Summary:
+- .env corrigido para apontar para Neon PostgreSQL
+- Schema sincronizado com todas as tabelas (User, Voice, VoiceVariation, Track, Session, SystemSetting, Payment, GenerationQueue)
+- Commit + push: 3ac6a96

@@ -7,13 +7,14 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
-    "db:push": "prisma db push",
+    "db:push": "DATABASE_URL=postgresql://neondb_owner:npg_8jNPdgtB3kQD@ep-blue-band-ac85wa8e-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require npx prisma db push --accept-data-loss --schema prisma/schema.prisma",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset",
-    "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "db:studio": "DATABASE_URL=postgresql://neondb_owner:npg_8jNPdgtB3kQD@ep-blue-band-ac85wa8e-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require npx prisma studio --schema prisma/schema.prisma",
+    "postinstall": "prisma generate",
+    "db:execute": "DATABASE_URL=postgresql://neondb_owner:npg_8jNPdgtB3kQD@ep-blue-band-ac85wa8e-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require npx prisma db execute --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",
