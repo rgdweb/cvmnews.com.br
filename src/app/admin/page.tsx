@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
+import { Slider } from '@/components/ui/slider'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import {
   AudioWaveform, LogOut, Plus, Trash2, Edit, Upload, Music, Mic,
@@ -896,6 +897,9 @@ export default function AdminDashboard() {
   // Settings state
   const [enableVoiceUpload, setEnableVoiceUpload] = useState(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const [watermarkPath, setWatermarkPath] = useState('')
+  const [watermarkVolume, setWatermarkVolume] = useState(0.08)
+  const [watermarkUploading, setWatermarkUploading] = useState(false)
 
   // Users state
   const [users, setUsers] = useState<Array<{ id: string; name: string; email: string; role: string; active: boolean; createdAt: string }>>([])
@@ -931,6 +935,8 @@ export default function AdminDashboard() {
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json()
         setEnableVoiceUpload(settingsData.enableVoiceUpload === 'true')
+        setWatermarkPath(settingsData.watermarkAudioPath || '')
+        setWatermarkVolume(settingsData.watermarkVolume ? parseFloat(settingsData.watermarkVolume) : 0.08)
         setSettingsLoaded(true)
       }
       if (trackCatRes.ok) setTrackCategories(await trackCatRes.json())
@@ -3508,6 +3514,98 @@ export default function AdminDashboard() {
                     checked={settingsLoaded ? enableVoiceUpload : false}
                     onCheckedChange={handleToggleVoiceUpload}
                   />
+                </div>
+
+                {/* Marca d'água */}
+                <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-amber-400" />
+                    <Label className="text-sm font-medium text-white">Marca d'Água de Proteção</Label>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Áudio mixado no preview que o cliente escuta. Para baixar sem marca d'água, o cliente precisa pagar.
+                  </p>
+
+                  {/* Upload da marca d'água */}
+                  <div className="flex items-center gap-3">
+                    <label className="flex-1 cursor-pointer">
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          if (!file) return
+                          setWatermarkUploading(true)
+                          try {
+                            const form = new FormData()
+                            form.append('file', file)
+                            const res = await fetch('/api/upload-watermark', { method: 'POST', body: form })
+                            if (!res.ok) throw new Error('Upload falhou')
+                            const data = await res.json()
+                            setWatermarkPath(data.path)
+                            // Salvar no settings
+                            await fetch('/api/admin/settings', {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ key: 'watermarkAudioPath', value: data.path }),
+                            })
+                            toast.success('Marca d\'água enviada!')
+                          } catch (err) {
+                            toast.error('Erro ao enviar marca d\'água')
+                          } finally {
+                            setWatermarkUploading(false)
+                          }
+                        }}
+                      />
+                      <div className="flex items-center justify-center px-4 py-2 rounded-lg border border-dashed border-slate-600 hover:border-amber-500/50 hover:bg-amber-500/5 transition-all">
+                        {watermarkUploading ? (
+                          <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
+                        ) : watermarkPath ? (
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span className="text-xs text-emerald-300">Arquivo carregado</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Upload className="w-4 h-4 text-slate-400" />
+                            <span className="text-xs text-slate-400">Escolher áudio</span>
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                    {watermarkPath && (
+                      <audio controls src={watermarkPath} className="h-8 w-32" />
+                    )}
+                  </div>
+
+                  {/* Volume da marca d'água */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-slate-400">Volume da marca d'água</span>
+                      <span className="text-xs text-amber-400">{Math.round(watermarkVolume * 100)}%</span>
+                    </div>
+                    <Slider
+                      value={[watermarkVolume]}
+                      onValueChange={async ([v]) => {
+                        setWatermarkVolume(v)
+                        try {
+                          await fetch('/api/admin/settings', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ key: 'watermarkVolume', value: String(v) }),
+                          })
+                        } catch {}
+                      }}
+                      min={0.01}
+                      max={0.5}
+                      step={0.01}
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-600">
+                      <span>Muito baixo (quase inaudível)</span>
+                      <span>Muito alto</span>
+                    </div>
+                  </div>
                 </div>
 
                 {!settingsLoaded && (
