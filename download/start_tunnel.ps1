@@ -1,162 +1,183 @@
-# ========================================
-# OmniVoice TTS - start_tunnel.ps1
-# Abre tunnel cloudflared e atualiza URL no HostGator
-# ========================================
-
 $port = 7860
+$auth = "vozpro_tunnel_2024"
 $serverUpdate = "https://sorteiomax.com.br/omnivoice/update_tunnel.php"
 
-Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  OmniVoice - Tunnel Cloudflare" -ForegroundColor Cyan
+Write-Host "  VozPro - Tunnel Automatico" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# --- 1. Encontrar cloudflared ---
-$cloudflared = $null
-$paths = @(
-    "C:\Program Files\cloudflared\cloudflared.exe",
-    "C:\Program Files (x86)\cloudflared\cloudflared.exe",
+# Aguardar OmniVoice ficar pronto (ate 120 segundos)
+Write-Host "[1/2] Aguardando OmniVoice na porta $port..." -ForegroundColor Yellow
+$esperado = 0
+$pronto = $false
+
+for ($i = 0; $i -lt 24; $i++) {
+    try {
+        $null = Invoke-WebRequest -Uri "http://localhost:$port/" -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+        $pronto = $true
+        break
+    } catch {
+        # Ainda nao esta pronto, aguardar
+    }
+    $esperado += 5
+    Write-Host "      Aguardando... ${esperado}s" -ForegroundColor DarkGray
+    Start-Sleep -Seconds 5
+}
+
+if (-not $pronto) {
+    Write-Host "[AVISO] OmniVoice nao respondeu apos 120s, tentando tunnel mesmo assim..." -ForegroundColor Yellow
+} else {
+    Write-Host "[OK] OmniVoice respondendo! (${esperado}s)" -ForegroundColor Green
+}
+
+Write-Host ""
+Write-Host "[2/2] Abrindo tunnel..." -ForegroundColor Yellow
+Write-Host ""
+
+# Verificar se cloudflared existe
+$cfPath = $null
+$cfPaths = @(
+    "C:\Users\Administrador\AppData\Local\Microsoft\WinGet\Links\cloudflared.exe",
     "$env:LOCALAPPDATA\Microsoft\WinGet\Links\cloudflared.exe",
-    "$env:LOCALAPPDATA\cloudflared\cloudflared.exe"
+    "C:\Program Files\cloudflared\cloudflared.exe",
+    "$env:ProgramFiles\cloudflared\cloudflared.exe"
 )
 
-foreach ($p in $paths) {
+foreach ($p in $cfPaths) {
     if (Test-Path $p) {
-        $cloudflared = $p
+        $cfPath = $p
         break
     }
 }
 
-if (-not $cloudflared) {
-    try {
-        $cloudflared = (Get-Command cloudflared -ErrorAction Stop).Source
-    } catch {}
+# Tentar achar no PATH
+if (-not $cfPath) {
+    $cfFromPath = Get-Command cloudflared -ErrorAction SilentlyContinue
+    if ($cfFromPath) {
+        $cfPath = $cfFromPath.Source
+    }
 }
 
-if (-not $cloudflared) {
-    Write-Host "[INFO] Instalando cloudflared via winget..." -ForegroundColor Yellow
-    winget install --id Cloudflare.cloudflared --accept-package-agreements --accept-source-agreements 2>$null
-    try {
-        $cloudflared = (Get-Command cloudflared -ErrorAction Stop).Source
-    } catch {}
-}
+if ($cfPath) {
+    # ========= USAR CLOUDFLARED =========
+    Write-Host "[OK] cloudflared encontrado: $cfPath" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Iniciando cloudflared tunnel..." -ForegroundColor Yellow
 
-if ($cloudflared) {
-    Write-Host "[OK] cloudflared encontrado: $cloudflared" -ForegroundColor Green
-} else {
-    Write-Host "[ERRO] cloudflared nao encontrado!" -ForegroundColor Red
-    Read-Host "Pressione Enter para sair"
-    exit 1
-}
+    $cfProcess = Start-Process -FilePath $cfPath -ArgumentList "tunnel", "--url", "http://localhost:$port" -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\cf_output.txt" -RedirectStandardError "$env:TEMP\cf_error.txt"
 
-# --- 2. Verificar OmniVoice ---
-Write-Host ""
-Write-Host "[1/2] Verificando OmniVoice na porta $port..." -ForegroundColor Yellow
+    # Aguardar URL do cloudflared
+    $cfUrl = $null
+    for ($i = 0; $i -lt 60; $i++) {
+        Start-Sleep -Milliseconds 1000
+        $errContent = ""
+        if (Test-Path "$env:TEMP\cf_error.txt") {
+            $errContent = Get-Content "$env:TEMP\cf_error.txt" -Raw -ErrorAction SilentlyContinue
+        }
+        $outContent = ""
+        if (Test-Path "$env:TEMP\cf_output.txt") {
+            $outContent = Get-Content "$env:TEMP\cf_output.txt" -Raw -ErrorAction SilentlyContinue
+        }
+        $allContent = "$outContent $errContent"
 
-try {
-    # UseBasicParsing evita o aviso de seguranca
-    $test = Invoke-WebRequest -Uri "http://localhost:$port/" -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
-    Write-Host "[OK] OmniVoice respondendo!" -ForegroundColor Green
-} catch {
-    Write-Host "[ERRO] OmniVoice NAO esta rodando na porta $port!" -ForegroundColor Red
-    Write-Host "Inicie o OmniVoice primeiro: omnivoice-demo --ip 0.0.0.0 --port $port" -ForegroundColor Yellow
-    Read-Host "Pressione Enter para sair"
-    exit 1
-}
-
-# --- 3. Abrir tunnel ---
-Write-Host ""
-Write-Host "[2/2] Abrindo tunnel cloudflare..." -ForegroundColor Yellow
-Write-Host ""
-
-# Remove arquivo de log anterior
-$logFile = "$env:TEMP\cloudflared_tunnel.log"
-if (Test-Path $logFile) { Remove-Item $logFile -Force }
-
-# Inicia o cloudflared com log em arquivo
-$processArgs = "tunnel", "--url", "http://localhost:$port", "--logfile", $logFile
-$tunnelProcess = Start-Process -FilePath $cloudflared -ArgumentList $processArgs -PassThru -WindowStyle Hidden
-
-# Aguarda a URL aparecer no log
-$maxWait = 45
-$waited = 0
-$tunnelUrl = ""
-
-Write-Host "[INFO] Aguardando URL do tunnel..." -ForegroundColor Yellow
-
-while ($waited -lt $maxWait) {
-    Start-Sleep -Seconds 2
-    $waited += 2
-
-    if (Test-Path $logFile) {
-        $logContent = Get-Content $logFile -Raw -ErrorAction SilentlyContinue
-        if ($logContent -match 'https://([a-z0-9\-]+)\.trycloudflare\.com') {
-            $tunnelUrl = "https://$($matches[1]).trycloudflare.com"
+        if ($allContent -match "(https://[a-z0-9\-]+\.trycloudflare\.com)") {
+            $cfUrl = $Matches[1]
             break
         }
     }
-}
 
-if ($tunnelUrl) {
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Green
-    Write-Host "  URL: $tunnelUrl" -ForegroundColor Green
-    Write-Host "========================================" -ForegroundColor Green
-    Write-Host ""
-} else {
-    Write-Host ""
-    Write-Host "[ERRO] Nao conseguiu obter URL do tunnel em ${maxWait}s" -ForegroundColor Red
-    Write-Host "[INFO] Verifique o log: $logFile" -ForegroundColor Yellow
-    Stop-Process -Id $tunnelProcess.Id -Force -ErrorAction SilentlyContinue
-    Read-Host "Pressione Enter para sair"
-    exit 1
-}
+    if ($cfUrl) {
+        Write-Host "========================================" -ForegroundColor Green
+        Write-Host "  URL: $cfUrl" -ForegroundColor Green
+        Write-Host "========================================" -ForegroundColor Green
+        Write-Host ""
 
-# --- 4. Atualizar HostGator via GET ---
-Write-Host "[INFO] Atualizando servidor HostGator..." -ForegroundColor Yellow
+        try {
+            $resp = Invoke-RestMethod -Uri "$serverUpdate`?auth=$auth&url=$cfUrl" -TimeoutSec 15
+            if ($resp.ok) {
+                Write-Host "[OK] Servidor atualizado automaticamente!" -ForegroundColor Green
+            } else {
+                Write-Host "[ERRO] $($resp.error)" -ForegroundColor Red
+            }
+        } catch {
+            Write-Host "[AVISO] Nao conseguiu atualizar servidor PHP: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
 
-try {
-    $encodedUrl = [System.Uri]::EscapeDataString($tunnelUrl)
-    $updateUrl = "${serverUpdate}?tunnelUrl=${encodedUrl}"
-    
-    # Usa System.Net.WebClient (rapido, sem overhead do Invoke-WebRequest)
-    $webClient = New-Object System.Net.WebClient
-    $webClient.Headers.Add("User-Agent", "OmniVoice-Tunnel/1.0")
-    $response = $webClient.DownloadString($updateUrl)
-    
-    $result = $response | ConvertFrom-Json
-    
-    if ($result.status -eq 'ok') {
-        Write-Host "[OK] URL atualizada no HostGator!" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "Tunnel ativo! Nao feche esta janela." -ForegroundColor Yellow
+        Write-Host "Pressione Ctrl+C para parar." -ForegroundColor DarkGray
+        Write-Host ""
+
+        try {
+            $cfProcess.WaitForExit()
+        } catch {
+            Start-Sleep -Seconds 999999
+        }
     } else {
-        Write-Host "[WARN] Resposta: $($response)" -ForegroundColor Yellow
+        Write-Host "[ERRO] Cloudflared nao gerou URL" -ForegroundColor Red
+        Write-Host "Tentando localtunnel como fallback..." -ForegroundColor Yellow
+
+        # Fallback para localtunnel
+        . do_fallback_localtunnel
     }
-} catch {
-    Write-Host "[ERRO] Falha ao atualizar HostGator: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "[INFO] Tunnel continua ativo. Atualize manualmente se necessario." -ForegroundColor Yellow
+
+} else {
+    # ========= USAR LOCALTUNNEL (FALLBACK) =========
+    Write-Host "[INFO] cloudflared nao encontrado, usando localtunnel..." -ForegroundColor Yellow
+    . do_fallback_localtunnel
 }
 
-# --- 5. Teste final ---
-Write-Host ""
-Write-Host "[INFO] Testando tunnel..." -ForegroundColor Yellow
-try {
-    $testResult = Invoke-WebRequest -Uri "$tunnelUrl/" -TimeoutSec 10 -UseBasicParsing -ErrorAction Stop
-    Write-Host "[OK] Tunnel respondendo!" -ForegroundColor Green
-} catch {
-    Write-Host "[WARN] Tunnel pode nao estar pronto ainda, mas esta ativo" -ForegroundColor Yellow
+function do_fallback_localtunnel {
+    $outputFile = "$env:TEMP\lt_output.txt"
+    Remove-Item $outputFile -Force -ErrorAction SilentlyContinue
+
+    $job = Start-Job -ScriptBlock {
+        param($p)
+        cmd /c "npx localtunnel --port $p 2>&1" | Out-File -FilePath $using:outputFile -Encoding ascii
+    } -ArgumentList $port
+
+    $url = $null
+    for ($i = 0; $i -lt 60; $i++) {
+        Start-Sleep -Milliseconds 500
+        if (Test-Path $outputFile) {
+            $content = Get-Content $outputFile -Raw -ErrorAction SilentlyContinue
+            if ($content -match "your url is: (https://[a-z0-9\-]+\.loca\.lt)") {
+                $url = $Matches[1]
+                break
+            }
+        }
+    }
+
+    if ($url) {
+        Write-Host "========================================" -ForegroundColor Green
+        Write-Host "  URL: $url" -ForegroundColor Green
+        Write-Host "========================================" -ForegroundColor Green
+        Write-Host ""
+
+        try {
+            $resp = Invoke-RestMethod -Uri "$serverUpdate`?auth=$auth&url=$url" -TimeoutSec 15
+            if ($resp.ok) {
+                Write-Host "[OK] Servidor atualizado automaticamente!" -ForegroundColor Green
+            } else {
+                Write-Host "[ERRO] $($resp.error)" -ForegroundColor Red
+            }
+        } catch {
+            Write-Host "[AVISO] Nao conseguiu atualizar servidor PHP: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+
+        Write-Host ""
+        Write-Host "Tunnel ativo! Nao feche esta janela." -ForegroundColor Yellow
+        Write-Host ""
+
+        try {
+            Wait-Job $job | Out-Null
+        } catch {
+            Start-Sleep -Seconds 999999
+        }
+    } else {
+        Write-Host "[ERRO] Nao conseguiu obter URL de nenhum tunnel!" -ForegroundColor Red
+        Write-Host "Verifique sua internet e tente novamente." -ForegroundColor Yellow
+        Start-Sleep -Seconds 10
+    }
 }
-
-Write-Host ""
-Write-Host "Tunnel ativo! Nao feche esta janela." -ForegroundColor Green
-Write-Host "Pressione Ctrl+C para parar." -ForegroundColor DarkGray
-Write-Host ""
-
-# Mantem o script rodando enquanto o cloudflared estiver ativo
-try {
-    $tunnelProcess.WaitForExit()
-} catch {
-    # Ignora
-}
-
-Write-Host "[INFO] Tunnel encerrado." -ForegroundColor Yellow
