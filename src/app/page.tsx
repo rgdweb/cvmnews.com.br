@@ -1833,6 +1833,9 @@ export default function VozProClient() {
                                   <span className={`text-sm font-medium flex-1 min-w-0 ${selectedTrackId === track.id ? 'text-purple-200' : 'text-slate-300'}`}>
                                     {track.name}
                                   </span>
+                                  {track.duration > 0 && (
+                                    <span className="text-xs text-slate-500 tabular-nums">{Math.floor(track.duration / 60)}:{String(Math.floor(track.duration % 60)).padStart(2, '0')}</span>
+                                  )}
                                   <VoicePreviewButton
                                     audioUrl={track.audioPath || undefined}
                                     voiceId={track.id}
@@ -1896,6 +1899,9 @@ export default function VozProClient() {
                                   <span className={`text-sm font-medium flex-1 min-w-0 ${selectedTrackId === track.id ? 'text-purple-200' : 'text-slate-300'}`}>
                                     {track.name}
                                   </span>
+                                  {track.duration > 0 && (
+                                    <span className="text-xs text-slate-500 tabular-nums">{Math.floor(track.duration / 60)}:{String(Math.floor(track.duration % 60)).padStart(2, '0')}</span>
+                                  )}
                                   <VoicePreviewButton
                                     audioUrl={track.audioPath || undefined}
                                     voiceId={track.id}
@@ -1969,6 +1975,9 @@ export default function VozProClient() {
                               <span className={`text-sm font-medium flex-1 min-w-0 ${selectedTrackId === track.id ? 'text-purple-200' : 'text-slate-300'}`}>
                                 {track.name}
                               </span>
+                              {track.duration > 0 && (
+                                <span className="text-xs text-slate-500 tabular-nums">{Math.floor(track.duration / 60)}:{String(Math.floor(track.duration % 60)).padStart(2, '0')}</span>
+                              )}
                               <VoicePreviewButton
                                 audioUrl={track.audioPath || undefined}
                                 voiceId={track.id}
