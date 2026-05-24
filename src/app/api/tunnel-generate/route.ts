@@ -367,14 +367,11 @@ export async function POST(req: NextRequest) {
       instruct || '',                     // [4] instruct
       numStep || 32,                      // [5] num_step
       guidanceScale || 2.0,              // [6] guidance_scale
-      false,                              // [7] denoise = DESATIVADO — remove artefatos e alterações de velocidade
+      true,                               // [7] denoise (padrão Gradio demo)
       parseFloat(speed) || 1.0,          // [8] speed — SEMPRE float
       null,                               // [9] duration: null (auto)
-      false,                              // [10] preprocess_prompt = DESATIVADO — sem nenhum efeito pós
-      false,                              // [11] postprocess_output = DESATIVADO
-                                          // O postprocess corta silêncios >500ms do audio gerado,
-                                          // colando frases e causando oscilação de velocidade ("bebada").
-                                          // O modelo OmniVoice gera audio limpo sem precisar de postprocess.
+      true,                               // [10] preprocess_prompt (padrão Gradio demo)
+      true,                               // [11] postprocess_output (padrão Gradio demo)
     ]
 
     debug.log('Parametros', 'ok', `lang:${language} speed:${parseFloat(speed) || 1.0} steps:${numStep} cfg:${guidanceScale} refText:VAZIO`)

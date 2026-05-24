@@ -399,11 +399,11 @@ export async function POST(req: NextRequest) {
       instructStr,
       numStep ?? 32,
       guidanceScale ?? 2.0,
-      false,  // denoise = DESATIVADO — remove artefatos e alterações de velocidade
+      true,   // denoise (padrão Gradio demo)
       speed ?? 1.0,
       null,   // duration
-      false,  // preprocess_prompt = DESATIVADO — sem nenhum efeito pós
-      false,  // postprocess_output = DESATIVADO — corta silêncios e causa oscilação ("bebada")
+      true,   // preprocess_prompt (padrão Gradio demo)
+      true,   // postprocess_output (padrão Gradio demo)
     ]
 
     // =========================================================
