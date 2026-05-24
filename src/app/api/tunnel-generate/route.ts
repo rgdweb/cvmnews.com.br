@@ -370,8 +370,11 @@ export async function POST(req: NextRequest) {
       true,                               // [7] denoise
       parseFloat(speed) || 1.0,          // [8] speed — SEMPRE float
       null,                               // [9] duration: null (auto)
-      true,                               // [10] preprocess_prompt
-      true,                               // [11] postprocess_output
+      true,                               // [10] preprocess_prompt (só afeta audio de ref, OK)
+      false,                              // [11] postprocess_output = DESATIVADO
+                                          // O postprocess corta silêncios >500ms do audio gerado,
+                                          // colando frases e causando oscilação de velocidade ("bebada").
+                                          // O modelo OmniVoice gera audio limpo sem precisar de postprocess.
     ]
 
     debug.log('Parametros', 'ok', `lang:${language} speed:${parseFloat(speed) || 1.0} steps:${numStep} cfg:${guidanceScale} refText:VAZIO`)
