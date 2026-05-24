@@ -643,7 +643,7 @@ export async function POST(req: NextRequest) {
       language = 'Auto',
       refText = '',  // IGNORADO - sempre vazio para evitar alucinacao
       instruct = null,
-      speed = 1,
+      speed = 1.0,
       numStep = 32,
       guidanceScale = 2.0,
       skipASR = false,

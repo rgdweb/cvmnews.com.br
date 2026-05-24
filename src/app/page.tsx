@@ -886,7 +886,7 @@ export default function VozProClient() {
           referenceAudioName: voiceMode !== 'clone' ? undefined : refName,
           instruct: finalInstruct,
           voiceMode,
-          useChunking: true,
+          useChunking: false,
         }
         res = await fetch('/api/tunnel-generate', {
           method: 'POST',
@@ -2097,7 +2097,7 @@ export default function VozProClient() {
                       <label className="text-xs text-slate-400">Velocidade</label>
                       <Badge variant="outline" className="text-xs border-white/10 text-slate-500">{speed.toFixed(2)}x</Badge>
                     </div>
-                    <Slider value={[speed]} onValueChange={([v]) => setSpeed(v)} min={0.5} max={1.5} step={0.05} />
+                    <Slider value={[speed]} onValueChange={([v]) => setSpeed(v)} min={0.8} max={1.3} step={0.05} />
                   </div>
                 </CardContent>
               </Card>
