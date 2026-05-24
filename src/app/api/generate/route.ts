@@ -399,11 +399,11 @@ export async function POST(req: NextRequest) {
       instructStr,
       numStep ?? 32,
       guidanceScale ?? 2.0,
-      true,   // denoise
+      false,  // denoise = DESATIVADO — remove artefatos e alterações de velocidade
       speed ?? 1.0,
       null,   // duration
       true,   // preprocess_prompt
-      true,   // postprocess_output
+      false,  // postprocess_output = DESATIVADO — corta silêncios e causa oscilação ("bebada")
     ]
 
     // =========================================================

@@ -222,7 +222,14 @@ export async function GET(req: Request) {
   configChecks.push({
     name: 'Postprocess',
     status: 'ok',
-    detail: 'postprocess_output=true (padrão Gradio demo — igual localhost:7860)',
+    detail: 'postprocess_output=false (DESATIVADO — causava estalos e oscilacao de velocidade)',
+  })
+
+  // denoise
+  configChecks.push({
+    name: 'Denoise',
+    status: 'ok',
+    detail: 'denoise=false (DESATIVADO — evita artefatos no audio gerado)',
   })
 
   // refText

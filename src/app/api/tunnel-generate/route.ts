@@ -367,7 +367,7 @@ export async function POST(req: NextRequest) {
       instruct || '',                     // [4] instruct
       numStep || 32,                      // [5] num_step
       guidanceScale || 2.0,              // [6] guidance_scale
-      true,                               // [7] denoise
+      false,                              // [7] denoise = DESATIVADO — remove artefatos e alterações de velocidade
       parseFloat(speed) || 1.0,          // [8] speed — SEMPRE float
       null,                               // [9] duration: null (auto)
       true,                               // [10] preprocess_prompt (só afeta audio de ref, OK)
