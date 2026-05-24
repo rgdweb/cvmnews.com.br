@@ -642,7 +642,7 @@ export async function POST(req: NextRequest) {
       text,
       language = 'Auto',
       refText = '',  // IGNORADO - sempre vazio para evitar alucinacao
-      instruct = null,
+      instruct = '',
       speed = 1.0,
       numStep = 32,
       guidanceScale = 2.0,
@@ -712,6 +712,14 @@ export async function POST(req: NextRequest) {
 
     // 4. Montar dados BASE do Gradio (texto será substituído por chunk)
     // No modo design/auto, ref_audio é null (vazio)
+    // LIMITAR instruct a maximo 3 palavras para evitar alucinacoes
+    // Instruct longo confunde o modelo e causa fala delirada
+    let safeInstruct = (instruct || '').trim()
+    if (safeInstruct) {
+      const parts = safeInstruct.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean)
+      safeInstruct = parts.slice(0, 3).join(', ')
+    }
+
     const gradioBaseData = [
       cleanText,  // placeholder — será substituído por cada chunk
       language,
@@ -722,18 +730,18 @@ export async function POST(req: NextRequest) {
         is_stream: false,
         meta: { _type: 'gradio.FileData' },
       } : null, // null no modo design/auto
-      refText,
-      instruct || '',
+      '',           // refText: SEMPRE VAZIO (texto aqui causa alucinacao!)
+      safeInstruct, // instruct limitado a 3 partes
       numStep || 32,
       guidanceScale || 2.0,
       true,   // denoise
-      speed || 1,
+      speed || 1.0,
       null,   // duration
       true,   // preprocess_prompt
       true,   // postprocess_output (padrao do Gradio — funciona igual localhost:7860)
     ]
 
-    debug.log('Parametros', 'info', `lang:${language} speed:${speed} steps:${numStep} cfg:${guidanceScale} chunking:${useChunking}`)
+    debug.log('Parametros', 'info', `lang:${language} speed:${speed} steps:${numStep} cfg:${guidanceScale} instruct:"${safeInstruct}" refText:VAZIO chunking:${useChunking}`)
 
     // =============================================================
     // 5. GERAR ÁUDIO (chunking ou single-shot)
