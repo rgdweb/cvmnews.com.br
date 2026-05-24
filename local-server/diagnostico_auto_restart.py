@@ -58,10 +58,14 @@ CONFIG = {
     "tunnel_check_url": "https://sorteiomax.com.br/omnivoice/get_tunnel.php",
 
     # Auto-restart
-    "auto_restart_enabled": True,          # Ativar auto-restart?
-    "idle_minutes_before_restart": 60,     # Minutos ocioso antes de restart (min 15)
-    "check_interval_seconds": 120,         # Checar a cada X segundos (min 60)
-    "max_restarts_per_day": 5,             # Maximo de restarts por dia
+    # DESATIVADO (24/05/2026): O auto-restart tinha bug critico —
+    # taskkill /F /IM python.exe mata o PROPRIE monitor no meio do restart,
+    # entao o OmniVoice e tunnel nunca voltavam. Sistema ficava morto.
+    # Para reiniciar: execute iniciar_monitor.bat manualmente.
+    "auto_restart_enabled": False,
+    "idle_minutes_before_restart": 60,
+    "check_interval_seconds": 120,
+    "max_restarts_per_day": 5,
 
     # Cleanup de temp
     "cleanup_enabled": True,               # Limpar arquivos temp?
@@ -691,14 +695,26 @@ def do_restart():
     log("Limpando arquivos temporarios...", "RESTART")
     check_temp_files()
 
-    # 2. Matar node (localtunnel)
-    log("Parando Localtunnel (node)...", "RESTART")
-    run_cmd("taskkill /F /IM node.exe", 10)
+    # 2. Matar tunnels (NAO matar node.exe — pode haver outros processos node)
+    log("Parando tunnels (cloudflared)...", "RESTART")
+    run_cmd("taskkill /F /IM cloudflared.exe", 10)
     time.sleep(3)
 
-    # 3. Matar Python/OmniVoice
+    # 3. Matar OmniVoice (procure pela porta, NAO mate TODOS python.exe!)
+    # taskkill /F /IM python.exe mata O PROPRIO MONITOR.
     log("Parando servidor OmniVoice...", "RESTART")
-    run_cmd("taskkill /F /IM python.exe", 10)
+    code_ns, output_ns = run_cmd(f'netstat -ano | findstr ":{CONFIG[\"gradio_port\"]}" | findstr "LISTENING"')
+    killed_omnivoice = False
+    if "LISTENING" in output_ns:
+        for line in output_ns.strip().splitlines():
+            parts = line.strip().split()
+            if parts:
+                pid = parts[-1]
+                log(f"  Matando PID {pid} (porta {CONFIG['gradio_port']})...", "RESTART")
+                run_cmd(f"taskkill /F /PID {pid}", 10)
+                killed_omnivoice = True
+    if not killed_omnivoice:
+        log("  Nenhum processo na porta 7860 encontrado (ja estava parado?)", "RESTART")
     time.sleep(3)
 
     # 4. Aguardar liberacao
