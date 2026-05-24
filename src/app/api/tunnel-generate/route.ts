@@ -370,7 +370,7 @@ export async function POST(req: NextRequest) {
       false,                              // [7] denoise = DESATIVADO — remove artefatos e alterações de velocidade
       parseFloat(speed) || 1.0,          // [8] speed — SEMPRE float
       null,                               // [9] duration: null (auto)
-      true,                               // [10] preprocess_prompt (só afeta audio de ref, OK)
+      false,                              // [10] preprocess_prompt = DESATIVADO — sem nenhum efeito pós
       false,                              // [11] postprocess_output = DESATIVADO
                                           // O postprocess corta silêncios >500ms do audio gerado,
                                           // colando frases e causando oscilação de velocidade ("bebada").

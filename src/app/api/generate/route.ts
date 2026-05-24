@@ -402,7 +402,7 @@ export async function POST(req: NextRequest) {
       false,  // denoise = DESATIVADO — remove artefatos e alterações de velocidade
       speed ?? 1.0,
       null,   // duration
-      true,   // preprocess_prompt
+      false,  // preprocess_prompt = DESATIVADO — sem nenhum efeito pós
       false,  // postprocess_output = DESATIVADO — corta silêncios e causa oscilação ("bebada")
     ]
 
