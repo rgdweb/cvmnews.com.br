@@ -198,3 +198,26 @@ Stage Summary:
 - Pipeline: 100% single-shot, sem chunking, sem ASR, sem preprocess, sem trim
 - Parâmetros Gradio mantidos iguais ao demo localhost:7860
 - Deploy via git push (Vercel auto-deploy)
+---
+Task ID: 2
+Agent: main
+Task: Investigar tunnel parando + voz oscilando ("bebada")
+
+Work Log:
+- Analisou iniciar_monitor.bat — mata python.exe, node.exe, cloudflared.exe na inicialização (ok, é limpeza)
+- Analisou fechar.bat / fechar_tudo.bat — mata processos (normal)
+- Analisou start_tunnel.ps1 — registro de tunnel OK (POST JSON)
+- Analisou diagnostico.py (monitor automático) — ENCONTROU BUG CRÍTICO
+- Comparou parâmetros PHP generate-omnivoice.php vs tunnel-generate/route.ts — IDÊNTICOS
+- Desativou auto-restart no diagnostico.py (download/ e local-server/)
+- Corrigiu do_restart() para matar por PID na porta 7860 em vez de taskkill /IM python.exe
+- Push: 5344c1c
+
+Stage Summary:
+- BUG CRÍTICO ENCONTRADO: diagnostico.py do_restart() fazia taskkill /F /IM python.exe
+  → Isso matava o PRÓPRIO monitor no meio do restart
+  → OmniVoice e tunnel MORRIAM e NUNCA VOLTAVAM
+  → Sistema ficava 100% offline sem o usuário saber
+- CORREÇÃO: auto_restart_enabled = False + kill por PID ao invés de nome de processo
+- Parâmetros Gradio: idênticos entre PHP e route.ts (postprocess=true, preprocess=true, denoise=true)
+- A voz "bebada" provavelmente era causada por tunnel instável (morria e não voltava)
