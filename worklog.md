@@ -174,3 +174,27 @@ Stage Summary:
 - Tunnel is down (cloudflared not running)
 - User needs to run iniciar_monitor.bat on the local PC
 - After restart, Vercel will be able to connect to Gradio via tunnel
+---
+Task ID: 1
+Agent: main
+Task: Limpar pipeline TTS para modo LIMPO single-shot (sem chunking, sem efeitos)
+
+Work Log:
+- Leu tunnel-generate/route.ts completo (908 linhas) — identificou TODOS os efeitos/processamentos
+- Removeu TODOS os imports de chunking, ASR, SSML, text preprocessor, audio trimmer, audio concatenator
+- Removeu funções: generateWithChunking, generateChunk, appendWavSilence, buildSimpleWavHeader, parseWavHeaderSimple
+- Removeu lógica de fallback chunking (TEXT_THRESHOLD=800) e pipeline de seleção
+- Removeu validação ASR do resultado final
+- Removeu SSML stripping (agora texto vai direto pro Gradio)
+- Manteve apenas: tunnel URL discovery, upload com retry, submit job, SSE stream, download com retry + WAV check
+- Pipeline agora é: texto inteiro → Gradio → audio → return (zero processamento)
+- Atualizou diagnose/route.ts para refletir modo limpo
+- Verificou frontend: useChunking=false já enviado, sem preprocessTTS ativo
+- Build limpo: ✓ Compiled successfully (zero erros/warnings)
+- Push para GitHub: b66f033
+
+Stage Summary:
+- tunnel-generate/route.ts: 908 linhas → ~280 linhas (cortou ~70% do código)
+- Pipeline: 100% single-shot, sem chunking, sem ASR, sem preprocess, sem trim
+- Parâmetros Gradio mantidos iguais ao demo localhost:7860
+- Deploy via git push (Vercel auto-deploy)

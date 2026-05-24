@@ -211,32 +211,25 @@ export async function GET(req: Request) {
     detail: 'Frontend: 0.8-1.3 (step 0.05) | Backend: parseFloat com fallback 1.0',
   })
 
-  // useChunking default
+  // Modo pipeline
   configChecks.push({
-    name: 'Chunking Default',
+    name: 'Pipeline',
     status: 'ok',
-    detail: 'Frontend: useChunking=false | Backend: single-shot para <=250 chars, chunking para >250 chars',
+    detail: 'MODO LIMPO: 100% single-shot, SEM chunking, SEM ASR, SEM preprocess. Texto direto pro Gradio.',
   })
 
   // postprocess_output
   configChecks.push({
     name: 'Postprocess',
     status: 'ok',
-    detail: 'postprocess_output=true (padrão Gradio — antiruido ativo)',
-  })
-
-  // instruct limit
-  configChecks.push({
-    name: 'Instruct Limit',
-    status: 'ok',
-    detail: 'Backend limita a 3 partes separadas por vírgula (evita alucinação)',
+    detail: 'postprocess_output=true (padrão Gradio demo — igual localhost:7860)',
   })
 
   // refText
   configChecks.push({
     name: 'Ref Text',
     status: 'ok',
-    detail: 'Sempre vazio no backend (evita alucinação do modelo)',
+    detail: 'Sempre vazio (evita alucinacao do modelo)',
   })
 
   // Tunnel registration
