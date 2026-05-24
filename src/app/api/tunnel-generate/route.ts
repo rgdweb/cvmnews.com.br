@@ -764,65 +764,32 @@ export async function POST(req: NextRequest) {
     let chunkInfo: TextChunk[] | null = null
     let audioDiagnostics: AudioDiagnostics | null = null
 
-    // PIPELINE: Roteamento inteligente por tamanho de texto
+    // PIPELINE: SEMPRE SINGLE-SHOT (modo limpo — sem efeito)
     // =============================================================
-    // O problema do fallback aleatório: single-shot falha às vezes por timeout
-    // do tunnel, e o chunking fallback produz áudio diferente (sem silêncio).
-    // Isso causava voz "delirada" — às vezes perfeita, às vezes errática.
+    // O chunking divide o texto em pedaços e gera cada um separadamente.
+    // Cada pedaço sai com velocidade DIFERENTE do modelo → quando concatena,
+    // fica "mistura de velocidade" (lento/rápico alternado sem padrão).
     //
-    // NOVA ESTRATÉGIA (consistente):
-    //   - Textos curtos (<=250 chars): SINGLE-SHOT (1 chamada, mais natural)
-    //   - Textos longos (>250 chars): CHUNKING (N chamadas, mais confiável)
-    //   - Nunca mistura os dois para o mesmo texto → resultado previsível
+    // O modo limpo que funcionava perfeitamente era SINGLE-SHOT:
+    //   - Texto inteiro vai de uma vez pro modelo
+    //   - Modelo gera com velocidade CONSISTENTE do início ao fim
+    //   - Sem cortes, sem junções, sem variações de ritmo
     //
-    // Limite 250 chars: OmniVoice com postprocess_output=true corta ~29%
-    // do áudio em textos >280 chars. Chunks de 250 chars evitam esse corte.
+    // Chunking SÓ como último recurso (se single-shot falhar por timeout
+    // em textos GIGANTES >800 chars). Para textos normais, sempre single-shot.
 
-    const TEXT_THRESHOLD = 250
-    const isLongText = cleanText.length > TEXT_THRESHOLD
-    const useChunkingForText = useChunking || isLongText
+    const TEXT_THRESHOLD = 800  // só chunking para textos muito longos
 
-    if (useChunkingForText) {
-      // Modo CHUNKING: textos longos ou pedido explícito do usuário
-      debug.log('Pipeline', 'info', `Modo CHUNKING (texto: ${cleanText.length} chars ${isLongText ? '> threshold' : ''})`)
-      const chunkResult = await generateWithChunking(tunnelUrl, cleanText, gradioBaseData, debug)
-      if (chunkResult) {
-        finalBuffer = chunkResult.finalBuffer
-        chunkInfo = chunkResult.chunks
-        const sr = finalBuffer.readUInt32LE(24)
-        const ch = finalBuffer.readUInt16LE(22)
-        const bps = finalBuffer.readUInt16LE(34)
-        const ds = finalBuffer.readUInt32LE(40)
-        const dur = (ds / ch / Math.floor(bps / 8) / sr).toFixed(1)
-        const expDur = (cleanText.length * 0.08).toFixed(1)
-        audioDiagnostics = {
-          textLength: cleanText.length, audioDurationSec: dur,
-          fileSizeKB: (finalBuffer.length / 1024).toFixed(1),
-          sampleRate: sr, bitsPerSample: bps, channels: ch,
-          delayAfterSse: 0, silencePadSec: 0,
-          expectedMinDuration: expDur,
-          durationOk: parseFloat(dur) >= parseFloat(expDur),
-          wavHeaderValid: isWavComplete(finalBuffer),
-        }
-      } else {
-        // Chunking falhou → tentar single-shot como último recurso
-        debug.log('Pipeline', 'warn', 'Chunking falhou, tentando single-shot como último recurso...')
-        const ssResult = await generateSingleShot(tunnelUrl, cleanText, gradioBaseData, debug)
-        if (ssResult.buffer) {
-          finalBuffer = ssResult.buffer
-          audioDiagnostics = ssResult.diagnostics
-        }
-      }
-    } else {
-      // Modo SINGLE-SHOT: textos curtos (mais natural, 1 chamada API)
-      debug.log('Pipeline', 'info', `Modo SINGLE-SHOT (texto: ${cleanText.length} chars — curto)`)
+    if (!useChunking) {
+      // MODO LIMPO: Single-shot (texto inteiro de uma vez, velocidade consistente)
+      debug.log('Pipeline', 'info', `Modo LIMPO SINGLE-SHOT (texto: ${cleanText.length} chars — sem efeito)`)
       const ssResult = await generateSingleShot(tunnelUrl, cleanText, gradioBaseData, debug)
       if (ssResult.buffer) {
         finalBuffer = ssResult.buffer
         audioDiagnostics = ssResult.diagnostics
-      } else {
-        // Single-shot falhou → tentar chunking como último recurso
-        debug.log('Pipeline', 'warn', 'Single-shot falhou, tentando chunking como último recurso...')
+      } else if (cleanText.length > TEXT_THRESHOLD) {
+        // Texto gigante falhou → chunking como último recurso
+        debug.log('Pipeline', 'warn', `Single-shot falhou (texto ${cleanText.length} chars > ${TEXT_THRESHOLD}), chunking como último recurso...`)
         const chunkResult = await generateWithChunking(tunnelUrl, cleanText, gradioBaseData, debug)
         if (chunkResult) {
           finalBuffer = chunkResult.finalBuffer
@@ -842,6 +809,31 @@ export async function POST(req: NextRequest) {
             durationOk: parseFloat(dur) >= parseFloat(expDur),
             wavHeaderValid: isWavComplete(finalBuffer),
           }
+        }
+      }
+      // Textos <=800 chars que falharam → retorna erro (não tenta chunking)
+      // Chunking em textos normais causa variação de velocidade
+    } else {
+      // Chunking manual (só se usuário pedir explicitamente)
+      debug.log('Pipeline', 'warn', `Modo CHUNKING manual (texto: ${cleanText.length} chars — usuário pediu)`)
+      const chunkResult = await generateWithChunking(tunnelUrl, cleanText, gradioBaseData, debug)
+      if (chunkResult) {
+        finalBuffer = chunkResult.finalBuffer
+        chunkInfo = chunkResult.chunks
+        const sr = finalBuffer.readUInt32LE(24)
+        const ch = finalBuffer.readUInt16LE(22)
+        const bps = finalBuffer.readUInt16LE(34)
+        const ds = finalBuffer.readUInt32LE(40)
+        const dur = (ds / ch / Math.floor(bps / 8) / sr).toFixed(1)
+        const expDur = (cleanText.length * 0.08).toFixed(1)
+        audioDiagnostics = {
+          textLength: cleanText.length, audioDurationSec: dur,
+          fileSizeKB: (finalBuffer.length / 1024).toFixed(1),
+          sampleRate: sr, bitsPerSample: bps, channels: ch,
+          delayAfterSse: 0, silencePadSec: 0,
+          expectedMinDuration: expDur,
+          durationOk: parseFloat(dur) >= parseFloat(expDur),
+          wavHeaderValid: isWavComplete(finalBuffer),
         }
       }
     }
