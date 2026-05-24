@@ -93,15 +93,27 @@ if ($cfPath) {
         Write-Host "========================================" -ForegroundColor Green
         Write-Host ""
 
-        try {
-            $resp = Invoke-RestMethod -Uri "$serverUpdate`?auth=$auth&url=$cfUrl" -TimeoutSec 15
-            if ($resp.ok) {
-                Write-Host "[OK] Servidor atualizado automaticamente!" -ForegroundColor Green
-            } else {
-                Write-Host "[ERRO] $($resp.error)" -ForegroundColor Red
+        # Registrar URL no servidor PHP (POST JSON - mais confiavel que GET)
+        $registered = $false
+        for ($tentativa = 1; $tentativa -le 3; $tentativa++) {
+            try {
+                $body = @{ tunnelUrl = $cfUrl } | ConvertTo-Json
+                $resp = Invoke-RestMethod -Uri $serverUpdate -Method POST -Body $body -ContentType "application/json" -TimeoutSec 15
+                if ($resp.status -eq 'ok') {
+                    Write-Host "[OK] Servidor atualizado automaticamente!" -ForegroundColor Green
+                    $registered = $true
+                    break
+                } else {
+                    Write-Host "[ERRO] Tentativa $tentativa/3 : $($resp.error)" -ForegroundColor Red
+                }
+            } catch {
+                Write-Host "[AVISO] Tentativa $tentativa/3 falhou: $($_.Exception.Message)" -ForegroundColor Yellow
             }
-        } catch {
-            Write-Host "[AVISO] Nao conseguiu atualizar servidor PHP: $($_.Exception.Message)" -ForegroundColor Yellow
+            if ($tentativa -lt 3) { Start-Sleep -Seconds 3 }
+        }
+        if (-not $registered) {
+            Write-Host "[AVISO] Nao conseguiu atualizar servidor PHP apos 3 tentativas." -ForegroundColor Yellow
+            Write-Host "        O tunnel funciona localmente, mas a Vercel nao vai encontrar a URL." -ForegroundColor Yellow
         }
 
         Write-Host ""
@@ -155,9 +167,11 @@ function do_fallback_localtunnel {
         Write-Host "========================================" -ForegroundColor Green
         Write-Host ""
 
+        # Registrar URL no servidor PHP (POST JSON)
         try {
-            $resp = Invoke-RestMethod -Uri "$serverUpdate`?auth=$auth&url=$url" -TimeoutSec 15
-            if ($resp.ok) {
+            $body = @{ tunnelUrl = $url } | ConvertTo-Json
+            $resp = Invoke-RestMethod -Uri $serverUpdate -Method POST -Body $body -ContentType "application/json" -TimeoutSec 15
+            if ($resp.status -eq 'ok') {
                 Write-Host "[OK] Servidor atualizado automaticamente!" -ForegroundColor Green
             } else {
                 Write-Host "[ERRO] $($resp.error)" -ForegroundColor Red
@@ -168,7 +182,7 @@ function do_fallback_localtunnel {
 
         Write-Host ""
         Write-Host "Tunnel ativo! Nao feche esta janela." -ForegroundColor Yellow
-        Write-Host ""
+        Write-Host "
 
         try {
             Wait-Job $job | Out-Null

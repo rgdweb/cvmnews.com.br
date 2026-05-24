@@ -84,7 +84,22 @@ async function getTunnelUrl(debug: ReturnType<typeof createDebug>): Promise<stri
     if (data.status !== 'online' || !data.tunnelUrl) {
       throw new Error(data.message || 'GPU offline')
     }
-    debug.log('Tunnel URL', 'ok', data.tunnelUrl.substring(0, 60) + '...')
+
+    // Health check: verificar se o tunnel esta realmente vivo
+    debug.log('Tunnel URL', 'info', `Verificando: ${data.tunnelUrl.substring(0, 50)}...`)
+    try {
+      const healthRes = await fetch(`${data.tunnelUrl}/`, { signal: AbortSignal.timeout(8000) })
+      if (!healthRes.ok) {
+        debug.log('Tunnel URL', 'warn', `URL do PHP respondeu mas tunnel esta morto (HTTP ${healthRes.status})`)
+        throw new Error(`Tunnel morto (HTTP ${healthRes.status}) - URL antiga no servidor PHP`)
+      }
+      debug.log('Tunnel URL', 'ok', `${data.tunnelUrl.substring(0, 60)}... (vivo!)`)
+    } catch (healthErr) {
+      if (healthErr instanceof Error && healthErr.message.includes('Tunnel morto')) throw healthErr
+      debug.log('Tunnel URL', 'warn', `Nao conseguiu contactar o tunnel: ${healthErr instanceof Error ? healthErr.message : String(healthErr)}`)
+      throw new Error('Tunnel inacessivel - reinicie o tunnel na maquina local')
+    }
+
     return data.tunnelUrl
   } catch (err) {
     throw new Error('GPU offline: ' + (err instanceof Error ? err.message : String(err)))
@@ -97,35 +112,46 @@ async function uploadToGradio(
   fileName: string,
   debug: ReturnType<typeof createDebug>
 ): Promise<string | null> {
-  try {
-    const blob = new Blob([audioBuffer], { type: fileName.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav' })
-    const form = new FormData()
-    form.append('files', blob, fileName)
+  // Tentar upload com retry (tunnel pode estar instavel)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      if (attempt > 0) {
+        debug.log('Upload', 'warn', `Tentativa ${attempt + 1}/3...`)
+        await new Promise(r => setTimeout(r, 3000))
+      }
 
-    const res = await fetch(`${tunnelUrl}/gradio_api/upload`, {
-      method: 'POST',
-      body: form,
-      signal: AbortSignal.timeout(30000),
-    })
+      const blob = new Blob([audioBuffer], { type: fileName.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav' })
+      const form = new FormData()
+      form.append('files', blob, fileName)
 
-    if (!res.ok) {
-      const errText = await res.text()
-      debug.log('Upload', 'error', `HTTP ${res.status}: ${errText.substring(0, 200)}`)
+      const res = await fetch(`${tunnelUrl}/gradio_api/upload`, {
+        method: 'POST',
+        body: form,
+        signal: AbortSignal.timeout(30000),
+      })
+
+      if (!res.ok) {
+        const errText = await res.text()
+        debug.log('Upload', 'error', `HTTP ${res.status}: ${errText.substring(0, 200)}`)
+        // Se for erro de conexao (tunnel morto), nao adianta retry
+        if (!res.ok && res.status >= 500) continue
+        return null
+      }
+
+      const paths = await res.json()
+      if (Array.isArray(paths) && paths.length > 0) {
+        debug.log('Upload', 'ok', `path: ${paths[0]}`)
+        return paths[0]
+      }
+
+      debug.log('Upload', 'error', 'Resposta inesperada')
       return null
+    } catch (err) {
+      debug.log('Upload', 'warn', `Tentativa ${attempt + 1}/3 falhou: ${err instanceof Error ? err.message : String(err)}`)
     }
-
-    const paths = await res.json()
-    if (Array.isArray(paths) && paths.length > 0) {
-      debug.log('Upload', 'ok', `path: ${paths[0]}`)
-      return paths[0]
-    }
-
-    debug.log('Upload', 'error', 'Resposta inesperada')
-    return null
-  } catch (err) {
-    debug.log('Upload', 'error', err instanceof Error ? err.message : String(err))
-    return null
   }
+  debug.log('Upload', 'error', 'Falha apos 3 tentativas')
+  return null
 }
 
 async function submitJob(

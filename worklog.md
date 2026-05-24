@@ -40,3 +40,33 @@ Stage Summary:
 - diagnostico.py and diagnostico_auto_restart.py updated with tunnel + RAM fixes
 - iniciar_monitor.bat updated to reference correct filename
 - User needs to copy new files to PC: C:\Users\Administrador\OneDrive\Área de Trabalho\tunnel e servidor\
+
+---
+Task ID: 2
+Agent: main
+Task: Fix tunnel URL not being registered - causing "fetch failed" on upload
+
+Work Log:
+- Analyzed user debug output: upload to Gradio fails with "fetch failed"
+- Root cause: start_tunnel.ps1 sends `?auth=xxx&url=xxx` (GET) but PHP expects `tunnelUrl` parameter (POST JSON or GET)
+- PHP reads `$_GET['tunnelUrl']` or `$input['tunnelUrl']` from JSON body, PowerShell was sending `url=` key
+- Since `tunnelUrl` was empty, PHP returned 400, tunnel URL never updated on server
+- Vercel API got stale tunnel URL from PHP, tried to upload to dead tunnel, got "fetch failed"
+
+Fixes applied:
+1. start_tunnel.ps1: Changed from GET `?url=` to POST JSON body `{ tunnelUrl: $cfUrl }` with 3 retries
+2. tunnel-generate/route.ts getTunnelUrl(): Added health check - verifies tunnel is alive before using URL
+3. tunnel-generate/route.ts uploadToGradio(): Added 3-attempt retry with 3s delay between attempts
+4. Verified PHP on sorteiomax.com.br accepts POST JSON correctly (tested with curl)
+5. Restored correct tunnel URL on PHP server (was accidentally overwritten during testing)
+6. Build passed successfully
+
+Files modified:
+- download/start_tunnel.ps1 (POST JSON + retry)
+- src/app/api/tunnel-generate/route.ts (health check + upload retry)
+
+Stage Summary:
+- ROOT CAUSE: PowerShell parameter name mismatch (`url` vs `tunnelUrl`)
+- User needs to copy updated start_tunnel.ps1 to PC
+- After restart, tunnel URL will register correctly on PHP server
+- Vercel API now also validates tunnel is alive before using it
