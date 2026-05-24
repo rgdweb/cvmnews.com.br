@@ -380,13 +380,13 @@ function buildSimpleWavHeader(fmt: SimpleWavFormat, dataSize: number, pcm: Buffe
 }
 
 // ============================================================
-// PIPELINE COM CHUNKING — fallback only
+// PIPELINE COM CHUNKING — modo principal para textos longos
 // ============================================================
 
 /**
- * Gera áudio com chunking (só como fallback se single-shot falhar).
+ * Gera áudio com chunking.
  * Usa postprocess_output=true (padrão Gradio) = antiruido + qualidade.
- * Splice puro de PCM bytes — sem processamento.
+ * Concatena PCM com silêncio real entre chunks para prosódia natural.
  */
 
 async function generateWithChunking(
@@ -427,13 +427,18 @@ async function generateWithChunking(
     debug.log('Chunking', 'warn', `${failedChunks}/${chunks.length} chunks falharam, continuando com ${audioChunks.length}`)
   }
 
-  // 3. Raw PCM splice — sem processamento (postprocess desativado nos chunks)
-  // Como postprocess_output=false, o OmniVoice NÃO corta o final do áudio.
-  // Denoise=true mantém o antiruido. Splice puro de bytes.
-  debug.log('Concatenacao', 'info', `Raw splice: ${audioChunks.length} chunks (postprocess OFF, denoise ON)...`)
+  // 3. PCM splice com silêncio entre chunks para prosódia natural
+  // postprocess_output=true corta o final de cada chunk → precisamos de silêncio
+  // entre chunks para simular respiração e evitar "deliradas" (fala colada).
+  const MIN_SILENCE_MS = 250  // silêncio mínimo entre chunks (respiração natural)
+
+  debug.log('Concatenacao', 'info', `PCM splice + silêncio: ${audioChunks.length} chunks (postprocess ON, denoise ON)...`)
 
   const firstFormat = parseWavHeaderSimple(audioChunks[0].buffer)
   const pcmParts: Buffer[] = []
+  const bytesPerSample = Math.floor(firstFormat.bitsPerSample / 8)
+  const blockAlign = bytesPerSample * firstFormat.numChannels
+  const silenceBytesPerMs = Math.floor(firstFormat.sampleRate * blockAlign / 1000)
 
   for (let i = 0; i < audioChunks.length; i++) {
     const buf = audioChunks[i].buffer
@@ -441,13 +446,22 @@ async function generateWithChunking(
     const dataSize = buf.readUInt32LE(40)
     const actualDataEnd = Math.min(44 + dataSize, buf.length)
     pcmParts.push(buf.subarray(44, actualDataEnd))
+
+    // Adicionar silêncio entre chunks (NÃO após o último)
+    if (i < audioChunks.length - 1) {
+      // Usar pauseAfterMs do chunk ou mínimo de 250ms
+      const pauseMs = Math.max(MIN_SILENCE_MS, audioChunks[i].pauseAfterMs || MIN_SILENCE_MS)
+      const silenceBytes = pauseMs * silenceBytesPerMs
+      pcmParts.push(Buffer.alloc(silenceBytes, 0))
+      debug.log('Concatenacao', 'info', `Silêncio ${pauseMs}ms após chunk ${i + 1}`)
+    }
   }
 
   const finalPcm = Buffer.concat(pcmParts)
   const finalBuffer = buildSimpleWavHeader(firstFormat, finalPcm.length, finalPcm)
 
   debug.log('Concatenacao', 'ok',
-    `PCM: ${finalPcm.length} bytes, ${pcmParts.length} chunks, ${(finalBuffer.length / 1024).toFixed(1)}KB`)
+    `PCM: ${finalPcm.length} bytes, ${pcmParts.length} partes (${audioChunks.length} chunks + silêncios), ${(finalBuffer.length / 1024).toFixed(1)}KB`)
 
   return { finalBuffer, chunks }
 }
@@ -750,20 +764,65 @@ export async function POST(req: NextRequest) {
     let chunkInfo: TextChunk[] | null = null
     let audioDiagnostics: AudioDiagnostics | null = null
 
-    // PIPELINE: SEMPRE tentar single-shot primeiro (igual localhost:7860)
-    // O demo local funciona perfeitamente com textos longos sem chunking.
-    // Chunking só como FALLBACK se single-shot falhar ou voltar audio claramente cortado.
-    // Motivo de velocidade: single-shot = 1 chamada API (~30s), chunking = N chamadas (~2min)
-    const useChunkingFallback = useChunking // só chunking manual se usuario pedir explicitamente
-    if (!useChunkingFallback && cleanText.length > 20) {
-      debug.log('Pipeline', 'info', `Modo SINGLE-SHOT (texto: ${cleanText.length} chars — igual localhost demo)`)
+    // PIPELINE: Roteamento inteligente por tamanho de texto
+    // =============================================================
+    // O problema do fallback aleatório: single-shot falha às vezes por timeout
+    // do tunnel, e o chunking fallback produz áudio diferente (sem silêncio).
+    // Isso causava voz "delirada" — às vezes perfeita, às vezes errática.
+    //
+    // NOVA ESTRATÉGIA (consistente):
+    //   - Textos curtos (<=250 chars): SINGLE-SHOT (1 chamada, mais natural)
+    //   - Textos longos (>250 chars): CHUNKING (N chamadas, mais confiável)
+    //   - Nunca mistura os dois para o mesmo texto → resultado previsível
+    //
+    // Limite 250 chars: OmniVoice com postprocess_output=true corta ~29%
+    // do áudio em textos >280 chars. Chunks de 250 chars evitam esse corte.
+
+    const TEXT_THRESHOLD = 250
+    const isLongText = cleanText.length > TEXT_THRESHOLD
+    const useChunkingForText = useChunking || isLongText
+
+    if (useChunkingForText) {
+      // Modo CHUNKING: textos longos ou pedido explícito do usuário
+      debug.log('Pipeline', 'info', `Modo CHUNKING (texto: ${cleanText.length} chars ${isLongText ? '> threshold' : ''})`)
+      const chunkResult = await generateWithChunking(tunnelUrl, cleanText, gradioBaseData, debug)
+      if (chunkResult) {
+        finalBuffer = chunkResult.finalBuffer
+        chunkInfo = chunkResult.chunks
+        const sr = finalBuffer.readUInt32LE(24)
+        const ch = finalBuffer.readUInt16LE(22)
+        const bps = finalBuffer.readUInt16LE(34)
+        const ds = finalBuffer.readUInt32LE(40)
+        const dur = (ds / ch / Math.floor(bps / 8) / sr).toFixed(1)
+        const expDur = (cleanText.length * 0.08).toFixed(1)
+        audioDiagnostics = {
+          textLength: cleanText.length, audioDurationSec: dur,
+          fileSizeKB: (finalBuffer.length / 1024).toFixed(1),
+          sampleRate: sr, bitsPerSample: bps, channels: ch,
+          delayAfterSse: 0, silencePadSec: 0,
+          expectedMinDuration: expDur,
+          durationOk: parseFloat(dur) >= parseFloat(expDur),
+          wavHeaderValid: isWavComplete(finalBuffer),
+        }
+      } else {
+        // Chunking falhou → tentar single-shot como último recurso
+        debug.log('Pipeline', 'warn', 'Chunking falhou, tentando single-shot como último recurso...')
+        const ssResult = await generateSingleShot(tunnelUrl, cleanText, gradioBaseData, debug)
+        if (ssResult.buffer) {
+          finalBuffer = ssResult.buffer
+          audioDiagnostics = ssResult.diagnostics
+        }
+      }
+    } else {
+      // Modo SINGLE-SHOT: textos curtos (mais natural, 1 chamada API)
+      debug.log('Pipeline', 'info', `Modo SINGLE-SHOT (texto: ${cleanText.length} chars — curto)`)
       const ssResult = await generateSingleShot(tunnelUrl, cleanText, gradioBaseData, debug)
       if (ssResult.buffer) {
         finalBuffer = ssResult.buffer
         audioDiagnostics = ssResult.diagnostics
       } else {
-        // Single-shot falhou → fallback chunking
-        debug.log('Pipeline', 'warn', 'Single-shot falhou, tentando chunking como fallback...')
+        // Single-shot falhou → tentar chunking como último recurso
+        debug.log('Pipeline', 'warn', 'Single-shot falhou, tentando chunking como último recurso...')
         const chunkResult = await generateWithChunking(tunnelUrl, cleanText, gradioBaseData, debug)
         if (chunkResult) {
           finalBuffer = chunkResult.finalBuffer
@@ -784,14 +843,6 @@ export async function POST(req: NextRequest) {
             wavHeaderValid: isWavComplete(finalBuffer),
           }
         }
-      }
-    } else if (useChunkingFallback) {
-      // Chunking manual (usuario pediu explicitamente)
-      debug.log('Pipeline', 'info', `Modo CHUNKING manual (texto: ${cleanText.length} chars)`)
-      const chunkResult = await generateWithChunking(tunnelUrl, cleanText, gradioBaseData, debug)
-      if (chunkResult) {
-        finalBuffer = chunkResult.finalBuffer
-        chunkInfo = chunkResult.chunks
       }
     }
 
