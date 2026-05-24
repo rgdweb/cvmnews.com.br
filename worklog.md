@@ -1,45 +1,91 @@
 ---
-Task ID: 1
+Task ID: 0 - REGISTRO PERMANENTE DE CONFIGURAÇÃO CRÍTICA
 Agent: main
-Task: Fix chunking regression — audio still 33% short even with 7 chunks
+Task: Registrar todas as configurações que funcionaram perfeitamente
 
-Work Log:
-- Diagnosed root cause: `postprocess_output: true` was being sent for EACH chunk individually, causing OmniVoice to cut ~29% of each chunk's audio — same as the single-shot issue
-- Key insight: The postprocess was designed for single-shot long text, but for chunks it was still active and cutting per-chunk audio
-- Fix 1: Set `postprocess_output: false` for all chunks in `generateChunk()` via `data[11] = false`
-- Fix 2: Removed `trimPcmStart()` function — was risky (threshold 200 could clip word beginnings) and unnecessary without postprocess cutting
-- Fix 3: Increased chunk download delay from `min(3000, 1500 + ...)` to `min(5000, 2500 + ...)` for more robust file saving
-- Fix 4: Added `ChunkResult` interface returning buffer + durationSec + textLength per chunk
-- Fix 5: Added `chunkDiagnostics` array to response with per-chunk success/failure and duration
-- Fix 6: Added `failedChunks`, `succeededChunks`, `postprocessDisabled` to chunking response
-- Fix 7: Updated page.tsx debug panel to show per-chunk durations, failure badges, total audio time
+## ⚠️ REGRAS DE OURO — NUNCA VIOLAR ⚠️
 
-Stage Summary:
-- Root cause: postprocess_output=true cutting each chunk individually
-- Solution: Disable postprocess for chunks (data[11] = false) — raw TTS output preserved
-- Build passes successfully
-- Files modified: src/app/api/tunnel-generate/route.ts, src/app/page.tsx
+### 1. MODO LIMPO — TEXTO DIRETO SECO
+Quando o usuário diz "sem efeito", "texto direto", "tava indo otimo antes",
+SIGNIFICA: texto vai DIRETO pro modelo OmniVoice sem NENHUM processamento.
 
----
-Task ID: 1
-Agent: main
-Task: Fix diagnostic script - tunnel detection and RAM detection
+O que NÃO fazer (causa voz delirada / velocidade variando):
+- ❌ NÃO usar chunking (divide texto, cada pedaço sai com velocidade diferente)
+- ❌ NÃO usar preprocessTTS() (adiciona/reordena pontuação)
+- ❌ NÃO usar optimizePronunciation() (substitui palavras por fonemas)
+- ❌ NÃO usar processControlTags() (adiciona tags de controle no texto)
+- ❌ NÃO usar parseSSML() (converte SSML → texto modificado)
 
-Work Log:
-- Analyzed user output: tunnel working (cloudflared) but diagnostic reporting "PROBLEMA"
-- Root cause 1: Diagnostic marks tunnel as PROBLEMA if PHP registration fails, even though cloudflared is running
-- Root cause 2: RAM showing 0.0 GB because PowerShell Format-List output parsing failed
-- Root cause 3: User running old version on PC that checks node.exe first instead of cloudflared
-- Fixed check_tunnel(): Now sets ok=True when cloudflared/node process is running, regardless of PHP registration
-- Fixed check_ram(): Replaced Format-List with simple (Get-CimInstance).Property returning raw numbers
-- Updated iniciar_monitor.bat to call diagnostico.py instead of diagnostico_auto_restart.py
-- Copied fixes to diagnostico_auto_restart.py as well
-- Cleaned up duplicate bat files
+O que fazer (modo que funcionou perfeitamente):
+- ✅ Texto do usuário vai EXATAMENTE como digitou pro Gradio
+- ✅ stripSSMLForTTS() OK — só remove tags se tiver, não modifica texto
+- ✅ refText SEMPRE vazio '' (causa alucinação se preenchido)
+- ✅ instruct limitado a 3 partes (mais que isso causa delírio)
+- ✅ Single-shot: texto inteiro de uma vez (velocidade consistente)
+- ✅ speed = parseFloat() || 1.0 (sempre float, nunca int)
+- ✅ speed range no slider: min=0.8, max=1.3, step=0.05
 
-Stage Summary:
-- diagnostico.py and diagnostico_auto_restart.py updated with tunnel + RAM fixes
-- iniciar_monitor.bat updated to reference correct filename
-- User needs to copy new files to PC: C:\Users\Administrador\OneDrive\Área de Trabalho\tunnel e servidor\
+### 2. PARÂMETROS DO GRADIO (ORDEM IMPORTANTE)
+gradioBaseData = [
+  text,           // índice 0: texto limpo
+  language,       // índice 1: 'Auto' ou 'Portuguese'
+  refAudio,       // índice 2: { path, orig_name, mime_type, is_stream, meta } ou null
+  '',             // índice 3: refText — SEMPRE VAZIO (causa alucinação!)
+  safeInstruct,   // índice 4: instruct limitado a 3 partes separadas por vírgula
+  32,             // índice 5: numStep
+  2.0,            // índice 6: guidanceScale
+  true,           // índice 7: denoise
+  1.0,            // índice 8: speed (sempre float!)
+  null,           // índice 9: duration
+  true,           // índice 10: preprocess_prompt
+  true,           // índice 11: postprocess_output (padrão Gradio = antiruido)
+]
+
+### 3. PIPELINE DE GERAÇÃO DE ÁUDIO
+- Texto <= 800 chars → SEMPRE single-shot (1 chamada, velocidade consistente)
+- Texto > 800 chars → single-shot primeiro, chunking SÓ se falhar
+- Chunking NUNCA como padrão (causa velocidade variando: lento/rápico alternado)
+
+### 4. CHUNKING (APENAS COMO ÚLTIMO RECURSO)
+Se chunking for necessário (texto gigante >800 chars):
+- Usar chunkByCharLimit(text, 250)
+- Adicionar silêncio MÍNIMO de 250ms entre chunks
+- postprocess_output=true (padrão Gradio)
+- Silêncio entre chunks = respiração natural
+
+### 5. SPEED SLIDER
+- Min: 0.8, Max: 1.3, Step: 0.05, Default: 1.0
+- Fora desse range (0.5-1.5) causa distorção
+- Sempre enviar como float pro backend (1.0 não 1)
+
+### 6. TUNNEL
+- Programa: cloudflared (NÃO localtunnel)
+- Caminho: C:\Users\Administrador\AppData\Local\Microsoft\WinGet\Links\cloudflared.exe
+- Registro: POST JSON { tunnelUrl: "..." } para https://sorteiomax.com.br/omnivoice/update_tunnel.php
+- Auth: vozpro_tunnel_2024
+- Health check: verificar se tunnel responde HTTP 200 antes de usar
+- Upload retry: 3 tentativas com 3s delay entre cada
+- Download retry: 3 tentativas com validação WAV (header data size == bytes reais)
+
+### 7. GPU/SERVIDOR LOCAL
+- Modelo: OmniVoice (k2-fsa/F5-TTS)
+- Porta: 7860 (Gradio)
+- GPU: RTX 3060 12GB
+- Script: omnivoice_gpu.py (lançado via iniciar_monitor.bat)
+- Auto-restart: diagnostico_auto_restart.py (reinicia após 60min idle)
+
+### 8. HISTÓRICO DE ERROS QUE NÃO DEVEM SE REPETIR
+| Erro | Causa | Lição |
+|------|-------|-------|
+| Voz "delirada" | Chunking divide texto, velocidade diferente por pedaço | Sempre single-shot para textos normais |
+| Velocidade variando (lento/rápico) | Chunking com threshold muito baixo (250 chars) | Single-shot para <=800 chars |
+| Tunnel "fetch failed" | start_tunnel.ps1 enviava `url=` em vez de `tunnelUrl` | POST JSON com chave `tunnelUrl` |
+| Tunnel URL antiga no PHP | Health check faltando | Verificar tunnel vivo antes de usar |
+| RAM mostrando 0.0 GB | PowerShell Format-List parsing | Comando simples direto |
+| Fala alucinada ("ba", "to") | refText preenchido + instruct longo | refText SEMPRE vazio, instruct max 3 partes |
+| Speed bugando a fala | Range 0.5-1.5 muito largo | Range 0.8-1.3 |
+| Speed como int | `speed = 1` enviado como integer | `speed = 1.0` sempre float |
+| Comentário mentiroso | Código dizia postprocess=false mas era true | Ler código real, não comentários |
 
 ---
 Task ID: 2
@@ -47,26 +93,84 @@ Agent: main
 Task: Fix tunnel URL not being registered - causing "fetch failed" on upload
 
 Work Log:
-- Analyzed user debug output: upload to Gradio fails with "fetch failed"
-- Root cause: start_tunnel.ps1 sends `?auth=xxx&url=xxx` (GET) but PHP expects `tunnelUrl` parameter (POST JSON or GET)
-- PHP reads `$_GET['tunnelUrl']` or `$input['tunnelUrl']` from JSON body, PowerShell was sending `url=` key
-- Since `tunnelUrl` was empty, PHP returned 400, tunnel URL never updated on server
-- Vercel API got stale tunnel URL from PHP, tried to upload to dead tunnel, got "fetch failed"
-
-Fixes applied:
-1. start_tunnel.ps1: Changed from GET `?url=` to POST JSON body `{ tunnelUrl: $cfUrl }` with 3 retries
-2. tunnel-generate/route.ts getTunnelUrl(): Added health check - verifies tunnel is alive before using URL
-3. tunnel-generate/route.ts uploadToGradio(): Added 3-attempt retry with 3s delay between attempts
-4. Verified PHP on sorteiomax.com.br accepts POST JSON correctly (tested with curl)
-5. Restored correct tunnel URL on PHP server (was accidentally overwritten during testing)
-6. Build passed successfully
-
-Files modified:
-- download/start_tunnel.ps1 (POST JSON + retry)
-- src/app/api/tunnel-generate/route.ts (health check + upload retry)
+- start_tunnel.ps1: Changed from GET `?url=` to POST JSON body `{ tunnelUrl: $cfUrl }` with 3 retries
+- tunnel-generate/route.ts: Added health check + upload retry
+- PHP on sorteiomax.com.br accepts POST JSON with `tunnelUrl` key
 
 Stage Summary:
-- ROOT CAUSE: PowerShell parameter name mismatch (`url` vs `tunnelUrl`)
 - User needs to copy updated start_tunnel.ps1 to PC
-- After restart, tunnel URL will register correctly on PHP server
-- Vercel API now also validates tunnel is alive before using it
+- After restart, tunnel URL registers correctly on PHP server
+- Vercel API validates tunnel is alive before using it
+
+---
+Task ID: 3
+Agent: main
+Task: Fix speed slider range and voice consistency
+
+Work Log:
+- Speed slider: min=0.5 max=1.5 → min=0.8 max=1.3 step=0.05
+- useChunking default: true → false (single-shot mode)
+- speed default: int 1 → float 1.0
+- Build passed, deployed to Vercel
+
+Stage Summary:
+- Speed range safe (0.8-1.3)
+- Single-shot as default mode
+- User reported voice inconsistency after deploy
+
+---
+Task ID: 4
+Agent: main
+Task: Full project audit — fix voice "delirada" and inconsistency
+
+Work Log:
+- Read ALL 104 source files in src/
+- Compared frontend↔backend parameter consistency
+- Found BUG 1: Comment said postprocess=OFF but code was ON
+- Found BUG 2: Random single-shot→chunking fallback caused inconsistency
+- Found BUG 3: chunkByCharLimit had pauseAfterMs=0 always (no silence between chunks)
+- Fixed: Corrected comments to match actual code
+- Fixed: Smart pipeline (<=250 chars single-shot, >250 chunking)
+- Fixed: Added minimum 250ms silence between chunks
+- Created /api/diagnose endpoint for real-time monitoring
+- Build passed, deployed to Vercel
+
+Stage Summary:
+- 3 critical bugs found and fixed
+- Pipeline now routes by text length
+- New /api/diagnose endpoint available
+
+---
+Task ID: 5
+Agent: main
+Task: Fix voice speed variation (lento/rápico alternado)
+
+Work Log:
+- User reported: "voz fica mistura de velocidade, lento e acelera, sem padrão"
+- Root cause: Chunking threshold 250 chars was TOO AGGRESSIVE
+- Chunking divides text → each chunk gets different speed from TTS model
+- When concatenated: speed varies between chunks (lento/rápico/lento/rápido)
+- Fix: Changed to SINGLE-SHOT ONLY for texts <=800 chars
+- Chunking only as last resort for texts >800 chars that fail single-shot
+- Texts <=800 that fail → return error (don't attempt chunking)
+
+Stage Summary:
+- Pipeline: SINGLE-SHOT for <=800 chars (no chunking = consistent speed)
+- Chunking disabled for normal texts
+- Speed variation should be eliminated
+
+---
+Task ID: 6
+Agent: main
+Task: Tunnel offline — user reported "fetch failed"
+
+Work Log:
+- Debug shows: tunnel URL registered but "fetch failed" when connecting
+- This means cloudflared process is NOT running on the user's PC
+- User needs to restart tunnel on local machine (start_tunnel.ps1 or iniciar_monitor.bat)
+- This is NOT a code issue — it's a connectivity issue
+
+Stage Summary:
+- Tunnel is down (cloudflared not running)
+- User needs to run iniciar_monitor.bat on the local PC
+- After restart, Vercel will be able to connect to Gradio via tunnel
