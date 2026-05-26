@@ -24,7 +24,23 @@ import PaymentDialog from '@/components/payment-dialog'
 import { optimizePronunciation, processControlTags, containsSSML, type TTSEngine } from '@/lib/pronunciation-optimizer'
 import { parseSSML } from '@/lib/ssml-parser'
 import { preprocessTTS } from '@/lib/tts-text-preprocessor'
-import { cleanupAudioServer } from '@/lib/audio-server'
+import { fixAudioServerUrl } from '@/lib/audio-server'
+
+/** Converte qualquer URL de audio para passar pelo proxy /api/proxy-audio.
+ * Isso evita Mixed Content (HTTPS carregando HTTP) e CORS. */
+function toProxyAudioUrl(url: string): string {
+  if (!url) return ''
+  if (url.startsWith('/api/proxy-audio')) return url
+  if (url.startsWith('data:')) return url
+  // Corrigir URLs mortas (sorteiomax) e extrair path
+  const resolved = fixAudioServerUrl(url)
+  try {
+    const path = resolved.startsWith('http') ? new URL(resolved).pathname : resolved
+    return `/api/proxy-audio?url=${encodeURIComponent(path)}`
+  } catch {
+    return `/api/proxy-audio?url=${encodeURIComponent(resolved)}`
+  }
+}
 import { Users } from 'lucide-react'
 
 interface TrackControlsProps {
@@ -826,8 +842,8 @@ export default function VozProClient() {
     loadData()
     // Health check da fila: desbloquear itens presos (fire-and-forget)
     fetch('/api/queue/complete', { method: 'GET' }).catch(() => {})
-    // Limpar arquivos temporários do servidor PHP (fire-and-forget)
-    cleanupAudioServer()
+    // Limpar arquivos temporários do servidor PHP via API proxy (evita mixed-content)
+    fetch('/api/cleanup', { method: 'GET' }).catch(() => {})
   }, [authChecked])
 
   // Detectar duração da trilha quando usuário aperta play (via VoicePreviewButton)
@@ -866,8 +882,8 @@ export default function VozProClient() {
       return
     }
 
-    // Limpar arquivos temporários do servidor PHP (fire-and-forget)
-    cleanupAudioServer()
+    // Limpar arquivos temporários do servidor PHP via API proxy (evita mixed-content)
+    fetch('/api/cleanup', { method: 'GET' }).catch(() => {})
 
     // Validar baseado no modo de voz
     if (voiceMode === 'clone' && !selectedVariationId && !uploadedVoiceUrl) {
@@ -1027,8 +1043,8 @@ export default function VozProClient() {
           finalInstruct = voiceDesignInstruct
         }
 
-        // Determinar audio de referencia
-        let refUrl = selectedVariation?.refAudioServerUrl || body.refAudioUrl
+        // Determinar audio de referencia (corrigir URL se apontar pro sorteiomax morto)
+        let refUrl = fixAudioServerUrl(selectedVariation?.refAudioServerUrl || body.refAudioUrl || '')
         let refName = body.refAudioName || 'ref_audio.wav'
 
         // Se tem upload de voz do frontend, usa ele
@@ -1231,7 +1247,7 @@ export default function VozProClient() {
         try {
           const mixedDataUri = await mixAudioClientSide(
             finalAudioUrl,
-            selectedTrack.audioPath,
+            toProxyAudioUrl(selectedTrack.audioPath),
             trackVolume,
             { duckVolume, fadeInMs, duckFadeMs, unduckFadeMs, fadeOutMs, musicStartLeadMs }
           )
@@ -1674,7 +1690,7 @@ export default function VozProClient() {
                               {isExpanded && voice.variations.length > 0 && (
                                 <div className="px-2 pb-2 pt-1 ml-4 border-l-2 border-violet-500/30 space-y-1 animate-in slide-in-from-top-1 duration-150">
                                   {voice.variations.map((v) => {
-                                    const varAudioUrl = v.refAudioServerUrl || v.refAudioPath || ''
+                                    const varAudioUrl = toProxyAudioUrl(v.refAudioServerUrl || v.refAudioPath || '')
                                     const isVarSelected = selectedVariationId === v.id
                                     const isInactive = v.active === false || !v.hasAudio
                                     return (
@@ -1761,7 +1777,7 @@ export default function VozProClient() {
                         <p className="text-sm font-medium text-slate-300 mb-2">Estilo / Emoção</p>
                         <div className="flex flex-wrap gap-2">
                           {selectedVoice.variations.map((v) => {
-                            const varAudioUrl = v.refAudioServerUrl || v.refAudioPath || ''
+                            const varAudioUrl = toProxyAudioUrl(v.refAudioServerUrl || v.refAudioPath || '')
                             return (
                               <button key={v.id} onClick={() => setSelectedVariationId(v.id)} className={`px-4 py-2 rounded-full border text-sm transition-all duration-300 flex items-center gap-1.5 ${selectedVariationId === v.id ? 'border-violet-500 bg-violet-500/20 text-violet-200' : 'border-white/10 bg-white/5 text-slate-400 hover:border-white/20'}`}>
                                 <VoicePreviewButton
@@ -1809,7 +1825,7 @@ export default function VozProClient() {
                         <p className="text-sm font-medium text-slate-300 mb-2">Estilo / Emoção</p>
                         <div className="flex flex-wrap gap-2">
                           {selectedVoice.variations.map((v) => {
-                            const varAudioUrl = v.refAudioServerUrl || v.refAudioPath || ''
+                            const varAudioUrl = toProxyAudioUrl(v.refAudioServerUrl || v.refAudioPath || '')
                             return (
                               <button key={v.id} onClick={() => setSelectedVariationId(v.id)} className={`px-4 py-2 rounded-full border text-sm transition-all duration-300 flex items-center gap-1.5 ${selectedVariationId === v.id ? 'border-violet-500 bg-violet-500/20 text-violet-200' : 'border-white/10 bg-white/5 text-slate-400 hover:border-white/20'}`}>
                                 <VoicePreviewButton
@@ -2080,7 +2096,7 @@ export default function VozProClient() {
                                     {track.name}
                                   </span>
                                   <VoicePreviewButton
-                                    audioUrl={track.audioPath || undefined}
+                                    audioUrl={toProxyAudioUrl(track.audioPath) || undefined}
                                     voiceId={track.id}
                                     currentlyPlayingId={previewingTrackId}
                                     onPlayStart={setPreviewingTrackId}
@@ -2147,7 +2163,7 @@ export default function VozProClient() {
                                     {track.name}
                                   </span>
                                   <VoicePreviewButton
-                                    audioUrl={track.audioPath || undefined}
+                                    audioUrl={toProxyAudioUrl(track.audioPath) || undefined}
                                     voiceId={track.id}
                                     currentlyPlayingId={previewingTrackId}
                                     onPlayStart={setPreviewingTrackId}
@@ -2224,7 +2240,7 @@ export default function VozProClient() {
                                 {track.name}
                               </span>
                               <VoicePreviewButton
-                                audioUrl={track.audioPath || undefined}
+                                audioUrl={toProxyAudioUrl(track.audioPath) || undefined}
                                 voiceId={track.id}
                                 currentlyPlayingId={previewingTrackId}
                                 onPlayStart={setPreviewingTrackId}
