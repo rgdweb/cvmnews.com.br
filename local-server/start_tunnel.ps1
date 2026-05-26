@@ -1,6 +1,6 @@
 $port = 7860
 $auth = "vozpro_tunnel_2024"
-$serverUpdate = "https://sorteiomax.com.br/omnivoice/update_tunnel.php"
+$serverUpdate = "http://147.15.77.137/update_tunnel.php"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  VozPro - Tunnel Automatico" -ForegroundColor Cyan

@@ -400,3 +400,24 @@ Stage Summary:
 - Antes: do_restart() matava o proprio script + abria janelas visiveis a cada restart
 - Depois: mata so o Gradio (PID especifico), monitor sobrevive, janelas escondidas
 - NOTA: usuario precisa copiar o novo script para o PC GPU e fechar as janelas acumuladas manualmente
+
+---
+Task ID: 8
+Agent: Main
+Task: Fix sorteiomax.com.br morto nos scripts PowerShell de tunnel
+
+Work Log:
+- start_tunnel.ps1 linha 3: $serverUpdate apontava para sorteiomax.com.br (MORTO - 404)
+- start_gpu_tunnel.ps1 linha 3: mesma URL morta
+- tunnel_php.ps1 linha 6: mesma URL morta
+- Quando o tunnel subia e tentava registrar a URL via Invoke-RestMethod, falhava silenciosamente
+- Resultado: Vercel nao descobria o tunnel → geracao TTS falhava
+
+- Corrigido todos os 3 arquivos: sorteiomax.com.br → http://147.15.77.137
+- Copiados para /download/ tambem
+
+Stage Summary:
+- Arquivos: start_tunnel.ps1, start_gpu_tunnel.ps1, tunnel_php.ps1
+- Antes: tunnel URL era salva num servidor morto → tunnel nunca registrado
+- Depois: URL salva no Oracle (147.15.77.137) → Vercel encontra o tunnel
+- IMPORTANTE: usuario precisa copiar os .ps1 corrigidos para o PC GPU
