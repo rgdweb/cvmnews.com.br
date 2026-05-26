@@ -1814,19 +1814,38 @@ export default function AdminDashboard() {
         toast.success('Variação atualizada!')
       } else {
         // CREATE new variation
-        if (!variationForm.serverUrl && !variationForm.refAudioPath) {
+        // Usar pendingVoiceFileData (variavel local) em vez de variationForm.serverUrl
+        // porque setVariationForm e assincrono e ainda nao refletiu o upload
+        const hasAudio = variationForm.serverUrl || variationForm.refAudioPath || pendingVoiceFileData
+        if (!hasAudio) {
           toast.error('Áudio de referência é obrigatório para nova variação')
           return
         }
         if (!addingVariationTo) return
 
+        // Construir body explicitamente para nao depender do estado async do React
+        const createBody: Record<string, unknown> = {
+          label: variationForm.label.trim(),
+          emoji: variationForm.emoji,
+          refText: variationForm.refText,
+          instruct: instructValue,
+          refAudioPath: variationForm.refAudioPath,
+          serverUrl: variationForm.serverUrl,
+          filename: variationForm.filename,
+          refAudioName: variationForm.refAudioName,
+        }
+        // Sobrescrever com dados do upload se existirem (pendingVoiceFileData e mais confiavel)
+        if (pendingVoiceFileData) {
+          createBody.refAudioPath = pendingVoiceFileData.refAudioPath
+          createBody.serverUrl = pendingVoiceFileData.serverUrl
+          createBody.filename = pendingVoiceFileData.filename
+          createBody.refAudioName = pendingVoiceFileData.refAudioName
+        }
+
         await fetch(`/api/voices/${addingVariationTo}/variations`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...variationForm,
-            instruct: instructValue,
-          }),
+          body: JSON.stringify(createBody),
         })
         toast.success('Variação adicionada!')
       }
