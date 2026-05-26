@@ -289,3 +289,28 @@ Stage Summary:
 - PaymentDialog agora suporta: Download direto MP3/WAV + Receber via E-mail
 - Variáveis de ambiente necessárias para email: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM
 
+---
+Task ID: 1
+Agent: Main
+Task: Sessão completa de correções Oracle VPS migration
+
+Work Log:
+- Fix proxy-audio 403 Forbidden: trocar runtime de 'edge' para 'nodejs' (Vercel Edge bloqueia fetch para IPs puros)
+- Descoberto sorteiomax.com.br MORTO (404 HostGator) - 6 referências ainda apontavam pra lá
+- Corrigido AUDIO_SERVER_URL em 6 arquivos: health, tunnel-generate, upload-chunk, upload-token, generate-token, audio-server.ts
+- Adicionado filtro de falsos positivos no /api/health (cloudflared, nvidia-smi, TTS no Oracle)
+- health POST agora usa /api/cleanup ao invés de cleanup.php direto
+
+Stage Summary:
+- proxy-audio/route.ts: runtime edge -> nodejs (fix 403)
+- 6 arquivos: sorteiomax.com.br -> http://147.15.77.137
+- health/route.ts: filtra alerts de cloudflared/nvidia/TTS quando tunnel localtunnel ativo
+- Commits: bce0a52 (proxy-audio), 7d78f31 (sorteiomax cleanup)
+
+---
+Task ID: 2
+Agent: Main
+Task: Investigar audios que mostram --s e não tocam no preview do painel admin
+
+Work Log:
+- Investigando...
