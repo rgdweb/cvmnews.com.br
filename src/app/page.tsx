@@ -971,15 +971,8 @@ export default function VozProClient() {
 
     setGeneratingTime(0) // Reset timer after queue wait
 
-    // ===== OTIMIZAÇÃO DE PRONÚNCIA (pipeline completo) =====
+    // Texto limpo — enviado direto ao TTS sem processamento de tags
     let textToSend = text.trim()
-
-    // Pipeline normal (sem SSML)
-    const engine: TTSEngine = 'f5tts'
-
-    // Processar TODOS os tags de controle (pause, slow, fast, emphasis, whisper)
-    // Também converte SSML (<prosody>, <break>, etc) para formato nativo automaticamente
-    textToSend = processControlTags(textToSend, engine)
 
 
 
