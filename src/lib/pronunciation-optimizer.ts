@@ -1857,9 +1857,10 @@ export function processControlTags(text: string, engine: TTSEngine = 'vozpro'): 
     return content.split(' ').map(w => `.${w}`).join(' ')
   })
 
-  // 4. Slow — add commas between words
+  // 4. Slow — insert commas between words to add pauses (slower pace)
+  // Adds comma after each word, but not before existing punctuation
   result = result.replace(/\{\{slow\}\}(.*?)\{\{\/slow\}\}/gs, (_match, content) => {
-    return content.replace(/,/g, ',,,')
+    return content.replace(/([^\s,.!?;:])\s+/g, '$1, ')
   })
 
   // 5. Fast — remove extra spaces

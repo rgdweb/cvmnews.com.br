@@ -1,7 +1,17 @@
 """
-omnivoice_gpu.py - Wrapper com limpeza de GPU para RTX 3060 12GB
-Versao LEVE: so empty_cache() apos cada geracao, sem limitar memoria
-Endpoints de manutencao: /api/maint/status e /api/maint/cleanup
+omnivoice_gpu.py - Wrapper com manutencao AUTOMATICA de GPU para RTX 3060 12GB
+Tudo automatico: monitor em background, cleanup inteligente, sem interacao humana.
+
+Manutencao automatica:
+- Monitor em background: verifica VRAM a cada 3 min, limpa se > 70%
+- Pre-geracao: se VRAM > 80%, faz cleanup agressivo antes de gerar
+- Pos-geracao: empty_cache + gc.collect (ja existia)
+- Deep cleanup: a cada 5 geracoes, faz cleanup triplo com delays
+- Tudo sem botao, sem painel, 100% automatico
+
+Endpoints (mantidos para debug):
+  GET  /api/maint/status  - VRAM da GPU
+  POST /api/maint/cleanup - forcar limpeza
 
 USO: python omnivoice_gpu.py --ip 0.0.0.0 --port 7860
 (substitui omnivoice-demo no iniciar.bat)
@@ -12,8 +22,78 @@ import os
 import importlib
 import importlib.metadata
 import gc as _gc
+import threading
+import time
 
 import torch
+
+# ============================================================
+# MANUTENCAO AUTOMATICA INTELIGENTE
+# ============================================================
+
+_gen_counter = 0
+_gen_counter_lock = threading.Lock()
+
+
+def _get_vram():
+    """Retorna (allocated_gb, reserved_gb, usage_percent)."""
+    if not torch.cuda.is_available():
+        return 0, 0, 0
+    alloc = torch.cuda.memory_allocated(0) / (1024**3)
+    reserv = torch.cuda.memory_reserved(0) / (1024**3)
+    pct = (reserv / gpu_total) * 100 if gpu_total > 0 else 0
+    return alloc, reserv, pct
+
+
+def _smart_cleanup(label=""):
+    """Cleanup inteligente: gc.collect + empty_cache com delay para o driver liberar."""
+    if not torch.cuda.is_available():
+        return 0
+    _gc.collect()
+    torch.cuda.empty_cache()
+    time.sleep(0.5)
+    _gc.collect()
+    torch.cuda.empty_cache()
+    _, reserv, _ = _get_vram()
+    if label:
+        print(f"[GPU-{label}] Cleanup feito: {reserv:.2f}GB reservado")
+    return reserv
+
+
+def _deep_cleanup(label="Deep"):
+    """Deep cleanup: 3 passes com delays para liberar VRAM fragmentada."""
+    if not torch.cuda.is_available():
+        return
+    print(f"[GPU-{label}] Deep cleanup iniciado...")
+    for i in range(3):
+        _gc.collect()
+        torch.cuda.empty_cache()
+        if i < 2:
+            time.sleep(1)
+    _, reserv, pct = _get_vram()
+    print(f"[GPU-{label}] Deep cleanup finalizado: {reserv:.2f}GB reservado ({pct:.0f}%)")
+
+
+def _background_monitor(interval=180):
+    """Thread de fundo: verifica VRAM periodicamente e limpa se necessario."""
+    # Espera 30s na primeira vez (deixar o servidor subir)
+    time.sleep(30)
+    while True:
+        try:
+            time.sleep(interval)
+            _, reserv, pct = _get_vram()
+            if pct > 70:
+                print(f"[GPU-Monitor] VRAM em {pct:.0f}% ({reserv:.2f}GB) — cleanup automatico")
+                _smart_cleanup("Monitor")
+                _, reserv2, pct2 = _get_vram()
+                if pct2 > 85:
+                    print(f"[GPU-Monitor] Ainda alto ({pct2:.0f}%) — deep cleanup")
+                    _deep_cleanup("Monitor")
+            else:
+                print(f"[GPU-Monitor] VRAM OK: {pct:.0f}% ({reserv:.2f}GB reservado)")
+        except Exception as e:
+            print(f"[GPU-Monitor] Erro: {e}")
+
 
 if torch.cuda.is_available():
     gpu_name = torch.cuda.get_device_name(0)
@@ -25,45 +105,68 @@ if torch.cuda.is_available():
     print(f"  [OK] Cache limpo")
     torch.cuda.empty_cache()
 
+    # Iniciar monitor automatico em background (daemon = morre com o processo)
+    _monitor_thread = threading.Thread(target=_background_monitor, daemon=True)
+    _monitor_thread.start()
+    print(f"  [OK] Monitor automatico ativo (verifica a cada 3 min)")
+
     try:
         from omnivoice import OmniVoice
 
         _original_generate = OmniVoice.generate
 
         def _patched_generate(self, *args, **kwargs):
-            # LIMPAR CACHE ANTES de gerar (libera VRAM dos modelos intermediarios)
+            global _gen_counter
+
             if torch.cuda.is_available():
-                alloc_before = torch.cuda.memory_allocated(0) / (1024**3)
-                reserv_before = torch.cuda.memory_reserved(0) / (1024**3)
-                print(f"[GPU] Antes geracao: {alloc_before:.2f}GB alloc / {reserv_before:.2f}GB reservado")
-                torch.cuda.empty_cache()
-            
+                alloc, reserv, pct = _get_vram()
+                print(f"[GPU] Antes geracao: {alloc:.2f}GB alloc / {reserv:.2f}GB reserv ({pct:.0f}%)")
+
+                # INTELIGENTE: se VRAM > 80%, fazer cleanup pre-geracao
+                if pct > 80:
+                    print(f"[GPU] VRAM alta ({pct:.0f}%) — cleanup automatico antes de gerar")
+                    _smart_cleanup("Pre")
+                    _, reserv2, pct2 = _get_vram()
+                    # Se ainda > 90%, deep cleanup com delays
+                    if pct2 > 90:
+                        print(f"[GPU] VRAM critica ({pct2:.0f}%) — deep cleanup")
+                        _deep_cleanup("Pre")
+                else:
+                    torch.cuda.empty_cache()
+
             result = _original_generate(self, *args, **kwargs)
-            
-            # LIMPAR CACHE APOS gerar (libera VRAM do resultado)
+
             if torch.cuda.is_available():
-                alloc = torch.cuda.memory_allocated(0) / (1024**3)
-                reserv = torch.cuda.memory_reserved(0) / (1024**3)
-                print(f"[GPU] Apos geracao: {alloc:.2f}GB alloc / {reserv:.2f}GB reservado")
-                torch.cuda.empty_cache()
-                # Forcar coleta de lixo do Python (libera tensores nao referenciados)
-                _gc.collect()
-                torch.cuda.empty_cache()
-                reserv2 = torch.cuda.memory_reserved(0) / (1024**3)
-                print(f"[GPU] Apos cleanup: {reserv2:.2f}GB reservado")
+                # Cleanup pos-geracao
+                _smart_cleanup("Pos")
+
+                # Contador: a cada 5 geracoes, deep cleanup preventivo
+                with _gen_counter_lock:
+                    _gen_counter += 1
+                    count = _gen_counter
+                    if _gen_counter >= 5:
+                        _gen_counter = 0
+                        _deep_cleanup("Auto5")
+
+                _, reserv_f, pct_f = _get_vram()
+                print(f"[GPU] Apos geracao #{count}: {reserv_f:.2f}GB ({pct_f:.0f}%)")
+
+                # Aviso se VRAM ainda alta apos cleanup
+                if pct_f > 85:
+                    print(f"[GPU] AVISO: VRAM ainda alta ({pct_f:.0f}%) apos cleanup — monitor vai verificar")
+
             return result
 
         OmniVoice.generate = _patched_generate
 
-        print(f"  [OK] OmniVoice patcheado:")
-        print(f"       - generate: empty_cache apos cada geracao")
-        print(f"       - SEM max_memory (modelo usa o que precisar)")
-        print(f"       - SEM memory_fraction (sem limitar)")
+        print(f"  [OK] OmniVoice patcheado com manutencao automatica:")
+        print(f"       - Pre-geracao: cleanup se VRAM > 80%")
+        print(f"       - Pos-geracao: cleanup inteligente")
+        print(f"       - Deep cleanup: a cada 5 geracoes")
+        print(f"       - Monitor: verifica a cada 3 min")
 
         # ============================================================
-        # ENDPOINTS DE MANUTENCAO (acessiveis via tunnel)
-        # /api/maint/status  - Verifica VRAM e status da GPU
-        # /api/maint/cleanup - Forca limpeza de VRAM
+        # ENDPOINTS DE MANUTENCAO (para debug, mantidos)
         # ============================================================
         try:
             import gradio as gr
@@ -78,8 +181,7 @@ if torch.cuda.is_available():
                         _gc.collect()
                         if torch.cuda.is_available():
                             torch.cuda.empty_cache()
-                        alloc = torch.cuda.memory_allocated(0) / (1024**3)
-                        reserv = torch.cuda.memory_reserved(0) / (1024**3)
+                        alloc, reserv, pct = _get_vram()
                         info = {
                             "cuda": torch.cuda.is_available(),
                             "gpu": gpu_name if torch.cuda.is_available() else None,
@@ -87,31 +189,28 @@ if torch.cuda.is_available():
                             "vram_alloc_gb": round(alloc, 2),
                             "vram_reserved_gb": round(reserv, 2),
                             "vram_free_gb": round((gpu_total - reserv), 2) if torch.cuda.is_available() else 0,
-                            "vram_percent": round((reserv / gpu_total) * 100, 1) if torch.cuda.is_available() and gpu_total > 0 else 0,
+                            "vram_percent": round(pct, 1),
+                            "gen_counter": _gen_counter,
+                            "auto_cleanup": "active",
                         }
                         return JSONResponse(info)
 
                     async def _maint_cleanup(request):
-                        _gc.collect()
-                        if torch.cuda.is_available():
-                            torch.cuda.empty_cache()
-                            _gc.collect()
-                            torch.cuda.empty_cache()
-                        alloc = torch.cuda.memory_allocated(0) / (1024**3)
-                        reserv = torch.cuda.memory_reserved(0) / (1024**3)
+                        _deep_cleanup("API")
+                        alloc, reserv, pct = _get_vram()
                         return JSONResponse({
                             "status": "ok",
                             "vram_alloc_gb": round(alloc, 2),
                             "vram_reserved_gb": round(reserv, 2),
-                            "vram_freed_gb": "verificado",
+                            "vram_percent": round(pct, 1),
                         })
 
                     # Registrar rotas no app do Gradio
                     _app.add_api_route("/api/maint/status", _maint_status, methods=["GET"])
                     _app.add_api_route("/api/maint/cleanup", _maint_cleanup, methods=["POST"])
                     print(f"  [OK] Endpoints de manutencao ativos:")
-                    print(f"       GET  /api/maint/status  (VRAM da GPU)")
-                    print(f"       POST /api/maint/cleanup (forcar limpeza)")
+                    print(f"       GET  /api/maint/status  (VRAM + info)")
+                    print(f"       POST /api/maint/cleanup (forcar deep cleanup)")
                 except Exception as e:
                     print(f"  [AVISO] Nao conseguiu adicionar endpoints de manutencao: {e}")
                 print("=" * 55)

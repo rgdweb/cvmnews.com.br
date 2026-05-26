@@ -282,6 +282,12 @@ function processSentenceTags(text: string, engine: TTSEngine): string {
  * Não tenta converter — apenas remove tags e preserva conteúdo.
  */
 export function stripSSMLForTTS(text: string): string {
-  if (!/<[a-z][^>]*>/i.test(text)) return text
-  return text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+  let result = text
+  // Remove SSML tags
+  if (/<[a-z][^>]*>/i.test(result)) {
+    result = result.replace(/<[^>]+>/g, '')
+  }
+  // Remove any remaining control tags ({{slow}}, {{pause:500}}, etc.)
+  result = result.replace(/\{\{\/?[\w:]+\}\}/g, '')
+  return result.replace(/\s+/g, ' ').trim()
 }

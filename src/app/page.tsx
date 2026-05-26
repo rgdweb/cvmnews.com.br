@@ -977,12 +977,9 @@ export default function VozProClient() {
     // Pipeline normal (sem SSML)
     const engine: TTSEngine = 'f5tts'
 
-    // Se contém SSML, converter para formato nativo do TTS engine
-    // parseSSML converte tags para notação VozPro/F5-TTS (brackets, pausas, ênfase)
-    if (containsSSML(textToSend)) {
-      textToSend = parseSSML(textToSend, engine)
-      console.log('[Pipeline] SSML convertido para formato nativo do', engine)
-    }
+    // Processar TODOS os tags de controle (pause, slow, fast, emphasis, whisper)
+    // Também converte SSML (<prosody>, <break>, etc) para formato nativo automaticamente
+    textToSend = processControlTags(textToSend, engine)
 
 
 
