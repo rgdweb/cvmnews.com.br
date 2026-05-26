@@ -31,6 +31,12 @@ export function fixAudioServerUrl(url: string): string {
     console.log(`[AudioServer] URL corrigida: ${url} -> ${fixedUrl}`)
     return fixedUrl
   }
+  // Se e caminho relativo (comeca com /), prefixar com Oracle base
+  if (url.startsWith('/') && !url.startsWith('//')) {
+    const fixedUrl = `${AUDIO_SERVER_URL}${url}`
+    console.log(`[AudioServer] URL relativa corrigida: ${url} -> ${fixedUrl}`)
+    return fixedUrl
+  }
   return url
 }
 
