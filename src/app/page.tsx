@@ -2383,38 +2383,7 @@ export default function VozProClient() {
               </Card>
             </details>
 
-            {/* Generate Button — desktop */}
-            <div className="hidden lg:block">
-              <Button
-                onClick={handleGenerate}
-                disabled={isGenerating || !text.trim() || (voiceMode === 'clone' && !selectedVariationId && !uploadedVoiceUrl)}
-                className="w-full h-14 text-lg font-bold bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-xl shadow-violet-500/25 disabled:opacity-50"
-                title={
-                  !selectedVariationId && !uploadedVoiceUrl && voiceMode === 'clone'
-                    ? 'Selecione uma voz ou faça upload de um áudio de referência'
-                    : !text.trim()
-                      ? 'Digite o texto para gerar'
-                      : undefined
-                }
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Gerando...
-                  </>
-                ) : !selectedVariationId && !uploadedVoiceUrl && voiceMode === 'clone' ? (
-                  <>
-                    <Sparkles className="w-5 h-5 mr-2" />
-                    Selecione uma Voz
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-5 h-5 mr-2" />
-                    Gerar Voz
-                  </>
-                )}
-              </Button>
-            </div>
+            {/* Generate button moved to fixed bottom bar */}
           </div>
 
           {/* Right Panel - Output */}
@@ -2840,8 +2809,8 @@ export default function VozProClient() {
         </Card>
       </main>
 
-      {/* ===== MOBILE FIXED BOTTOM BAR ===== */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50">
+      {/* ===== FIXED BOTTOM BAR ===== */}
+      <div className="fixed bottom-0 left-0 right-0 z-50">
         {/* Backdrop when expanded */}
         {mobilePlayerExpanded && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobilePlayerExpanded(false)} style={{ zIndex: 40 }} />
@@ -2993,21 +2962,10 @@ export default function VozProClient() {
         </div>
       </div>
 
-      {/* Mobile bottom spacing so content isn't hidden behind fixed bar */}
-      <div className="lg:hidden h-24" />
+      {/* Bottom spacing so content isn't hidden behind fixed bar */}
+      <div className="h-24" />
 
-      {/* Footer — hidden on mobile (covered by fixed player) */}
-      <footer className="hidden lg:block border-t border-white/10 mt-auto">
-        
-        <div className="container mx-auto px-4 py-5 flex items-center justify-between text-xs text-slate-500">
-          <p className="flex items-center gap-2">
-            <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">VozPro</span>
-            <span className="text-slate-600">—</span>
-            <span>Vozes Profissionais com IA</span>
-          </p>
-          <p className="text-slate-600">Powered by <span className="text-slate-400 font-medium">VozPro</span></p>
-        </div>
-      </footer>
+      {/* Footer hidden — fixed bottom bar replaces it */}
 
       {/* Payment Dialog (Paywall) */}
       <PaymentDialog
