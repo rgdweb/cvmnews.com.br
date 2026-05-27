@@ -19,6 +19,28 @@ export const metadata: Metadata = {
   icons: {
     icon: "/logo.jpg",
   },
+  openGraph: {
+    title: "VozPro - Sintetizador de Voz Profissional com IA",
+    description: "Crie vozes profissionais com IA. Clonagem de voz, emoções e trilhas musicais para suas propagandas e conteúdos.",
+    url: "https://omnivoice-umber.vercel.app",
+    siteName: "VozPro",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "VozPro - Vozes Profissionais com IA",
+      },
+    ],
+    locale: "pt_BR",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "VozPro - Sintetizador de Voz Profissional com IA",
+    description: "Crie vozes profissionais com IA. Clonagem de voz, emoções e trilhas musicais para suas propagandas e conteúdos.",
+    images: ["/og-image.jpg"],
+  },
 };
 
 export default function RootLayout({
