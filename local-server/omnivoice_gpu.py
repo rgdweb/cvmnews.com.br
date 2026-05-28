@@ -195,6 +195,21 @@ def _post_generate_cleanup():
 # ENDPOINTS
 # ============================================================
 
+async def index(request):
+    """Rota raiz — info basica (compativel com startup scripts e tunnel)."""
+    return JSONResponse({
+        "service": "OmniVoice Native Server",
+        "model_loaded": _model is not None,
+        "gpu": _gpu_name if torch.cuda.is_available() else None,
+        "endpoints": {
+            "health": "GET /health",
+            "status": "GET /api/maint/status",
+            "cleanup": "POST /api/maint/cleanup",
+            "generate": "POST /api/native-generate",
+        },
+    })
+
+
 async def health(request):
     """Health check simples."""
     return JSONResponse({"status": "ok", "model_loaded": _model is not None})
@@ -381,6 +396,7 @@ async def native_generate(request):
 
 app = Starlette(
     routes=[
+        Route("/", index, methods=["GET"]),
         Route("/health", health, methods=["GET"]),
         Route("/api/maint/status", maint_status, methods=["GET"]),
         Route("/api/maint/cleanup", maint_cleanup, methods=["POST"]),
