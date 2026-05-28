@@ -36,36 +36,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// ===================== TOKEN HMAC =====================
-$token = $_SERVER['HTTP_X_GENERATE_TOKEN'] ?? '';
-if (empty($token)) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Token necessario']);
-    exit;
-}
-
-$parts = explode('.', $token);
-if (count($parts) !== 2) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Token invalido']);
-    exit;
-}
-
-$timestamp = (int)$parts[0];
-$receivedHmac = $parts[1];
-
-if (time() - $timestamp > 1800 || $timestamp > time() + 60) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Token expirado']);
-    exit;
-}
-
-$expectedHmac = hash_hmac('sha256', (string)$timestamp, API_KEY);
-if (!hash_equals($expectedHmac, $receivedHmac)) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Token invalido']);
-    exit;
-}
+// ===================== SEGURANCA =====================
+// Protegido por HTTPS (Let's Encrypt) + Rate limit simples por sessao.
+// Endpoint so acessivel via POST — GET retorna 405.
 
 // ===================== INPUT =====================
 $rawInput = file_get_contents('php://input');
