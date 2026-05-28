@@ -208,8 +208,22 @@ async function streamResult(
 
         if (eventType === 'error') {
           clearTimeout(timeoutId)
-          debug.log('SSE Stream', 'error', (eventData || 'Erro na geracao').substring(0, 200))
-          return { audioUrl: null, error: eventData || 'Erro na geracao' }
+          let errMsg = eventData || 'Erro na geracao'
+          // Gradio frequentemente retorna {"error": null} quando é CUDA OOM
+          // que o OmniVoice não captura corretamente sem o wrapper omnivoice_gpu.py
+          try {
+            const parsed = JSON.parse(eventData)
+            if (parsed.error === null || parsed.error === undefined) {
+              errMsg = 'GPU sem memoria (CUDA OOM) — reinicie o servidor GPU ou use texto menor'
+              debug.log('SSE Stream', 'error', `Gradio error nulo detectado -> ${errMsg}`)
+            } else if (typeof parsed.error === 'string') {
+              errMsg = parsed.error
+            }
+          } catch {
+            // eventData não é JSON, usar como string
+          }
+          debug.log('SSE Stream', 'error', errMsg.substring(0, 300))
+          return { audioUrl: null, error: errMsg }
         }
 
         if (eventType === 'heartbeat') {
@@ -239,13 +253,33 @@ interface GenResult {
   failReason: string
 }
 
+async function triggerGpuCleanup(tunnelUrl: string, debug: ReturnType<typeof createDebug>): Promise<boolean> {
+  try {
+    debug.log('GPU Cleanup', 'info', 'Tentando limpar GPU via /api/maint/cleanup...')
+    const res = await fetch(`${tunnelUrl}/api/maint/cleanup`, {
+      method: 'POST', signal: AbortSignal.timeout(15000)
+    })
+    if (res.ok) {
+      const data = await res.json()
+      debug.log('GPU Cleanup', 'ok', `VRAM apos cleanup: ${data.vram_percent}%`)
+      return true
+    }
+    debug.log('GPU Cleanup', 'warn', `Endpoint nao disponivel (wrapper nao carregado) - HTTP ${res.status}`)
+    return false
+  } catch (err) {
+    debug.log('GPU Cleanup', 'warn', err instanceof Error ? err.message : String(err))
+    return false
+  }
+}
+
 async function generateSingleShot(
   tunnelUrl: string,
   text: string,
   gradioData: unknown[],
-  debug: ReturnType<typeof createDebug>
+  debug: ReturnType<typeof createDebug>,
+  isRetry = false
 ): Promise<GenResult> {
-  debug.log('Geracao', 'info', 'Gerando audio (single-shot)...')
+  debug.log('Geracao', 'info', `Gerando audio (single-shot${isRetry ? ' RETRY' : ''})...`)
 
   let eventId: string | null = null
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -260,7 +294,18 @@ async function generateSingleShot(
   if (!eventId) return { buffer: null, failReason: 'Falha ao enviar job para GPU (3 tentativas)' }
 
   const result = await streamResult(tunnelUrl, eventId, debug, 180000)
-  if (!result.audioUrl) return { buffer: null, failReason: result.error || 'Stream sem resultado' }
+  if (!result.audioUrl) {
+    // Se foi OOM (error nulo do Gradio), tentar cleanup e retry UMA VEZ
+    const isOom = result.error?.includes('CUDA OOM') || result.error?.includes('GPU sem memoria')
+    if (isOom && !isRetry) {
+      debug.log('Geracao', 'warn', 'CUDA OOM detectado — tentando limpar GPU e gerar de novo...')
+      await triggerGpuCleanup(tunnelUrl, debug)
+      // Aguardar 5s para GPU liberar
+      await new Promise(r => setTimeout(r, 5000))
+      return generateSingleShot(tunnelUrl, text, gradioData, debug, true)
+    }
+    return { buffer: null, failReason: result.error || 'Stream sem resultado' }
+  }
 
   // Delay fixo 10s — dar tempo do Gradio salvar o WAV via tunnel
   await new Promise(r => setTimeout(r, 10000))

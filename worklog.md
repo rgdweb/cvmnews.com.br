@@ -483,3 +483,23 @@ Stage Summary:
 - Tunnel e Gradio estão funcionando normalmente
 - Código melhorado com retry automático e mensagens de erro detalhadas
 - Arquivo: src/app/api/tunnel-generate/route.ts
+---
+Task ID: 2
+Agent: main
+Task: Diagnosticar e corrigir erro 500 persistente no tunnel-generate
+
+Work Log:
+- Testou fluxo completo: tunnel online, Gradio respondendo, upload OK
+- Descobriu que Gradio retorna "event: error" com {"error": null} quando CUDA OOM
+- Verificou que /api/maint/status retorna 404 — omnivoice_gpu.py NÃO está carregado
+- O Gradio está rodando como demo original, sem wrapper de GPU
+- Root cause: sem wrapper, GPU acumula VRAM sem cleanup → OOM silencioso
+- Melhorou streamResult() para detectar {"error": null} e retornar mensagem clara "GPU sem memoria"
+- Adicionou triggerGpuCleanup() para tentar limpar VRAM via API do wrapper
+- Adicionou retry automático dentro de generateSingleShot() quando detecta OOM
+
+Stage Summary:
+- Erro 500 causado por CUDA OOM silencioso (Gradio retorna {"error": null})
+- omnivoice_gpu.py NÃO está ativo no servidor GPU — precisa reiniciar com iniciar.bat
+- Código agora detecta OOM, tenta cleanup automático e retry
+- Arquivo: src/app/api/tunnel-generate/route.ts
