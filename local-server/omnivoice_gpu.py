@@ -9,9 +9,10 @@ Manutencao automatica:
 - Deep cleanup: a cada 5 geracoes, faz cleanup triplo com delays
 - Tudo sem botao, sem painel, 100% automatico
 
-Endpoints (mantidos para debug):
+Endpoints:
   GET  /api/maint/status  - VRAM da GPU
   POST /api/maint/cleanup - forcar limpeza
+  POST /api/native-generate - Geracao 100% nativa (JSON -> OmniVoice -> WAV base64)
 
 USO: python omnivoice_gpu.py --ip 0.0.0.0 --port 7860
 (substitui omnivoice-demo no iniciar.bat)
@@ -33,6 +34,7 @@ import torch
 
 _gen_counter = 0
 _gen_counter_lock = threading.Lock()
+_global_model = None  # Referencia para API nativa (/api/native-generate)
 
 
 def _get_vram():
@@ -166,6 +168,142 @@ if torch.cuda.is_available():
         print(f"       - Monitor: verifica a cada 3 min")
 
         # ============================================================
+        # CAPTURAR MODELO PARA API NATIVA
+        # ============================================================
+        _original_from_pretrained = OmniVoice.from_pretrained
+
+        def _patched_from_pretrained(*args, **kwargs):
+            global _global_model
+            model = _original_from_pretrained(*args, **kwargs)
+            _global_model = model
+            print(f"  [OK] Modelo capturado para API nativa")
+            return model
+
+        OmniVoice.from_pretrained = _patched_from_pretrained
+
+        # ============================================================
+        # ENDPOINT NATIVO (/api/native-generate)
+        # Gera audio diretamente com OmniVoice, sem passar pelo Gradio.
+        # 100% do pipeline em Python — mesmo comportamento do localhost.
+        # ============================================================
+        async def _native_generate_handler(request):
+            """Endpoint nativo: JSON -> OmniVoice.generate() -> WAV base64."""
+            import asyncio
+            import tempfile
+            import base64
+            import io
+            import time as _time
+            import urllib.request
+            import ssl
+            import soundfile as _sf
+
+            try:
+                body = await request.json()
+
+                text = body.get("text", "")
+                if not text or not text.strip():
+                    return JSONResponse({"status": "error", "error": "Texto obrigatorio"})
+
+                voice_mode = body.get("voice_mode", "clone")
+                language = body.get("language", "Auto")
+                speed = float(body.get("speed", 1.0))
+                num_step = int(body.get("num_step", 32))
+                guidance_scale = float(body.get("guidance_scale", 2.0))
+                instruct = body.get("instruct", "")
+                ref_text = body.get("ref_text", "")
+                ref_audio_url = body.get("ref_audio_url", "")
+                ref_audio_base64 = body.get("ref_audio_base64", "")
+
+                if _global_model is None:
+                    return JSONResponse({"status": "error", "error": "Modelo nao carregado ainda"}, status_code=503)
+
+                # Baixar ou decodificar audio de referencia
+                ref_audio_path = ""
+                if voice_mode == "clone" and (ref_audio_url or ref_audio_base64):
+                    try:
+                        audio_data = None
+                        if ref_audio_url:
+                            req = urllib.request.Request(
+                                ref_audio_url,
+                                headers={'User-Agent': 'OmniVoice/1.0'}
+                            )
+                            ctx = ssl.create_default_context()
+                            ctx.check_hostname = False
+                            ctx.verify_mode = ssl.CERT_NONE
+                            with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
+                                audio_data = resp.read()
+                        elif ref_audio_base64:
+                            b64 = ref_audio_base64
+                            if ',' in b64 and b64.startswith('data:'):
+                                b64 = b64.split(',', 1)[1]
+                            audio_data = base64.b64decode(b64)
+
+                        if audio_data:
+                            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                                f.write(audio_data)
+                                ref_audio_path = f.name
+                            print(f"[Native] Ref audio: {len(audio_data)} bytes")
+                    except Exception as e:
+                        print(f"[Native] Erro ref audio: {e}")
+
+                # Montar kwargs — EXATAMENTE como OmniVoice funciona no localhost
+                kwargs = {
+                    "text": text.strip(),
+                    "num_step": num_step,
+                    "speed": speed,
+                }
+
+                if ref_audio_path:
+                    kwargs["ref_audio"] = ref_audio_path
+
+                if instruct and instruct.strip():
+                    kwargs["instruct"] = instruct.strip()
+
+                if ref_text and ref_text.strip():
+                    kwargs["ref_text"] = ref_text.strip()
+
+                if language and language.lower() != "auto":
+                    kwargs["language"] = language
+
+                # Gerar em thread pool (OmniVoice.generate e sincrono)
+                print(f"[Native] Gerando: mode={voice_mode} speed={speed} steps={num_step} cfg={guidance_scale} text=\"{text[:50]}...\"")
+                start = _time.time()
+
+                loop = asyncio.get_event_loop()
+                audio_list = await loop.run_in_executor(
+                    None, lambda: _global_model.generate(**kwargs)
+                )
+                audio_array = audio_list[0]
+
+                elapsed = _time.time() - start
+                duration = len(audio_array) / 24000
+                rtf = elapsed / duration if duration > 0 else 0
+                print(f"[Native] OK: {elapsed:.2f}s (duracao={duration:.1f}s, RTF={rtf:.3f})")
+
+                # Converter para WAV
+                buf = io.BytesIO()
+                _sf.write(buf, audio_array, 24000, format='WAV')
+                wav_bytes = buf.getvalue()
+
+                # Cleanup temp file
+                if ref_audio_path and os.path.exists(ref_audio_path):
+                    os.unlink(ref_audio_path)
+
+                return JSONResponse({
+                    "status": "ok",
+                    "audio_base64": base64.b64encode(wav_bytes).decode('ascii'),
+                    "audio_size": len(wav_bytes),
+                    "duration": round(duration, 2),
+                    "generation_time": round(elapsed, 2),
+                    "rtf": round(rtf, 4),
+                })
+
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return JSONResponse({"status": "error", "error": str(e)}, status_code=500)
+
+        # ============================================================
         # ENDPOINTS DE MANUTENCAO (para debug, mantidos)
         # ============================================================
         try:
@@ -208,9 +346,11 @@ if torch.cuda.is_available():
                     # Registrar rotas no app do Gradio
                     _app.add_api_route("/api/maint/status", _maint_status, methods=["GET"])
                     _app.add_api_route("/api/maint/cleanup", _maint_cleanup, methods=["POST"])
-                    print(f"  [OK] Endpoints de manutencao ativos:")
-                    print(f"       GET  /api/maint/status  (VRAM + info)")
-                    print(f"       POST /api/maint/cleanup (forcar deep cleanup)")
+                    _app.add_api_route("/api/native-generate", _native_generate_handler, methods=["POST"])
+                    print(f"  [OK] Endpoints ativos:")
+                    print(f"       GET  /api/maint/status       (VRAM + info)")
+                    print(f"       POST /api/maint/cleanup      (forcar deep cleanup)")
+                    print(f"       POST /api/native-generate     (geracao 100% nativa)")
                 except Exception as e:
                     print(f"  [AVISO] Nao conseguiu adicionar endpoints de manutencao: {e}")
                 print("=" * 55)
