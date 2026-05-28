@@ -1054,10 +1054,23 @@ export default function VozProClient() {
 
       let res: Response
 
-      // ===== F5-TTS via Tunnel (GPU local) =====
+      // ===== F5-TTS via Tunnel (GPU local via PHP Oracle, sem Vercel) =====
       if (useTunnelGenerate) {
-        // ===== TUNNEL DIRETO: Vercel -> GPU local via cloudflared =====
-        console.log(`[F5-TTS] Gerando via tunnel (GPU local)... modo: ${voiceMode}`)
+        // ===== TUNNEL: Browser -> Oracle PHP -> GPU local (nativo, sem Gradio, sem Vercel) =====
+        console.log(`[F5-TTS] Gerando via tunnel PHP (GPU local)... modo: ${voiceMode}`)
+
+        // Obter token HMAC pra chamar PHP diretamente
+        const tokenRes = await fetch('/api/generate-token')
+        if (!tokenRes.ok) {
+          toast.error('Erro ao obter token de geracao')
+          return
+        }
+        const { token } = await tokenRes.json()
+
+        if (!token) {
+          toast.error('Servidor PHP nao configurado corretamente')
+          return
+        }
 
         // Determinar instruct baseado no modo
         let finalInstruct = instructStr
@@ -1082,9 +1095,15 @@ export default function VozProClient() {
           instruct: finalInstruct,
           voiceMode,
         }
-        res = await fetch('/api/tunnel-generate', {
+
+        // Chamar Oracle PHP direto (bypass Vercel — zero timeout, zero custo)
+        const oracleUrl = process.env.NEXT_PUBLIC_AUDIO_SERVER_URL || 'http://147.15.77.137'
+        res = await fetch(`${oracleUrl}/omnivoice/tunnel-generate.php`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Generate-Token': token,
+          },
           body: JSON.stringify(tunnelBody),
           signal: controller.signal,
         })
