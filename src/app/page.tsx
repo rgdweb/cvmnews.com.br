@@ -724,6 +724,7 @@ export default function VozProClient() {
   const [speed, setSpeed] = useState(1.0)
   const [numStep, setNumStep] = useState(32)
   const [guidanceScale, setGuidanceScale] = useState(2.0)
+  const [denoise, setDenoise] = useState(true)
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   // Generation state
@@ -1050,6 +1051,7 @@ export default function VozProClient() {
         speed,
         numStep,
         guidanceScale,
+        denoise,
       }
 
       let res: Response
@@ -2414,6 +2416,15 @@ export default function VozProClient() {
                       <Badge variant="outline" className={`text-xs ${speed < 0.85 ? 'border-red-500/50 text-red-400' : speed > 1.15 ? 'border-orange-500/50 text-orange-400' : 'border-white/10 text-slate-500'}`}>{speed.toFixed(2)}x{speed < 0.85 ? ' (distorção!)' : speed > 1.15 ? ' (alucinação!)' : ''}</Badge>
                     </div>
                     <Slider value={[speed]} onValueChange={([v]) => setSpeed(v)} min={0.5} max={1.5} step={0.05} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-slate-400">Denoise (remover ruído)</label>
+                    <button
+                      onClick={() => setDenoise(!denoise)}
+                      className={`relative w-9 h-5 rounded-full transition-colors ${denoise ? 'bg-emerald-500' : 'bg-white/10'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${denoise ? 'translate-x-4' : ''}`} />
+                    </button>
                   </div>
                 </CardContent>
               </Card>
