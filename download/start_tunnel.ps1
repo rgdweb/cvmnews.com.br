@@ -40,23 +40,20 @@ $job = Start-Job -ScriptBlock {
 } -ArgumentList $port
 
 $url = $null
+$pattern1 = '(https://[a-z0-9\-\.]+\.trycloudflare\.com)'
+$pattern2 = '(https://[a-z0-9\-\.]+\.cfargotunnel\.com)'
+
 for ($i = 0; $i -lt 60; $i++) {
     Start-Sleep -Milliseconds 500
     if (Test-Path $outputFile) {
         $content = Get-Content $outputFile -Raw -ErrorAction SilentlyContinue
-        # Aceita qualquer URL do cloudflared (trycloudflare.com, cfargotunnel.com, etc)
-        if ($content -match "(https://[a-z0-9\-\.]+\.cloudflare\.com|[a-z0-9\-\.]+\.trycloudflare\.com|[a-z0-9\-\.]+\.cfargotunnel\.com)") {
+        if ($url -eq $null -and $content -match $pattern1) {
             $url = $Matches[1]
             break
         }
-        # Fallback: qualquer URL https que contenha palavras tipicas do cloudflared
-        if (-not $url -and $content -match "(https://[a-z0-9\-]+\.[a-z0-9\-]+\.(?:com|net|dev|io)[^\s\"'\)]*)") {
-            $candidate = $Matches[1]
-            # Filtra apenas URLs que parecem do cloudflared (nao localhost, nao oracle)
-            if ($candidate -notmatch "localhost|127\.0\.0|147\.15\.77" -and $candidate -match "cloud|tunnel|cf|flare") {
-                $url = $candidate
-                break
-            }
+        if ($url -eq $null -and $content -match $pattern2) {
+            $url = $Matches[1]
+            break
         }
     }
 }
