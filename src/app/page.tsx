@@ -2419,9 +2419,9 @@ export default function VozProClient() {
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                       <label className="text-xs text-slate-400">Velocidade</label>
-                      <input type="number" value={speed.toFixed(1)} onChange={(e) => setSpeed(parseFloat(e.target.value) || 1.0)} className="w-14 px-1.5 py-0.5 text-xs bg-white/5 border border-white/10 rounded text-slate-300 text-right focus:outline-none focus:border-violet-400" min={0.5} max={2.0} step={0.1} />
+                      <input type="number" value={speed.toFixed(1)} onChange={(e) => setSpeed(parseFloat(e.target.value) || 1.0)} className="w-14 px-1.5 py-0.5 text-xs bg-white/5 border border-white/10 rounded text-slate-300 text-right focus:outline-none focus:border-violet-400" min={0.5} max={1.5} step={0.1} />
                     </div>
-                    <Slider value={[speed]} onValueChange={([v]) => setSpeed(v)} min={0.5} max={2.0} step={0.1} />
+                    <Slider value={[speed]} onValueChange={([v]) => setSpeed(v)} min={0.5} max={1.5} step={0.1} />
                   </div>
                   <div className="flex items-center justify-between">
                     <label className="text-xs text-slate-400">Denoise (remover ruído do ref)</label>
