@@ -259,7 +259,8 @@ async def native_generate(request):
         "instruct": "female, low pitch (opcional, para design)",
         "speed": 1.0,
         "num_step": 32,
-        "guidance_scale": 2.0
+        "guidance_scale": 2.0,
+        "denoise": true
     }
 
     Retorna:
@@ -288,6 +289,7 @@ async def native_generate(request):
         speed = float(body.get("speed", 1.0))
         num_step = int(body.get("num_step", 32))
         guidance_scale = float(body.get("guidance_scale", 2.0))
+        denoise = body.get("denoise", True) == True
         instruct = body.get("instruct", "")
         ref_text = body.get("ref_text", "")
         ref_audio_url = body.get("ref_audio_url", "")
@@ -331,6 +333,9 @@ async def native_generate(request):
             "text": text.strip(),
             "num_step": num_step,
             "speed": speed,
+            "guidance_scale": guidance_scale,
+            "denoise": denoise,
+            "postprocess_output": True,
         }
 
         if ref_audio_path:
@@ -349,7 +354,7 @@ async def native_generate(request):
         _pre_generate_cleanup()
 
         # Gerar em thread pool (OmniVoice.generate e sincrono)
-        print(f"[Native] Gerando: mode={voice_mode} speed={speed} steps={num_step} text=\"{text[:60]}...\"")
+        print(f"[Native] Gerando: mode={voice_mode} speed={speed} cfg={guidance_scale} steps={num_step} denoise={denoise} text=\"{text[:60]}...\"")
         start = time.time()
 
         loop = asyncio.get_event_loop()
