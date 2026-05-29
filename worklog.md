@@ -542,3 +542,42 @@ Stage Summary:
 - Arquivo corrigido: download/omnivoice_gpu.py (para usuario copiar no PC)
 - Arquivo corrigido: src/app/api/tunnel-generate/route.ts (deploy automatico)
 - Usuario precisa copiar omnivoice_gpu.py atualizado para o PC e reiniciar com iniciar.bat
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Adicionar parametros nativos do OmniVoice na interface (postprocess_output, preprocess_prompt, duration)
+
+Work Log:
+- Analisou todos os parametros nativos do OmniVoice.generate() e identificou 4 uteis nao expostos:
+  - postprocess_output (bool, default True) — remove silencios longos do audio gerado
+  - preprocess_prompt (bool, default True) — remove silencios longos do audio de referencia
+  - duration (float, optional) — forca duracao exata em segundos
+  - denoise ja existia na interface e no pipeline
+- Editou src/app/page.tsx (frontend):
+  - Adicionou 3 state variables: postprocessOutput, preprocessPrompt, targetDuration
+  - Adicionou no body do POST: postprocessOutput, preprocessPrompt, targetDuration
+  - Adicionou 3 toggles na secao "Configuracoes Avançadas" (abaixo do denoise)
+  - Adicionou input numerico para duracao alvo com botao Reset (vazio = auto)
+- Editou download/tunnel-generate.php (PHP proxy):
+  - Adicionou denoise, postprocess_output, preprocess_prompt no nativePayload
+  - Adicionado logica condicional para duration (so envia se > 0)
+- Editou local-server/omnivoice_gpu.py e download/omnivoice_gpu.py (Python server):
+  - Recebe postprocess_output, preprocess_prompt, duration do JSON
+  - Valida duration (float > 0, senao None)
+  - Passa postprocess_output e preprocess_prompt no kwargs (antes eram hardcoded True)
+  - Passa duration condicionalmente no kwargs
+  - Log melhorado com todos os novos params
+
+Stage Summary:
+- Interface agora expoe todos os parametros nativos uteis do OmniVoice:
+  - Passos (num_step): 4-64, slider
+  - Guia/CFG (guidance_scale): 0-4, slider
+  - Velocidade (speed): 0.5-1.5, slider
+  - Denoise: toggle (default ON)
+  - Pós-processar (postprocess_output): toggle (default ON) — NOVO
+  - Pré-processar ref (preprocess_prompt): toggle (default ON) — NOVO
+  - Duração alvo (duration): input numerico, vazio = auto — NOVO
+- Pipeline completo: Frontend -> PHP (Oracle) -> Python (GPU) -> model.generate()
+- Arquivos editados: src/app/page.tsx, download/tunnel-generate.php, local-server/omnivoice_gpu.py, download/omnivoice_gpu.py
+- PENDENTE: Usuario precisa copiar tunnel-generate.php para Oracle e omnivoice_gpu.py para PC GPU

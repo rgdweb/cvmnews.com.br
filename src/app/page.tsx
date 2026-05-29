@@ -725,6 +725,9 @@ export default function VozProClient() {
   const [numStep, setNumStep] = useState(32)
   const [guidanceScale, setGuidanceScale] = useState(2.0)
   const [denoise, setDenoise] = useState(true)
+  const [postprocessOutput, setPostprocessOutput] = useState(true)
+  const [preprocessPrompt, setPreprocessPrompt] = useState(true)
+  const [targetDuration, setTargetDuration] = useState<number | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   // Generation state
@@ -1052,6 +1055,9 @@ export default function VozProClient() {
         numStep,
         guidanceScale,
         denoise,
+        postprocessOutput,
+        preprocessPrompt,
+        targetDuration,
       }
 
       let res: Response
@@ -2418,13 +2424,54 @@ export default function VozProClient() {
                     <Slider value={[speed]} onValueChange={([v]) => setSpeed(v)} min={0.5} max={1.5} step={0.05} />
                   </div>
                   <div className="flex items-center justify-between">
-                    <label className="text-xs text-slate-400">Denoise (remover ruído)</label>
+                    <label className="text-xs text-slate-400">Denoise (remover ruído do ref)</label>
                     <button
                       onClick={() => setDenoise(!denoise)}
                       className={`relative w-9 h-5 rounded-full transition-colors ${denoise ? 'bg-emerald-500' : 'bg-white/10'}`}
                     >
                       <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${denoise ? 'translate-x-4' : ''}`} />
                     </button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-slate-400">Pós-processar (remover silêncios longos)</label>
+                    <button
+                      onClick={() => setPostprocessOutput(!postprocessOutput)}
+                      className={`relative w-9 h-5 rounded-full transition-colors ${postprocessOutput ? 'bg-emerald-500' : 'bg-white/10'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${postprocessOutput ? 'translate-x-4' : ''}`} />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-slate-400">Pré-processar ref (remover silêncios)</label>
+                    <button
+                      onClick={() => setPreprocessPrompt(!preprocessPrompt)}
+                      className={`relative w-9 h-5 rounded-full transition-colors ${preprocessPrompt ? 'bg-emerald-500' : 'bg-white/10'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${preprocessPrompt ? 'translate-x-4' : ''}`} />
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <label className="text-xs text-slate-400">Duração alvo (seg, vazio = auto)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={targetDuration ?? ''}
+                          onChange={(e) => setTargetDuration(e.target.value ? parseFloat(e.target.value) : null)}
+                          placeholder="Auto"
+                          className="w-16 px-2 py-0.5 text-xs bg-white/5 border border-white/10 rounded text-slate-300 text-center focus:outline-none focus:border-violet-400"
+                          min={1}
+                          max={120}
+                          step={0.5}
+                        />
+                        <button
+                          onClick={() => setTargetDuration(null)}
+                          className="text-xs text-slate-500 hover:text-violet-300 transition-colors"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

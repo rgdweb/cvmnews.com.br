@@ -114,17 +114,26 @@ if (empty($tunnelUrl)) {
 
 // ===================== MONTAR PAYLOAD PRO NATIVE-GENERATE =====================
 $nativePayload = [
-    'text'             => $input['text'] ?? '',
-    'voice_mode'       => $input['voiceMode'] ?? ($input['voice_mode'] ?? 'clone'),
-    'ref_audio_url'    => $input['referenceAudioUrl'] ?? '',
-    'ref_audio_base64' => $input['referenceAudioBase64'] ?? '',
-    'language'         => $input['language'] ?? 'Auto',
-    'instruct'         => $input['instruct'] ?? '',
-    'ref_text'         => $input['refText'] ?? '',
-    'speed'            => $input['speed'] ?? 1.0,
-    'num_step'         => $input['numStep'] ?? 32,
-    'guidance_scale'   => $input['guidanceScale'] ?? 2.0,
+    'text'                 => $input['text'] ?? '',
+    'voice_mode'           => $input['voiceMode'] ?? ($input['voice_mode'] ?? 'clone'),
+    'ref_audio_url'        => $input['referenceAudioUrl'] ?? '',
+    'ref_audio_base64'     => $input['referenceAudioBase64'] ?? '',
+    'language'             => $input['language'] ?? 'Auto',
+    'instruct'             => $input['instruct'] ?? '',
+    'ref_text'             => $input['refText'] ?? '',
+    'speed'                => $input['speed'] ?? 1.0,
+    'num_step'             => $input['numStep'] ?? 32,
+    'guidance_scale'       => $input['guidanceScale'] ?? 2.0,
+    'denoise'              => $input['denoise'] ?? true,
+    'postprocess_output'   => $input['postprocessOutput'] ?? true,
+    'preprocess_prompt'    => $input['preprocessPrompt'] ?? true,
 ];
+
+// Duração alvo: só envia se definido (> 0)
+$targetDuration = $input['targetDuration'] ?? null;
+if ($targetDuration !== null && $targetDuration > 0) {
+    $nativePayload['duration'] = (float)$targetDuration;
+}
 
 // ===================== CHAMAR NATIVE-GENERATE =====================
 $nativeUrl = rtrim($tunnelUrl, '/') . '/api/native-generate';

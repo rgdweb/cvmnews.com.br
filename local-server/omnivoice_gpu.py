@@ -260,7 +260,10 @@ async def native_generate(request):
         "speed": 1.0,
         "num_step": 32,
         "guidance_scale": 2.0,
-        "denoise": true
+        "denoise": true,
+        "postprocess_output": true,
+        "preprocess_prompt": true,
+        "duration": null  (opcional, forca duracao em segundos)
     }
 
     Retorna:
@@ -290,6 +293,16 @@ async def native_generate(request):
         num_step = int(body.get("num_step", 32))
         guidance_scale = float(body.get("guidance_scale", 2.0))
         denoise = body.get("denoise", True) == True
+        postprocess_output = body.get("postprocess_output", True) == True
+        preprocess_prompt = body.get("preprocess_prompt", True) == True
+        duration = body.get("duration", None)
+        if duration is not None:
+            try:
+                duration = float(duration)
+                if duration <= 0:
+                    duration = None
+            except (ValueError, TypeError):
+                duration = None
         instruct = body.get("instruct", "")
         ref_text = body.get("ref_text", "")
         ref_audio_url = body.get("ref_audio_url", "")
@@ -335,8 +348,12 @@ async def native_generate(request):
             "speed": speed,
             "guidance_scale": guidance_scale,
             "denoise": denoise,
-            "postprocess_output": True,
+            "postprocess_output": postprocess_output,
+            "preprocess_prompt": preprocess_prompt,
         }
+
+        if duration is not None:
+            kwargs["duration"] = duration
 
         if ref_audio_path:
             kwargs["ref_audio"] = ref_audio_path
@@ -354,7 +371,7 @@ async def native_generate(request):
         _pre_generate_cleanup()
 
         # Gerar em thread pool (OmniVoice.generate e sincrono)
-        print(f"[Native] Gerando: mode={voice_mode} speed={speed} cfg={guidance_scale} steps={num_step} denoise={denoise} text=\"{text[:60]}...\"")
+        print(f"[Native] Gerando: mode={voice_mode} speed={speed} cfg={guidance_scale} steps={num_step} denoise={denoise} postprocess={postprocess_output} preprocess={preprocess_prompt} dur={duration} text=\"{text[:60]}...\"")
         start = time.time()
 
         loop = asyncio.get_event_loop()
