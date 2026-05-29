@@ -722,7 +722,7 @@ export default function VozProClient() {
   const [musicStartLeadMs, setMusicStartLeadMs] = useState(DEFAULT_DUCKING.musicStartLeadMs)
   const [showDuckingSettings, setShowDuckingSettings] = useState(false)
   const [speed, setSpeed] = useState(1.0)
-  const [numStep, setNumStep] = useState(16)
+  const [numStep, setNumStep] = useState(32)
   const [guidanceScale, setGuidanceScale] = useState(2.0)
   const [denoise, setDenoise] = useState(true)
   const [postprocessOutput, setPostprocessOutput] = useState(true)
