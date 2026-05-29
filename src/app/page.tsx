@@ -2402,24 +2402,24 @@ export default function VozProClient() {
                 <CardContent className="pt-5 space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <div className="flex justify-between">
+                      <div className="flex justify-between items-center">
                         <label className="text-xs text-slate-400">Passos</label>
-                        <Badge variant="outline" className={`text-xs ${numStep < 20 ? 'border-yellow-500/50 text-yellow-400' : numStep > 50 ? 'border-orange-500/50 text-orange-400' : 'border-white/10 text-slate-500'}`}>{numStep}{numStep < 20 ? ' (baixa qualidade)' : numStep > 50 ? ' (lento)' : ''}</Badge>
+                        <input type="number" value={numStep} onChange={(e) => setNumStep(parseInt(e.target.value) || 4)} className="w-14 px-1.5 py-0.5 text-xs bg-white/5 border border-white/10 rounded text-slate-300 text-right focus:outline-none focus:border-violet-400" min={4} max={64} step={1} />
                       </div>
                       <Slider value={[numStep]} onValueChange={([v]) => setNumStep(v)} min={4} max={64} step={1} />
                     </div>
                     <div className="space-y-2">
-                      <div className="flex justify-between">
+                      <div className="flex justify-between items-center">
                         <label className="text-xs text-slate-400">Guia (CFG)</label>
-                        <Badge variant="outline" className={`text-xs ${guidanceScale < 1 ? 'border-yellow-500/50 text-yellow-400' : guidanceScale > 3.5 ? 'border-orange-500/50 text-orange-400' : 'border-white/10 text-slate-500'}`}>{guidanceScale.toFixed(1)}{guidanceScale < 1 ? ' (fraco)' : guidanceScale > 3.5 ? ' (alucinação!)' : ''}</Badge>
+                        <input type="number" value={guidanceScale.toFixed(1)} onChange={(e) => setGuidanceScale(parseFloat(e.target.value) || 0)} className="w-14 px-1.5 py-0.5 text-xs bg-white/5 border border-white/10 rounded text-slate-300 text-right focus:outline-none focus:border-violet-400" min={0} max={4} step={0.1} />
                       </div>
                       <Slider value={[guidanceScale]} onValueChange={([v]) => setGuidanceScale(v)} min={0} max={4} step={0.1} />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <label className="text-xs text-slate-400">Velocidade</label>
-                      <Badge variant="outline" className={`text-xs ${speed < 0.85 ? 'border-red-500/50 text-red-400' : speed > 1.15 ? 'border-orange-500/50 text-orange-400' : 'border-white/10 text-slate-500'}`}>{speed.toFixed(2)}x{speed < 0.85 ? ' (distorção!)' : speed > 1.15 ? ' (alucinação!)' : ''}</Badge>
+                      <input type="number" value={speed.toFixed(2)} onChange={(e) => setSpeed(parseFloat(e.target.value) || 1.0)} className="w-14 px-1.5 py-0.5 text-xs bg-white/5 border border-white/10 rounded text-slate-300 text-right focus:outline-none focus:border-violet-400" min={0.5} max={1.5} step={0.01} />
                     </div>
                     <Slider value={[speed]} onValueChange={([v]) => setSpeed(v)} min={0.5} max={1.5} step={0.05} />
                   </div>
