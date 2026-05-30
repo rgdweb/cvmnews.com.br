@@ -5,7 +5,7 @@
 define('API_KEY', 'vozpro_2024_a8f7d9e2b4c1m6n3p5q0r9s2t8u1');
 
 // URL base do servidor (ALTERE PARA SEU DOMÍNIO!)
-define('BASE_URL', 'https://sorteiomax.com.br/omnivoice');
+define('BASE_URL', 'https://api.cvmnews.com.br');
 
 // Tipos de arquivos permitidos (apenas áudio)
 define('ALLOWED_TYPES', [

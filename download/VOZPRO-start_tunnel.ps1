@@ -4,7 +4,7 @@
 # ========================================
 
 $port = 7860
-$serverUpdate = "https://sorteiomax.com.br/omnivoice/update_tunnel.php"
+$serverUpdate = "https://api.cvmnews.com.br/update_tunnel.php"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan

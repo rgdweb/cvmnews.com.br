@@ -6,7 +6,7 @@ const https = require('https');
 const http = require('http');
 
 const PORT = 7860;
-const SERVER_BASE = 'https://sorteiomax.com.br/omnivoice';
+const SERVER_BASE = 'https://api.cvmnews.com.br';
 const AUTH_KEY = 'vozpro_tunnel_2024';
 
 async function updateServerConfig(tunnelUrl) {
