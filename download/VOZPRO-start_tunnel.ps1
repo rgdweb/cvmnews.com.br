@@ -1,6 +1,6 @@
 # ========================================
 # OmniVoice TTS - start_tunnel.ps1
-# Abre tunnel cloudflared e atualiza URL no HostGator
+# Abre tunnel cloudflared e atualiza URL no servidor (Oracle)
 # ========================================
 
 $port = 7860
@@ -113,8 +113,8 @@ if ($tunnelUrl) {
     exit 1
 }
 
-# --- 4. Atualizar HostGator via GET ---
-Write-Host "[INFO] Atualizando servidor HostGator..." -ForegroundColor Yellow
+# --- 4. Atualizar servidor Oracle via GET ---
+Write-Host "[INFO] Atualizando servidor Oracle..." -ForegroundColor Yellow
 
 try {
     $encodedUrl = [System.Uri]::EscapeDataString($tunnelUrl)
@@ -128,12 +128,12 @@ try {
     $result = $response | ConvertFrom-Json
     
     if ($result.status -eq 'ok') {
-        Write-Host "[OK] URL atualizada no HostGator!" -ForegroundColor Green
+        Write-Host "[OK] URL atualizada no servidor!" -ForegroundColor Green
     } else {
         Write-Host "[WARN] Resposta: $($response)" -ForegroundColor Yellow
     }
 } catch {
-    Write-Host "[ERRO] Falha ao atualizar HostGator: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "[ERRO] Falha ao atualizar servidor: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "[INFO] Tunnel continua ativo. Atualize manualmente se necessario." -ForegroundColor Yellow
 }
 
