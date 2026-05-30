@@ -30,12 +30,12 @@ export const metadata: Metadata = {
     siteName: "VozPro",
     images: [
       {
-        url: "/og-image.jpg",
+        url: "/og-image.jpg?v=2",
         width: 1200,
         height: 630,
         alt: "VozPro - Vozes Profissionais com IA",
         type: "image/jpeg",
-        secureUrl: "https://vozpro.cvmnews.com.br/og-image.jpg",
+        secureUrl: "https://vozpro.cvmnews.com.br/og-image.jpg?v=2",
       },
     ],
     locale: "pt_BR",
@@ -45,7 +45,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "VozPro - Sintetizador de Voz Profissional com IA",
     description: "Crie vozes profissionais com IA. Clonagem de voz, emoções e trilhas musicais para suas propagandas e conteúdos.",
-    images: ["/og-image.jpg"],
+    images: ["/og-image.jpg?v=2"],
   },
 };
 
