@@ -34,6 +34,8 @@ export const metadata: Metadata = {
         width: 1200,
         height: 630,
         alt: "VozPro - Vozes Profissionais com IA",
+        type: "image/jpeg",
+        secureUrl: "https://vozpro.cvmnews.com.br/og-image.jpg",
       },
     ],
     locale: "pt_BR",
