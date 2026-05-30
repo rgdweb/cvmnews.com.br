@@ -1092,11 +1092,26 @@ export default function VozProClient() {
           voiceMode,
         }
 
+        // Obter token HMAC para autenticacao com o PHP
+        const tokenRes = await fetch('/api/generate-token')
+        if (!tokenRes.ok) {
+          toast.error('Erro ao obter token de geracao')
+          return
+        }
+        const { token: tunnelToken } = await tokenRes.json()
+        if (!tunnelToken) {
+          toast.error('Servidor nao configurado corretamente')
+          return
+        }
+
         // Chamar Oracle PHP direto via HTTPS (SSL Letsencrypt, sem Vercel no meio)
         const oracleApi = process.env.NEXT_PUBLIC_AUDIO_SERVER_URL || 'https://api.cvmnews.com.br'
         res = await fetch(`${oracleApi}/tunnel-generate.php`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Generate-Token': tunnelToken,
+          },
           body: JSON.stringify(tunnelBody),
           signal: controller.signal,
         })
