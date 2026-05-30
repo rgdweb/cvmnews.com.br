@@ -941,7 +941,7 @@ export default function VozProClient() {
 
         // Poll queue status until it's our turn
         const pollQueue = async () => {
-          const statusRes = await fetch(`/api/queue/status?id=${qId}`)
+          const statusRes = await fetch(`/api/queue/join?id=${qId}`)
           const statusData = await statusRes.json()
 
           if (statusData.status === 'processing') {
