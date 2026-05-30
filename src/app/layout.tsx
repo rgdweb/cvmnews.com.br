@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 const APP_URL = "https://vozpro.cvmnews.com.br";
 
 export const metadata: Metadata = {
-  title: "VozPro - Sintetizador de Voz Profissional com IA",
+  title: "VozPro - Crie Vozes e Propagandas Profissionais com IA",
   description: "Crie vozes profissionais com IA. Clonagem de voz, emoções e trilhas musicais para suas propagandas e conteúdos.",
   icons: {
     icon: "/logo.jpg",
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   },
   metadataBase: new URL(APP_URL),
   openGraph: {
-    title: "VozPro - Sintetizador de Voz Profissional com IA",
+    title: "VozPro - Crie Vozes e Propagandas Profissionais com IA",
     description: "Crie vozes profissionais com IA. Clonagem de voz, emoções e trilhas musicais para suas propagandas e conteúdos.",
     url: APP_URL,
     siteName: "VozPro",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "VozPro - Sintetizador de Voz Profissional com IA",
+    title: "VozPro - Crie Vozes e Propagandas Profissionais com IA",
     description: "Crie vozes profissionais com IA. Clonagem de voz, emoções e trilhas musicais para suas propagandas e conteúdos.",
     images: ["/og-image.jpg?v=2"],
   },
