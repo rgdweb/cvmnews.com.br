@@ -377,7 +377,7 @@ export async function POST(req: NextRequest) {
     if (variation.instruct && variation.instruct.trim()) instructParts.push(variation.instruct.trim())
     const instructStr = instructParts.join(', ')
     debug.log('Instruct', 'info', instructStr || '(vazio)')
-    debug.log('Parâmetros', 'info', `lang: ${language || 'Auto'} | speed: ${speed ?? 1.0} | steps: ${numStep ?? 32} | cfg: ${guidanceScale ?? 2.0}`)
+    debug.log('Parâmetros', 'info', `lang: ${language || 'Auto'} | speed: ${speed ?? 1.0} | steps: ${numStep ?? 16} | cfg: ${guidanceScale ?? 2.0}`)
 
     // Get permanent audio URL
     const serverUrl = (variation as Record<string, unknown>).refAudioServerUrl as string || ''
@@ -397,7 +397,7 @@ export async function POST(req: NextRequest) {
       {} as unknown, // placeholder, preenchido no runGeneration
       '',  // refText: SEMPRE vazio - texto causa alucinacao (fala "to", "ba", outra lingua)
       instructStr,
-      numStep ?? 32,
+      numStep ?? 16,
       guidanceScale ?? 2.0,
       true,   // denoise
       speed ?? 1.0,

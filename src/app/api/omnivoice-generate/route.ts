@@ -227,7 +227,7 @@ export async function POST(request: NextRequest) {
       referenceAudioUrl = '',  // URL do audio de referencia (clone mode)
       referenceAudioName = 'ref_audio.wav',
       refText = '',            // transcricao (vazio = auto Whisper)
-      numStep = 32,            // 32=qualidade (padrao), 16=rapido mas pode gaguejar
+      numStep = 16,            // 16=qualidade + velocidade otima
       speed = 1.0,
       language = 'Auto',       // Auto = detectar
       // Voice Design params (usados no modo design)
